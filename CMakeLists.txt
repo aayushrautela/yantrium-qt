@@ -27,6 +27,10 @@ set(PROJECT_SOURCES
     src/core/database/database_manager.h
     src/core/database/addon_dao.cpp
     src/core/database/addon_dao.h
+    src/core/database/trakt_auth_dao.cpp
+    src/core/database/trakt_auth_dao.h
+    src/core/database/catalog_preferences_dao.cpp
+    src/core/database/catalog_preferences_dao.h
     # Addon models
     src/features/addons/models/addon_manifest.cpp
     src/features/addons/models/addon_manifest.h
@@ -44,6 +48,8 @@ set(PROJECT_SOURCES
     # Core models
     src/core/models/tmdb_models.cpp
     src/core/models/tmdb_models.h
+    src/core/models/trakt_models.cpp
+    src/core/models/trakt_models.h
     # Core services
     src/core/services/configuration.cpp
     src/core/services/configuration.h
@@ -55,6 +61,18 @@ set(PROJECT_SOURCES
     src/core/services/tmdb_service.h
     src/core/services/tmdb_search_service.cpp
     src/core/services/tmdb_search_service.h
+    src/core/services/trakt_core_service.cpp
+    src/core/services/trakt_core_service.h
+    src/core/services/trakt_auth_service.cpp
+    src/core/services/trakt_auth_service.h
+    src/core/services/trakt_scrobble_service.cpp
+    src/core/services/trakt_scrobble_service.h
+    src/core/services/trakt_watchlist_service.cpp
+    src/core/services/trakt_watchlist_service.h
+    src/core/services/library_service.cpp
+    src/core/services/library_service.h
+    src/core/services/catalog_preferences_service.cpp
+    src/core/services/catalog_preferences_service.h
     resources/qml.qrc
 )
 
@@ -75,6 +93,25 @@ if(TMDB_API_KEY)
 else()
     message(WARNING "TMDB_API_KEY not set. Set it via: -DTMDB_API_KEY=your_key")
     target_compile_definitions(Yantrium PRIVATE TMDB_API_KEY="")
+endif()
+
+# Trakt API Key configuration
+option(TRAKT_CLIENT_ID "Trakt Client ID" "")
+if(TRAKT_CLIENT_ID)
+    target_compile_definitions(Yantrium PRIVATE TRAKT_CLIENT_ID="${TRAKT_CLIENT_ID}")
+    message(STATUS "Trakt Client ID configured")
+else()
+    message(WARNING "TRAKT_CLIENT_ID not set. Set it via: -DTRAKT_CLIENT_ID=your_id")
+    target_compile_definitions(Yantrium PRIVATE TRAKT_CLIENT_ID="")
+endif()
+
+option(TRAKT_CLIENT_SECRET "Trakt Client Secret" "")
+if(TRAKT_CLIENT_SECRET)
+    target_compile_definitions(Yantrium PRIVATE TRAKT_CLIENT_SECRET="${TRAKT_CLIENT_SECRET}")
+    message(STATUS "Trakt Client Secret configured")
+else()
+    message(WARNING "TRAKT_CLIENT_SECRET not set. Set it via: -DTRAKT_CLIENT_SECRET=your_secret")
+    target_compile_definitions(Yantrium PRIVATE TRAKT_CLIENT_SECRET="")
 endif()
 
 # 5. Link Qt Libraries

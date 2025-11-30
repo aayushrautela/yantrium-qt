@@ -4,9 +4,17 @@
 #include <QObject>
 #include <QString>
 
-// Compile-time API key definition
+// Compile-time API key definitions
 #ifndef TMDB_API_KEY
 #define TMDB_API_KEY ""
+#endif
+
+#ifndef TRAKT_CLIENT_ID
+#define TRAKT_CLIENT_ID ""
+#endif
+
+#ifndef TRAKT_CLIENT_SECRET
+#define TRAKT_CLIENT_SECRET ""
 #endif
 
 class Configuration : public QObject
@@ -22,6 +30,19 @@ public:
     QString tmdbApiKey() const;
     QString tmdbBaseUrl() const;
     QString tmdbImageBaseUrl() const;
+    
+    // Trakt configuration
+    QString traktClientId() const;
+    QString traktClientSecret() const;
+    QString traktRedirectUri() const;
+    QString traktBaseUrl() const;
+    QString traktAuthUrl() const;
+    QString traktTokenUrl() const;
+    QString traktDeviceCodeUrl() const;
+    QString traktDeviceTokenUrl() const;
+    QString traktApiVersion() const;
+    int defaultTraktCompletionThreshold() const;
+    bool isTraktConfigured() const;
 
 private:
     explicit Configuration(QObject* parent = nullptr);
@@ -31,6 +52,10 @@ private:
     QString m_tmdbApiKey;
     QString m_tmdbBaseUrl;
     QString m_tmdbImageBaseUrl;
+    
+    // Trakt configuration
+    QString m_traktClientId;
+    QString m_traktClientSecret;
 };
 
 #endif // CONFIGURATION_H

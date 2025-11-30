@@ -5,6 +5,7 @@
 #include <QList>
 #include <QString>
 #include <QJsonArray>
+#include <QVariantList>
 #include "../models/addon_config.h"
 #include "../models/addon_manifest.h"
 #include "core/database/addon_dao.h"
@@ -25,6 +26,9 @@ public:
     
     // Get specific addon by ID (returns JSON string for QML)
     Q_INVOKABLE QString getAddonJson(const QString& id);
+    
+    // Get all addons as QVariantList for QML
+    Q_INVOKABLE QVariantList getAllAddons();
     
     // Enable/disable addon
     Q_INVOKABLE bool enableAddon(const QString& id);

@@ -14,6 +14,11 @@
 #include "features/addons/logic/addon_repository.h"
 #include "core/services/tmdb_service.h"
 #include "core/services/tmdb_search_service.h"
+#include "core/services/trakt_auth_service.h"
+#include "core/services/trakt_scrobble_service.h"
+#include "core/services/trakt_watchlist_service.h"
+#include "core/services/library_service.h"
+#include "core/services/catalog_preferences_service.h"
 
 // Force logging to console
 Q_LOGGING_CATEGORY(yantrium, "yantrium")
@@ -81,9 +86,29 @@ int main(int argc, char *argv[])
     std::cout << "[MAIN] Registered TMDB services" << std::endl;
     std::cout.flush();
     qDebug() << "Registered TMDB services";
+    
+    // Register Trakt services
+    qmlRegisterType<TraktAuthService>("Yantrium.Services", 1, 0, "TraktAuthService");
+    qmlRegisterType<TraktScrobbleService>("Yantrium.Services", 1, 0, "TraktScrobbleService");
+    qmlRegisterType<TraktWatchlistService>("Yantrium.Services", 1, 0, "TraktWatchlistService");
+    std::cout << "[MAIN] Registered Trakt services" << std::endl;
+    std::cout.flush();
+    qDebug() << "Registered Trakt services";
+    
+    // Register Library service
+    qmlRegisterType<LibraryService>("Yantrium.Services", 1, 0, "LibraryService");
+    std::cout << "[MAIN] Registered LibraryService" << std::endl;
+    std::cout.flush();
+    qDebug() << "Registered LibraryService";
+    
+    // Register Catalog Preferences service
+    qmlRegisterType<CatalogPreferencesService>("Yantrium.Services", 1, 0, "CatalogPreferencesService");
+    std::cout << "[MAIN] Registered CatalogPreferencesService" << std::endl;
+    std::cout.flush();
+    qDebug() << "Registered CatalogPreferencesService";
 
     QQmlApplicationEngine engine;
-    const QUrl url(QStringLiteral("qrc:/qml/TestLauncher.qml"));
+    const QUrl url(QStringLiteral("qrc:/qml/MainApp.qml"));
     std::cout << "[MAIN] Loading QML from: " << url.toString().toStdString() << std::endl;
     std::cout.flush();
     qDebug() << "Loading QML from:" << url;

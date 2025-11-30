@@ -19,6 +19,8 @@ public:
     
     // Table creation
     bool createAddonsTable();
+    bool createTraktAuthTable();
+    bool createCatalogPreferencesTable();
     
 private:
     DatabaseManager(QObject* parent = nullptr);

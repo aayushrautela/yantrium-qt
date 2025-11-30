@@ -2,6 +2,7 @@
 #include "addon_installer.h"
 #include "addon_client.h"
 #include <QJsonDocument>
+#include <QVariantMap>
 #include <QDebug>
 
 AddonRepository::AddonRepository(QObject* parent)
@@ -164,6 +165,24 @@ void AddonRepository::onInstallerError(const QString& error)
 int AddonRepository::listAddonsCount()
 {
     return listAddons().size();
+}
+
+QVariantList AddonRepository::getAllAddons()
+{
+    QList<AddonConfig> addons = listAddons();
+    QVariantList result;
+    
+    for (const AddonConfig& addon : addons) {
+        QVariantMap map;
+        map["id"] = addon.id();
+        map["name"] = addon.name();
+        map["version"] = addon.version();
+        map["enabled"] = addon.enabled();
+        map["manifestUrl"] = addon.manifestUrl();
+        result.append(map);
+    }
+    
+    return result;
 }
 
 QString AddonRepository::getAddonJson(const QString& id)

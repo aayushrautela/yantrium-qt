@@ -28,6 +28,10 @@ Item {
                 text: "TMDB"
                 width: 150
             }
+            TabButton {
+                text: "Trakt"
+                width: 150
+            }
         }
 
         Item {
@@ -618,6 +622,506 @@ Item {
                         }
                     }
                 }
+                }
+            }
+
+            // Trakt Test Tab
+            ScrollView {
+                id: traktTab
+                anchors.fill: parent
+                visible: tabBar.currentIndex === 2
+                clip: true
+                
+                Column {
+                    id: traktColumn
+                    width: parent.width
+                    spacing: 15
+
+                    Text {
+                        text: "Trakt Integration Test"
+                        font.pixelSize: 28
+                        font.bold: true
+                        color: "#FFFFFF"
+                    }
+
+                    TraktAuthService {
+                        id: traktAuth
+                        
+                        onDeviceCodeGenerated: function(userCode, verificationUrl, expiresIn) {
+                            traktStatusText.text = "✓ Device code generated!\nUser Code: " + userCode + "\nVisit: " + verificationUrl
+                            traktStatusText.color = "#4CAF50"
+                            traktUserCodeText.text = "User Code: " + userCode
+                            traktVerificationUrlText.text = "Visit: " + verificationUrl
+                        }
+                        
+                        onAuthenticationStatusChanged: function(authenticated) {
+                            if (authenticated) {
+                                traktStatusText.text = "✓ Authenticated with Trakt"
+                                traktStatusText.color = "#4CAF50"
+                            } else {
+                                traktStatusText.text = "Not authenticated"
+                                traktStatusText.color = "#FF9800"
+                            }
+                        }
+                        
+                        onUserInfoFetched: function(username, slug) {
+                            traktStatusText.text = "✓ User: " + username + " (" + slug + ")"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        onError: function(errorMessage) {
+                            traktStatusText.text = "✗ Error: " + errorMessage
+                            traktStatusText.color = "#F44336"
+                        }
+                    }
+
+                    TraktScrobbleService {
+                        id: traktScrobble
+                        
+                        onScrobbleStarted: function(success) {
+                            traktStatusText.text = success ? "✓ Scrobble started" : "✗ Failed to start scrobble"
+                            traktStatusText.color = success ? "#4CAF50" : "#F44336"
+                        }
+                        
+                        onScrobblePaused: function(success) {
+                            traktStatusText.text = success ? "✓ Scrobble paused" : "✗ Failed to pause scrobble"
+                            traktStatusText.color = success ? "#4CAF50" : "#F44336"
+                        }
+                        
+                        onScrobbleStopped: function(success) {
+                            traktStatusText.text = success ? "✓ Scrobble stopped" : "✗ Failed to stop scrobble"
+                            traktStatusText.color = success ? "#4CAF50" : "#F44336"
+                        }
+                        
+                        onHistoryFetched: function(history) {
+                            traktStatusText.text = "✓ Fetched " + history.length + " history items"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        onError: function(errorMessage) {
+                            traktStatusText.text = "✗ Error: " + errorMessage
+                            traktStatusText.color = "#F44336"
+                        }
+                    }
+
+                    TraktWatchlistService {
+                        id: traktWatchlist
+                        
+                        onWatchlistMoviesFetched: function(movies) {
+                            traktStatusText.text = "✓ Fetched " + movies.length + " watchlist movies"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        onWatchlistShowsFetched: function(shows) {
+                            traktStatusText.text = "✓ Fetched " + shows.length + " watchlist shows"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        onCollectionMoviesFetched: function(movies) {
+                            traktStatusText.text = "✓ Fetched " + movies.length + " collection movies"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        onCollectionShowsFetched: function(shows) {
+                            traktStatusText.text = "✓ Fetched " + shows.length + " collection shows"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        onError: function(errorMessage) {
+                            traktStatusText.text = "✗ Error: " + errorMessage
+                            traktStatusText.color = "#F44336"
+                        }
+                    }
+
+                    // Status display
+                    Rectangle {
+                        width: parent.width
+                        height: 80
+                        color: "#1a1a1a"
+                        radius: 8
+                        border.color: "#333333"
+                        border.width: 1
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 5
+
+                            Text {
+                                id: traktStatusText
+                                text: "Ready to test Trakt"
+                                color: "#FFFFFF"
+                                font.pixelSize: 14
+                                wrapMode: Text.Wrap
+                                width: parent.width
+                            }
+
+                            Text {
+                                id: traktUserCodeText
+                                visible: text !== ""
+                                color: "#AAAAAA"
+                                font.pixelSize: 12
+                            }
+
+                            Text {
+                                id: traktVerificationUrlText
+                                visible: text !== ""
+                                color: "#AAAAAA"
+                                font.pixelSize: 12
+                            }
+                        }
+                    }
+
+                    // Authentication section
+                    Rectangle {
+                        width: parent.width
+                        height: 200
+                        color: "#1a1a1a"
+                        radius: 8
+                        border.color: "#333333"
+                        border.width: 1
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 10
+
+                            Text {
+                                text: "Authentication"
+                                color: "#FFFFFF"
+                                font.pixelSize: 16
+                                font.bold: true
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: 10
+
+                                Button {
+                                    text: "Generate Device Code"
+                                    enabled: traktAuth.isConfigured
+                                    onClicked: {
+                                        traktStatusText.text = "Generating device code..."
+                                        traktStatusText.color = "#FFA500"
+                                        traktAuth.generateDeviceCode()
+                                    }
+                                }
+
+                                Button {
+                                    text: "Check Auth Status"
+                                    onClicked: {
+                                        traktAuth.checkAuthentication()
+                                    }
+                                }
+
+                                Button {
+                                    text: "Get User Info"
+                                    onClicked: {
+                                        traktAuth.getCurrentUser()
+                                    }
+                                }
+
+                                Button {
+                                    text: "Logout"
+                                    onClicked: {
+                                        traktAuth.logout()
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: "Configured: " + (traktAuth.isConfigured ? "Yes" : "No") + " | Authenticated: " + (traktAuth.isAuthenticated ? "Yes" : "No")
+                                color: "#AAAAAA"
+                                font.pixelSize: 12
+                            }
+                        }
+                    }
+
+                    // Scrobbling section
+                    Rectangle {
+                        width: parent.width
+                        height: 280
+                        color: "#1a1a1a"
+                        radius: 8
+                        border.color: "#333333"
+                        border.width: 1
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 10
+
+                            Text {
+                                text: "Scrobbling"
+                                color: "#FFFFFF"
+                                font.pixelSize: 16
+                                font.bold: true
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: 10
+
+                                TextField {
+                                    id: scrobbleTypeInput
+                                    width: 100
+                                    placeholderText: "Type"
+                                    text: "movie"
+                                    color: "#FFFFFF"
+                                    background: Rectangle {
+                                        color: "#2a2a2a"
+                                        border.color: "#444444"
+                                        border.width: 1
+                                        radius: 4
+                                    }
+                                }
+
+                                TextField {
+                                    id: scrobbleImdbInput
+                                    width: 150
+                                    placeholderText: "IMDb ID"
+                                    text: "tt0133093"
+                                    color: "#FFFFFF"
+                                    background: Rectangle {
+                                        color: "#2a2a2a"
+                                        border.color: "#444444"
+                                        border.width: 1
+                                        radius: 4
+                                    }
+                                }
+
+                                TextField {
+                                    id: scrobbleTitleInput
+                                    width: 200
+                                    placeholderText: "Title"
+                                    text: "The Matrix"
+                                    color: "#FFFFFF"
+                                    background: Rectangle {
+                                        color: "#2a2a2a"
+                                        border.color: "#444444"
+                                        border.width: 1
+                                        radius: 4
+                                    }
+                                }
+
+                                TextField {
+                                    id: scrobbleYearInput
+                                    width: 80
+                                    placeholderText: "Year"
+                                    text: "1999"
+                                    color: "#FFFFFF"
+                                    background: Rectangle {
+                                        color: "#2a2a2a"
+                                        border.color: "#444444"
+                                        border.width: 1
+                                        radius: 4
+                                    }
+                                }
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: 10
+
+                                Slider {
+                                    id: scrobbleProgressSlider
+                                    width: 200
+                                    from: 0
+                                    to: 100
+                                    value: 50
+                                }
+
+                                Text {
+                                    text: Math.round(scrobbleProgressSlider.value) + "%"
+                                    color: "#FFFFFF"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: 10
+
+                                Button {
+                                    text: "Start"
+                                    onClicked: {
+                                        var contentData = {
+                                            "type": scrobbleTypeInput.text,
+                                            "imdbId": scrobbleImdbInput.text,
+                                            "title": scrobbleTitleInput.text,
+                                            "year": parseInt(scrobbleYearInput.text) || 0
+                                        }
+                                        traktScrobble.scrobbleStart(contentData, scrobbleProgressSlider.value)
+                                    }
+                                }
+
+                                Button {
+                                    text: "Pause"
+                                    onClicked: {
+                                        var contentData = {
+                                            "type": scrobbleTypeInput.text,
+                                            "imdbId": scrobbleImdbInput.text,
+                                            "title": scrobbleTitleInput.text,
+                                            "year": parseInt(scrobbleYearInput.text) || 0
+                                        }
+                                        traktScrobble.scrobblePause(contentData, scrobbleProgressSlider.value)
+                                    }
+                                }
+
+                                Button {
+                                    text: "Stop"
+                                    onClicked: {
+                                        var contentData = {
+                                            "type": scrobbleTypeInput.text,
+                                            "imdbId": scrobbleImdbInput.text,
+                                            "title": scrobbleTitleInput.text,
+                                            "year": parseInt(scrobbleYearInput.text) || 0
+                                        }
+                                        traktScrobble.scrobbleStop(contentData, scrobbleProgressSlider.value)
+                                    }
+                                }
+
+                                Button {
+                                    text: "Get History"
+                                    onClicked: {
+                                        traktScrobble.getHistoryMovies()
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Watchlist section
+                    Rectangle {
+                        width: parent.width
+                        height: 150
+                        color: "#1a1a1a"
+                        radius: 8
+                        border.color: "#333333"
+                        border.width: 1
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 10
+
+                            Text {
+                                text: "Watchlist"
+                                color: "#FFFFFF"
+                                font.pixelSize: 16
+                                font.bold: true
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: 10
+
+                                TextField {
+                                    id: watchlistTypeInput
+                                    width: 100
+                                    placeholderText: "Type"
+                                    text: "movie"
+                                    color: "#FFFFFF"
+                                    background: Rectangle {
+                                        color: "#2a2a2a"
+                                        border.color: "#444444"
+                                        border.width: 1
+                                        radius: 4
+                                    }
+                                }
+
+                                TextField {
+                                    id: watchlistImdbInput
+                                    width: 150
+                                    placeholderText: "IMDb ID"
+                                    text: "tt0133093"
+                                    color: "#FFFFFF"
+                                    background: Rectangle {
+                                        color: "#2a2a2a"
+                                        border.color: "#444444"
+                                        border.width: 1
+                                        radius: 4
+                                    }
+                                }
+
+                                Button {
+                                    text: "Get Movies"
+                                    onClicked: traktWatchlist.getWatchlistMoviesWithImages()
+                                }
+
+                                Button {
+                                    text: "Get Shows"
+                                    onClicked: traktWatchlist.getWatchlistShowsWithImages()
+                                }
+
+                                Button {
+                                    text: "Add"
+                                    onClicked: {
+                                        traktWatchlist.addToWatchlist(watchlistTypeInput.text, watchlistImdbInput.text)
+                                    }
+                                }
+
+                                Button {
+                                    text: "Remove"
+                                    onClicked: {
+                                        traktWatchlist.removeFromWatchlist(watchlistTypeInput.text, watchlistImdbInput.text)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Collection section
+                    Rectangle {
+                        width: parent.width
+                        height: 120
+                        color: "#1a1a1a"
+                        radius: 8
+                        border.color: "#333333"
+                        border.width: 1
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 10
+
+                            Text {
+                                text: "Collection"
+                                color: "#FFFFFF"
+                                font.pixelSize: 16
+                                font.bold: true
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: 10
+
+                                Button {
+                                    text: "Get Movies"
+                                    onClicked: traktWatchlist.getCollectionMoviesWithImages()
+                                }
+
+                                Button {
+                                    text: "Get Shows"
+                                    onClicked: traktWatchlist.getCollectionShowsWithImages()
+                                }
+
+                                Button {
+                                    text: "Add"
+                                    onClicked: {
+                                        traktWatchlist.addToCollection(watchlistTypeInput.text, watchlistImdbInput.text)
+                                    }
+                                }
+
+                                Button {
+                                    text: "Remove"
+                                    onClicked: {
+                                        traktWatchlist.removeFromCollection(watchlistTypeInput.text, watchlistImdbInput.text)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

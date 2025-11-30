@@ -67,6 +67,18 @@ bool DatabaseManager::initialize(const QString& databasePath)
         return false;
     }
     
+    if (!createTraktAuthTable()) {
+        qWarning() << "Failed to create trakt_auth table";
+        m_database.close();
+        return false;
+    }
+    
+    if (!createCatalogPreferencesTable()) {
+        qWarning() << "Failed to create catalog_preferences table";
+        m_database.close();
+        return false;
+    }
+    
     m_initialized = true;
     return true;
 }
@@ -103,6 +115,59 @@ bool DatabaseManager::createAddonsTable()
     }
     
     qDebug() << "Addons table created successfully";
+    return true;
+}
+
+bool DatabaseManager::createTraktAuthTable()
+{
+    QSqlQuery query(m_database);
+    
+    QString createTableSql = R"(
+        CREATE TABLE IF NOT EXISTS trakt_auth (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            accessToken TEXT NOT NULL,
+            refreshToken TEXT NOT NULL,
+            expiresIn INTEGER NOT NULL,
+            createdAt TEXT NOT NULL,
+            expiresAt TEXT NOT NULL,
+            username TEXT,
+            slug TEXT
+        )
+    )";
+    
+    if (!query.exec(createTableSql)) {
+        qWarning() << "Failed to create trakt_auth table:" << query.lastError().text();
+        return false;
+    }
+    
+    qDebug() << "Trakt auth table created successfully";
+    return true;
+}
+
+bool DatabaseManager::createCatalogPreferencesTable()
+{
+    QSqlQuery query(m_database);
+    
+    // Use empty string instead of NULL for catalog_id to avoid PRIMARY KEY issues
+    QString createTableSql = R"(
+        CREATE TABLE IF NOT EXISTS catalog_preferences (
+            addon_id TEXT NOT NULL,
+            catalog_type TEXT NOT NULL,
+            catalog_id TEXT NOT NULL DEFAULT '',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            is_hero_source INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (addon_id, catalog_type, catalog_id)
+        )
+    )";
+    
+    if (!query.exec(createTableSql)) {
+        qWarning() << "Failed to create catalog_preferences table:" << query.lastError().text();
+        return false;
+    }
+    
+    qDebug() << "Catalog preferences table created successfully";
     return true;
 }
 

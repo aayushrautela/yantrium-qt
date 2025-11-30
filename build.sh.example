@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Build script for Yantrium with API keys
+# Copy this file to build.sh and add your API keys
+# build.sh is gitignored to keep keys private
+
+set -e  # Exit on error
+
+# API Keys - SET THESE TO YOUR ACTUAL KEYS
+TMDB_API_KEY="your_tmdb_api_key_here"
+TRAKT_CLIENT_ID="your_trakt_client_id_here"
+TRAKT_CLIENT_SECRET="your_trakt_client_secret_here"
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}=== Yantrium Build Script ===${NC}"
+
+# Check if keys are set
+if [ -z "$TMDB_API_KEY" ] || [ "$TMDB_API_KEY" = "your_tmdb_api_key_here" ]; then
+    echo -e "${YELLOW}Warning: TMDB_API_KEY is not set!${NC}"
+    echo "Edit build.sh and set TMDB_API_KEY"
+fi
+
+if [ -z "$TRAKT_CLIENT_ID" ] || [ "$TRAKT_CLIENT_ID" = "your_trakt_client_id_here" ]; then
+    echo -e "${YELLOW}Warning: TRAKT_CLIENT_ID is not set!${NC}"
+    echo "Edit build.sh and set TRAKT_CLIENT_ID"
+fi
+
+if [ -z "$TRAKT_CLIENT_SECRET" ] || [ "$TRAKT_CLIENT_SECRET" = "your_trakt_client_secret_here" ]; then
+    echo -e "${YELLOW}Warning: TRAKT_CLIENT_SECRET is not set!${NC}"
+    echo "Edit build.sh and set TRAKT_CLIENT_SECRET"
+fi
+
+# Clean build directory
+echo -e "${GREEN}Cleaning build directory...${NC}"
+rm -rf build
+mkdir -p build
+
+# Configure with CMake
+echo -e "${GREEN}Configuring with CMake...${NC}"
+cd build
+cmake \
+    -DTMDB_API_KEY="${TMDB_API_KEY}" \
+    -DTRAKT_CLIENT_ID="${TRAKT_CLIENT_ID}" \
+    -DTRAKT_CLIENT_SECRET="${TRAKT_CLIENT_SECRET}" \
+    ..
+
+# Build
+echo -e "${GREEN}Building...${NC}"
+ninja
+
+# Run
+echo -e "${GREEN}Running Yantrium...${NC}"
+echo ""
+./Yantrium
+

@@ -275,6 +275,30 @@ src/core/database/database_manager.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/database/database_manager.cpp.s
 .PHONY : src/core/database/database_manager.cpp.s
 
+src/core/database/trakt_auth_dao.o: src/core/database/trakt_auth_dao.cpp.o
+.PHONY : src/core/database/trakt_auth_dao.o
+
+# target to build an object file
+src/core/database/trakt_auth_dao.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/database/trakt_auth_dao.cpp.o
+.PHONY : src/core/database/trakt_auth_dao.cpp.o
+
+src/core/database/trakt_auth_dao.i: src/core/database/trakt_auth_dao.cpp.i
+.PHONY : src/core/database/trakt_auth_dao.i
+
+# target to preprocess a source file
+src/core/database/trakt_auth_dao.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/database/trakt_auth_dao.cpp.i
+.PHONY : src/core/database/trakt_auth_dao.cpp.i
+
+src/core/database/trakt_auth_dao.s: src/core/database/trakt_auth_dao.cpp.s
+.PHONY : src/core/database/trakt_auth_dao.s
+
+# target to generate assembly for a file
+src/core/database/trakt_auth_dao.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/database/trakt_auth_dao.cpp.s
+.PHONY : src/core/database/trakt_auth_dao.cpp.s
+
 src/core/models/tmdb_models.o: src/core/models/tmdb_models.cpp.o
 .PHONY : src/core/models/tmdb_models.o
 
@@ -298,6 +322,30 @@ src/core/models/tmdb_models.s: src/core/models/tmdb_models.cpp.s
 src/core/models/tmdb_models.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/models/tmdb_models.cpp.s
 .PHONY : src/core/models/tmdb_models.cpp.s
+
+src/core/models/trakt_models.o: src/core/models/trakt_models.cpp.o
+.PHONY : src/core/models/trakt_models.o
+
+# target to build an object file
+src/core/models/trakt_models.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/models/trakt_models.cpp.o
+.PHONY : src/core/models/trakt_models.cpp.o
+
+src/core/models/trakt_models.i: src/core/models/trakt_models.cpp.i
+.PHONY : src/core/models/trakt_models.i
+
+# target to preprocess a source file
+src/core/models/trakt_models.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/models/trakt_models.cpp.i
+.PHONY : src/core/models/trakt_models.cpp.i
+
+src/core/models/trakt_models.s: src/core/models/trakt_models.cpp.s
+.PHONY : src/core/models/trakt_models.s
+
+# target to generate assembly for a file
+src/core/models/trakt_models.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/models/trakt_models.cpp.s
+.PHONY : src/core/models/trakt_models.cpp.s
 
 src/core/services/configuration.o: src/core/services/configuration.cpp.o
 .PHONY : src/core/services/configuration.o
@@ -346,6 +394,30 @@ src/core/services/id_parser.s: src/core/services/id_parser.cpp.s
 src/core/services/id_parser.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/id_parser.cpp.s
 .PHONY : src/core/services/id_parser.cpp.s
+
+src/core/services/library_service.o: src/core/services/library_service.cpp.o
+.PHONY : src/core/services/library_service.o
+
+# target to build an object file
+src/core/services/library_service.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/library_service.cpp.o
+.PHONY : src/core/services/library_service.cpp.o
+
+src/core/services/library_service.i: src/core/services/library_service.cpp.i
+.PHONY : src/core/services/library_service.i
+
+# target to preprocess a source file
+src/core/services/library_service.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/library_service.cpp.i
+.PHONY : src/core/services/library_service.cpp.i
+
+src/core/services/library_service.s: src/core/services/library_service.cpp.s
+.PHONY : src/core/services/library_service.s
+
+# target to generate assembly for a file
+src/core/services/library_service.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/library_service.cpp.s
+.PHONY : src/core/services/library_service.cpp.s
 
 src/core/services/tmdb_data_extractor.o: src/core/services/tmdb_data_extractor.cpp.o
 .PHONY : src/core/services/tmdb_data_extractor.o
@@ -418,6 +490,102 @@ src/core/services/tmdb_service.s: src/core/services/tmdb_service.cpp.s
 src/core/services/tmdb_service.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/tmdb_service.cpp.s
 .PHONY : src/core/services/tmdb_service.cpp.s
+
+src/core/services/trakt_auth_service.o: src/core/services/trakt_auth_service.cpp.o
+.PHONY : src/core/services/trakt_auth_service.o
+
+# target to build an object file
+src/core/services/trakt_auth_service.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_auth_service.cpp.o
+.PHONY : src/core/services/trakt_auth_service.cpp.o
+
+src/core/services/trakt_auth_service.i: src/core/services/trakt_auth_service.cpp.i
+.PHONY : src/core/services/trakt_auth_service.i
+
+# target to preprocess a source file
+src/core/services/trakt_auth_service.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_auth_service.cpp.i
+.PHONY : src/core/services/trakt_auth_service.cpp.i
+
+src/core/services/trakt_auth_service.s: src/core/services/trakt_auth_service.cpp.s
+.PHONY : src/core/services/trakt_auth_service.s
+
+# target to generate assembly for a file
+src/core/services/trakt_auth_service.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_auth_service.cpp.s
+.PHONY : src/core/services/trakt_auth_service.cpp.s
+
+src/core/services/trakt_core_service.o: src/core/services/trakt_core_service.cpp.o
+.PHONY : src/core/services/trakt_core_service.o
+
+# target to build an object file
+src/core/services/trakt_core_service.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_core_service.cpp.o
+.PHONY : src/core/services/trakt_core_service.cpp.o
+
+src/core/services/trakt_core_service.i: src/core/services/trakt_core_service.cpp.i
+.PHONY : src/core/services/trakt_core_service.i
+
+# target to preprocess a source file
+src/core/services/trakt_core_service.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_core_service.cpp.i
+.PHONY : src/core/services/trakt_core_service.cpp.i
+
+src/core/services/trakt_core_service.s: src/core/services/trakt_core_service.cpp.s
+.PHONY : src/core/services/trakt_core_service.s
+
+# target to generate assembly for a file
+src/core/services/trakt_core_service.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_core_service.cpp.s
+.PHONY : src/core/services/trakt_core_service.cpp.s
+
+src/core/services/trakt_scrobble_service.o: src/core/services/trakt_scrobble_service.cpp.o
+.PHONY : src/core/services/trakt_scrobble_service.o
+
+# target to build an object file
+src/core/services/trakt_scrobble_service.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_scrobble_service.cpp.o
+.PHONY : src/core/services/trakt_scrobble_service.cpp.o
+
+src/core/services/trakt_scrobble_service.i: src/core/services/trakt_scrobble_service.cpp.i
+.PHONY : src/core/services/trakt_scrobble_service.i
+
+# target to preprocess a source file
+src/core/services/trakt_scrobble_service.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_scrobble_service.cpp.i
+.PHONY : src/core/services/trakt_scrobble_service.cpp.i
+
+src/core/services/trakt_scrobble_service.s: src/core/services/trakt_scrobble_service.cpp.s
+.PHONY : src/core/services/trakt_scrobble_service.s
+
+# target to generate assembly for a file
+src/core/services/trakt_scrobble_service.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_scrobble_service.cpp.s
+.PHONY : src/core/services/trakt_scrobble_service.cpp.s
+
+src/core/services/trakt_watchlist_service.o: src/core/services/trakt_watchlist_service.cpp.o
+.PHONY : src/core/services/trakt_watchlist_service.o
+
+# target to build an object file
+src/core/services/trakt_watchlist_service.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_watchlist_service.cpp.o
+.PHONY : src/core/services/trakt_watchlist_service.cpp.o
+
+src/core/services/trakt_watchlist_service.i: src/core/services/trakt_watchlist_service.cpp.i
+.PHONY : src/core/services/trakt_watchlist_service.i
+
+# target to preprocess a source file
+src/core/services/trakt_watchlist_service.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_watchlist_service.cpp.i
+.PHONY : src/core/services/trakt_watchlist_service.cpp.i
+
+src/core/services/trakt_watchlist_service.s: src/core/services/trakt_watchlist_service.cpp.s
+.PHONY : src/core/services/trakt_watchlist_service.s
+
+# target to generate assembly for a file
+src/core/services/trakt_watchlist_service.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/trakt_watchlist_service.cpp.s
+.PHONY : src/core/services/trakt_watchlist_service.cpp.s
 
 src/features/addons/logic/addon_client.o: src/features/addons/logic/addon_client.cpp.o
 .PHONY : src/features/addons/logic/addon_client.o
@@ -661,15 +829,24 @@ help:
 	@echo "... src/core/database/database_manager.o"
 	@echo "... src/core/database/database_manager.i"
 	@echo "... src/core/database/database_manager.s"
+	@echo "... src/core/database/trakt_auth_dao.o"
+	@echo "... src/core/database/trakt_auth_dao.i"
+	@echo "... src/core/database/trakt_auth_dao.s"
 	@echo "... src/core/models/tmdb_models.o"
 	@echo "... src/core/models/tmdb_models.i"
 	@echo "... src/core/models/tmdb_models.s"
+	@echo "... src/core/models/trakt_models.o"
+	@echo "... src/core/models/trakt_models.i"
+	@echo "... src/core/models/trakt_models.s"
 	@echo "... src/core/services/configuration.o"
 	@echo "... src/core/services/configuration.i"
 	@echo "... src/core/services/configuration.s"
 	@echo "... src/core/services/id_parser.o"
 	@echo "... src/core/services/id_parser.i"
 	@echo "... src/core/services/id_parser.s"
+	@echo "... src/core/services/library_service.o"
+	@echo "... src/core/services/library_service.i"
+	@echo "... src/core/services/library_service.s"
 	@echo "... src/core/services/tmdb_data_extractor.o"
 	@echo "... src/core/services/tmdb_data_extractor.i"
 	@echo "... src/core/services/tmdb_data_extractor.s"
@@ -679,6 +856,18 @@ help:
 	@echo "... src/core/services/tmdb_service.o"
 	@echo "... src/core/services/tmdb_service.i"
 	@echo "... src/core/services/tmdb_service.s"
+	@echo "... src/core/services/trakt_auth_service.o"
+	@echo "... src/core/services/trakt_auth_service.i"
+	@echo "... src/core/services/trakt_auth_service.s"
+	@echo "... src/core/services/trakt_core_service.o"
+	@echo "... src/core/services/trakt_core_service.i"
+	@echo "... src/core/services/trakt_core_service.s"
+	@echo "... src/core/services/trakt_scrobble_service.o"
+	@echo "... src/core/services/trakt_scrobble_service.i"
+	@echo "... src/core/services/trakt_scrobble_service.s"
+	@echo "... src/core/services/trakt_watchlist_service.o"
+	@echo "... src/core/services/trakt_watchlist_service.i"
+	@echo "... src/core/services/trakt_watchlist_service.s"
 	@echo "... src/features/addons/logic/addon_client.o"
 	@echo "... src/features/addons/logic/addon_client.i"
 	@echo "... src/features/addons/logic/addon_client.s"

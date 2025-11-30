@@ -38,3 +38,7 @@ vendor/mdk-sdk/bin/
 
 # References
 dart_old/
+CMakeLists.txt
+
+# Build script with API keys (keep private)
+build.sh
