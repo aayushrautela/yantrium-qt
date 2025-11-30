@@ -1,0 +1,71 @@
+#include "configuration.h"
+#include <QDebug>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
+
+Configuration::Configuration(QObject* parent)
+    : QObject(parent)
+    , m_tmdbBaseUrl("https://api.themoviedb.org/3")
+    , m_tmdbImageBaseUrl("https://image.tmdb.org/t/p/")
+{
+    // Get API key from compile-time define
+    QString apiKey = QString::fromUtf8(TMDB_API_KEY);
+    
+    // If not set at compile time, try environment variable
+    if (apiKey.isEmpty()) {
+        apiKey = QString::fromLocal8Bit(qgetenv("TMDB_API_KEY"));
+    }
+    
+    // If still empty, try reading from config file in app data directory
+    if (apiKey.isEmpty()) {
+        QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QDir dir;
+        if (dir.exists(dataDir)) {
+            QString configFile = dataDir + "/tmdb_config.txt";
+            QFile file(configFile);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream in(&file);
+                apiKey = in.readLine().trimmed();
+                file.close();
+            }
+        }
+    }
+    
+    m_tmdbApiKey = apiKey;
+    
+    if (m_tmdbApiKey.isEmpty()) {
+        qWarning() << "TMDB API key not set. Set it via CMake: -DTMDB_API_KEY=your_key";
+        qWarning() << "Or set environment variable: TMDB_API_KEY=your_key";
+        qWarning() << "Or create file: ~/.local/share/Yantrium/tmdb_config.txt with your API key";
+    } else {
+        qDebug() << "TMDB API key loaded (length:" << m_tmdbApiKey.length() << ")";
+    }
+}
+
+Configuration::~Configuration()
+{
+}
+
+Configuration& Configuration::instance()
+{
+    static Configuration instance;
+    return instance;
+}
+
+QString Configuration::tmdbApiKey() const
+{
+    return m_tmdbApiKey;
+}
+
+QString Configuration::tmdbBaseUrl() const
+{
+    return m_tmdbBaseUrl;
+}
+
+QString Configuration::tmdbImageBaseUrl() const
+{
+    return m_tmdbImageBaseUrl;
+}
+

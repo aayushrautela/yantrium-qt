@@ -1,0 +1,16 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/">
+        <file>qml/Main.qml</file>
+        <file>qml/AppStyle.qml</file>
+        <file>qml/components/AppButton.qml</file>
+        <file>qml/components/AppCard.qml</file>
+        <file>qml/components/VideoOverlay.qml</file>
+        <file>qml/modules/player/VideoScreen.qml</file>
+        <file>qml/screens/VideoPlayerScreen.qml</file>
+        <file>qml/screens/AddonTestScreen.qml</file>
+        <file>qml/TestLauncher.qml</file>
+    </qresource>
+    <!-- TODO: Add font and icon files here when available -->
+</RCC>
+

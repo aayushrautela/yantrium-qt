@@ -1,0 +1,40 @@
+# Build directories
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.cmake
+!CMakeLists.txt
+
+# Executables
+yantrium-qt
+*.exe
+
+# Qt specific
+*.pro.user
+*.pro.user.*
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+*.dSYM/
+
+# Vendor SDK (if extracted)
+vendor/mdk-sdk/lib/
+vendor/mdk-sdk/bin/
+
+# References
+dart_old/
