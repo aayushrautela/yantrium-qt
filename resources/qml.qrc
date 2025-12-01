@@ -11,6 +11,7 @@
         <file>qml/screens/AddonTestScreen.qml</file>
         <file>qml/screens/HomeScreen.qml</file>
         <file>qml/components/ContentCard.qml</file>
+        <file>qml/components/ContinueWatchingCard.qml</file>
         <file>qml/components/HorizontalList.qml</file>
         <file>qml/components/HeroSection.qml</file>
         <file>qml/components/SearchBar.qml</file>

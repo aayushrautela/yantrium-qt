@@ -736,6 +736,12 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
         QVariantMap images = movie["images"].toMap();
         QVariantMap poster = images["poster"].toMap();
         map["posterUrl"] = poster["full"].toString();
+        
+        QVariantMap backdrop = images["backdrop"].toMap();
+        map["backdropUrl"] = backdrop["full"].toString();
+        
+        QVariantMap logo = images["logo"].toMap();
+        map["logoUrl"] = logo["full"].toString();
     } else if (type == "episode" && !show.isEmpty() && !episode.isEmpty()) {
         QVariantMap showIds = show["ids"].toMap();
         map["imdbId"] = showIds["imdb"].toString();
@@ -748,6 +754,19 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
         QVariantMap showImages = show["images"].toMap();
         QVariantMap poster = showImages["poster"].toMap();
         map["posterUrl"] = poster["full"].toString();
+        
+        // Try episode backdrop first, fallback to show backdrop
+        QVariantMap episodeImages = episode["images"].toMap();
+        QVariantMap episodeBackdrop = episodeImages["screenshot"].toMap();
+        if (episodeBackdrop["full"].toString().isEmpty()) {
+            QVariantMap backdrop = showImages["backdrop"].toMap();
+            map["backdropUrl"] = backdrop["full"].toString();
+        } else {
+            map["backdropUrl"] = episodeBackdrop["full"].toString();
+        }
+        
+        QVariantMap logo = showImages["logo"].toMap();
+        map["logoUrl"] = logo["full"].toString();
     }
     
     // Extract watched_at
@@ -762,6 +781,30 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
 
     if (!map.contains("posterUrl")) {
         map["posterUrl"] = "";
+    }
+
+    if (!map.contains("backdropUrl")) {
+        map["backdropUrl"] = "";
+    }
+
+    if (!map.contains("logoUrl")) {
+        map["logoUrl"] = "";
+    }
+
+    if (!map.contains("type")) {
+        map["type"] = "";
+    }
+
+    if (!map.contains("season")) {
+        map["season"] = 0;
+    }
+
+    if (!map.contains("episode")) {
+        map["episode"] = 0;
+    }
+
+    if (!map.contains("episodeTitle")) {
+        map["episodeTitle"] = "";
     }
 
     if (!map.contains("year") || map["year"].toInt() <= 0) {

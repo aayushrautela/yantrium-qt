@@ -55,18 +55,41 @@ Rectangle {
                 rightMargin: 20
                 model: root.model
                 
-                delegate: ContentCard {
-                    posterUrl: model.posterUrl || model.poster || ""
-                    title: model.title || ""
-                    year: model.year || 0
-                    rating: model.rating || ""
-                    progress: model.progressPercent || model.progress || 0
-                    badgeText: model.badgeText || ""
-                    isHighlighted: model.isHighlighted || false
+                delegate: Loader {
+                    width: root.title === "Continue Watching" ? 400 : root.itemWidth
+                    height: root.title === "Continue Watching" ? 225 : root.itemHeight
                     
-                    onClicked: {
-                        // Emit signal or handle click
-                        console.log("Clicked on:", model.title)
+                    source: root.title === "Continue Watching" 
+                        ? "qrc:/qml/components/ContinueWatchingCard.qml"
+                        : "qrc:/qml/components/ContentCard.qml"
+                    
+                    onLoaded: {
+                        if (!item) return
+                        
+                        if (root.title === "Continue Watching") {
+                            item.backdropUrl = model.backdropUrl || ""
+                            item.logoUrl = model.logoUrl || ""
+                            item.title = model.title || ""
+                            item.type = model.type || ""
+                            item.season = model.season || 0
+                            item.episode = model.episode || 0
+                            item.episodeTitle = model.episodeTitle || ""
+                            item.progress = model.progress || model.progressPercent || 0
+                            item.clicked.connect(function() {
+                                console.log("Clicked on:", model.title)
+                            })
+                        } else {
+                            item.posterUrl = model.posterUrl || model.poster || ""
+                            item.title = model.title || ""
+                            item.year = model.year || 0
+                            item.rating = model.rating || ""
+                            item.progress = model.progressPercent || model.progress || 0
+                            item.badgeText = model.badgeText || ""
+                            item.isHighlighted = model.isHighlighted || false
+                            item.clicked.connect(function() {
+                                console.log("Clicked on:", model.title)
+                            })
+                        }
                     }
                 }
                 

@@ -197,14 +197,64 @@ Item {
         continueWatchingModel.clear()
         if (!items) return
 
+        // Filter: Remove items that are >80% watched (>=81%)
+        let filteredItems = []
         for (let i = 0; i < items.length; i++) {
             let item = items[i]
+            let progress = item.progress || item.progressPercent || 0
+            if (progress < 81) {  // Only include items <81% watched
+                filteredItems.push(item)
+            }
+        }
+
+        // For episodes: Group by show and keep only the highest episode
+        let showEpisodes = {}  // Key: show title or imdbId, Value: highest episode item
+        
+        for (let i = 0; i < filteredItems.length; i++) {
+            let item = filteredItems[i]
+            
+            if (item.type === "episode") {
+                // Use show title + imdbId as key to group episodes
+                let key = (item.title || "") + "|" + (item.imdbId || "")
+                
+                if (!showEpisodes[key]) {
+                    // First episode for this show
+                    showEpisodes[key] = item
+                } else {
+                    // Compare with existing episode
+                    let existing = showEpisodes[key]
+                    let existingSeason = existing.season || 0
+                    let existingEpisode = existing.episode || 0
+                    let currentSeason = item.season || 0
+                    let currentEpisode = item.episode || 0
+                    
+                    // Keep the highest episode (higher season, or same season with higher episode)
+                    if (currentSeason > existingSeason || 
+                        (currentSeason === existingSeason && currentEpisode > existingEpisode)) {
+                        showEpisodes[key] = item
+                    }
+                }
+            } else {
+                // Movies: add directly (no grouping needed)
+                showEpisodes["movie_" + i] = item
+            }
+        }
+
+        // Add filtered and grouped items to model
+        for (let key in showEpisodes) {
+            let item = showEpisodes[key]
             continueWatchingModel.append({
+                backdropUrl: item.backdropUrl || item.backdrop || "",
+                logoUrl: item.logoUrl || item.logo || "",
                 posterUrl: item.posterUrl || "",
                 title: item.title || "",
+                type: item.type || "",
+                season: item.season || 0,
+                episode: item.episode || 0,
+                episodeTitle: item.episodeTitle || "",
                 year: item.year || 0,
                 rating: item.rating || "",
-                progress: item.progress || 0,
+                progress: item.progress || item.progressPercent || 0,
                 badgeText: (item.progress > 0) ? "UP NEXT" : "",
                 imdbId: item.imdbId || ""
             })
@@ -286,7 +336,7 @@ Item {
                             if (!item) return
                             item.title = "Continue Watching"
                             item.icon = "\U0001f550"
-                            item.itemWidth = 150
+                            item.itemWidth = 400
                             item.itemHeight = 225
                             item.model = continueWatchingModel
                         }
