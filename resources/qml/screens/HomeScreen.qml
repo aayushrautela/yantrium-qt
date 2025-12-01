@@ -20,69 +20,40 @@ Item {
     // --- Connections ---
     Connections {
         target: libraryService
-        
-        function onCatalogsLoaded(sections) {
-            root.onCatalogsLoaded(sections)
-        }
-
-        function onContinueWatchingLoaded(items) {
-            root.onContinueWatchingLoaded(items)
-        }
-
-        function onError(message) {
-            root.onError(message)
-        }
+        function onCatalogsLoaded(sections) { root.onCatalogsLoaded(sections) }
+        function onContinueWatchingLoaded(items) { root.onContinueWatchingLoaded(items) }
+        function onError(message) { root.onError(message) }
     }
 
     // --- Models ---
-    ListModel {
-        id: continueWatchingModel
-    }
-
-    // Outer ListModel: Stores section metadata + raw items array
-    ListModel {
-        id: catalogSectionsModel
-    }
+    ListModel { id: continueWatchingModel }
+    ListModel { id: catalogSectionsModel }
 
     // --- State ---
     property bool isLoading: false
     property var heroItems: []
     property int currentHeroIndex: 0
-    
+
     // --- Hero Logic ---
-    
-    // Call this to go to next slide (1 = Next, -1 = Prev)
     function cycleHero(direction) {
         if (heroItems.length <= 1) return
-        
-        // Calculate new index with wrap-around logic
         let newIndex = currentHeroIndex + direction
         if (newIndex >= heroItems.length) newIndex = 0
         if (newIndex < 0) newIndex = heroItems.length - 1
-        
         currentHeroIndex = newIndex
-        
-        // Pass the direction to the component to decide animation slide
         updateHeroSection(heroItems[currentHeroIndex], true, direction)
-        
-        // Restart timer so we don't auto-slide immediately after user clicks
         heroRotationTimer.restart()
     }
     
-    // Timer for auto-rotating hero
     Timer {
         id: heroRotationTimer
-        interval: 10000 // 10 seconds
-        running: heroItems.length > 1
-        repeat: true
-        onTriggered: root.cycleHero(1) // Auto always goes "Next"
+        interval: 10000; running: heroItems.length > 1; repeat: true
+        onTriggered: root.cycleHero(1)
     }
 
     // --- Initialization ---
     Component.onCompleted: {
-        if (libraryService) {
-            loadCatalogs()
-        }
+        if (libraryService) loadCatalogs()
     }
 
     function loadCatalogs() {
@@ -92,76 +63,46 @@ Item {
         libraryService.loadCatalogs()
     }
 
-    // --- Logic ---
     function onCatalogsLoaded(sections) {
-        console.log("[HomeScreen] Sections loaded:", sections ? sections.length : 0)
         isLoading = false
-
         if (!sections || sections.length === 0) {
             catalogSectionsModel.clear()
             return
         }
-
-        // 1. Clear existing data
         catalogSectionsModel.clear()
 
-        // 2. Hero Logic (Store all items from first section for rotation)
+        // Hero Logic
         heroItems = []
         if (sections[0].items && sections[0].items.length > 0) {
             heroItems = sections[0].items
             currentHeroIndex = 0
-            // Initial load: no animation (false), direction 0
             updateHeroSection(heroItems[0], false, 0)
             heroRotationTimer.restart()
         }
 
-        // 3. Populate Outer ListModel with explicit data mapping
+        // Populate Models
         for (let i = 0; i < sections.length; i++) {
             let section = sections[i]
             let items = section.items || []
-            
-            // Create inner ListModel for cards right away
             let cardModel = Qt.createQmlObject('import QtQuick; ListModel {}', catalogSectionsModel)
             
-            // EXPLICIT DATA MAPPING: Convert items to card model
             if (items && items.length > 0) {
-                let itemsArray = []
-                if (Array.isArray(items)) {
-                    itemsArray = items
-                } else {
-                    try {
-                        for (let j = 0; j < items.length; j++) {
-                            itemsArray.push(items[j])
-                        }
-                    } catch (e) {
-                        console.error("[HomeScreen] Error converting items array:", e)
-                    }
+                let itemsArray = Array.isArray(items) ? items : []
+                if (!Array.isArray(items)) {
+                     try { for(let k=0; k<items.length; k++) itemsArray.push(items[k]) } catch(e){}
                 }
-                
+
                 for (let j = 0; j < itemsArray.length; j++) {
                     let item = itemsArray[j]
-                    
-                    let posterUrl = item.posterUrl || item.poster || ""
-                    let title = item.title || item.name || "Unknown"
-                    let year = 0
-                    if (item.year !== undefined) {
-                        year = typeof item.year === 'number' ? item.year : parseInt(item.year) || 0
-                    }
-                    let rating = item.rating || ""
-                    let progress = item.progress || 0
-                    let badgeText = item.badgeText || ""
-                    let isHighlighted = item.isHighlighted || false
-                    let id = item.id || ""
-                    
                     cardModel.append({
-                        posterUrl: posterUrl,
-                        title: title,
-                        year: year,
-                        rating: rating,
-                        progress: progress,
-                        badgeText: badgeText,
-                        isHighlighted: isHighlighted,
-                        id: id
+                        posterUrl: item.posterUrl || item.poster || "",
+                        title: item.title || item.name || "Unknown",
+                        year: item.year || 0,
+                        rating: item.rating || "",
+                        progress: item.progress || 0,
+                        badgeText: item.badgeText || "",
+                        isHighlighted: item.isHighlighted || false,
+                        id: item.id || ""
                     })
                 }
             }
@@ -176,8 +117,6 @@ Item {
 
     function updateHeroSection(data, animate, direction) {
         if (!heroLoader.item) return
-        
-        // 1. Text/Data updates instantly
         heroLoader.item.title = data.title || ""
         heroLoader.item.logoUrl = data.logoUrl || data.logo || ""
         heroLoader.item.description = data.description || "No description available."
@@ -187,8 +126,6 @@ Item {
         if (data.rating) meta.push(data.rating.toString())
         heroLoader.item.metadata = meta
         
-        // 2. Animate Backdrop with specific direction
-        // direction: 1 (Next/Swipe Left), -1 (Prev/Swipe Right), 0 (Instant)
         let bg = data.background || data.backdrop || ""
         heroLoader.item.updateBackdrop(bg, animate ? (direction || 1) : 0)
     }
@@ -196,9 +133,6 @@ Item {
     function onContinueWatchingLoaded(items) {
         continueWatchingModel.clear()
         if (!items) return
-
-        // Items are already filtered and grouped in C++ (LibraryService)
-        // Just add them directly to the model
         for (let i = 0; i < items.length; i++) {
             let item = items[i]
             continueWatchingModel.append({
@@ -207,14 +141,8 @@ Item {
                 posterUrl: item.posterUrl || "",
                 title: item.title || "",
                 type: item.type || "",
-                season: item.season || 0,
-                episode: item.episode || 0,
-                episodeTitle: item.episodeTitle || "",
-                year: item.year || 0,
-                rating: item.rating || "",
                 progress: item.progress || item.progressPercent || 0,
-                badgeText: (item.progress > 0) ? "UP NEXT" : "",
-                imdbId: item.imdbId || ""
+                rating: item.rating || ""
             })
         }
     }
@@ -228,9 +156,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: "#09090b"
-        focus: true // Enable focus for keyboard testing
-        
-        // Keyboard keys for testing Left/Right
+        focus: true
         Keys.onRightPressed: cycleHero(1)
         Keys.onLeftPressed: cycleHero(-1)
 
@@ -243,49 +169,32 @@ Item {
             Column {
                 id: contentColumn
                 width: parent.width
-                spacing: 20
-                bottomPadding: 50 
+                spacing: 40
+                bottomPadding: 80
 
-                // 1. Hero Section (full width, independent of margins)
+                // 1. Hero Section (Full width, no margin)
                 Loader {
                     id: heroLoader
                     width: parent.width
                     height: 650
                     source: "qrc:/qml/components/HeroSection.qml"
                     
-                    // Add invisible mouse areas on the sides for clicking "Next/Prev"
                     MouseArea {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: 100
-                        onClicked: root.cycleHero(-1) // Go Left
-                        z: 100
+                        anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 100
+                        onClicked: root.cycleHero(-1); z: 100
                     }
-                    
                     MouseArea {
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: 100
-                        onClicked: root.cycleHero(1) // Go Right
-                        z: 100
+                        anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 100
+                        onClicked: root.cycleHero(1); z: 100
                     }
                 }
                 
-                // Content wrapper with margins for everything except hero
-                Column {
-                    width: parent.width
-                    spacing: 20
-                    leftPadding: 40
-                    rightPadding: 40
-
                 // 2. Continue Watching
                 Loader {
                     id: cwLoader
-                    width: parent.width
-                    height: (item && item.implicitHeight > 0) ? item.implicitHeight : (active ? 320 : 0)
                     
+                    width: parent.width
+                    height: (item && item.implicitHeight > 0) ? item.implicitHeight : (active ? 350 : 0)
                     source: "qrc:/qml/components/HorizontalList.qml"
                     active: continueWatchingModel.count > 0
                     visible: active
@@ -293,9 +202,9 @@ Item {
                     onLoaded: {
                         if (!item) return
                         item.title = "Continue Watching"
-                        item.icon = "\U0001f550"
-                            item.itemWidth = 400
-                        item.itemHeight = 225
+                        item.icon = "" 
+                        item.itemWidth = 480 
+                        item.itemHeight = 270 
                         item.model = continueWatchingModel
                     }
                 }
@@ -308,7 +217,7 @@ Item {
                     Column {
                         id: sectionColumn
                         width: parent.width
-                        spacing: 10
+                        spacing: 15
 
                         readonly property string sectionTitle: model.sectionTitle
                         readonly property var sectionItemsModel: model.itemsModel
@@ -316,76 +225,70 @@ Item {
                         // Section Title
                         Text {
                             width: parent.width
-                            height: 40
+                            height: 30
                             text: sectionColumn.sectionTitle
                             color: "white"
                             font.pixelSize: 18
                             font.bold: true
-                            leftPadding: 0
+                            // Simple Left Padding
+                            leftPadding: 50
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        // Inner ListView
-                        ListView {
-                            id: sectionListView
-                            width: parent.width
-                            height: 400 // Total height for delegate (360 poster + 40 text)
-                            orientation: ListView.Horizontal
-                            spacing: 20
-                            leftMargin: 0
-                            rightMargin: 0
-                            clip: true
-                            model: sectionColumn.sectionItemsModel
+                        // Inner ListView container
+                        Item {
+                            width: parent.width - 100  // Reduce width to leave 50px on each side
+                            height: 420 
+                            anchors.horizontalCenter: parent.horizontalCenter
                             
-                            delegate: Item {
-                                width: 240
-                                height: 400
+                            ListView {
+                                id: sectionListView
+                                anchors.fill: parent
+                                orientation: ListView.Horizontal
+                                spacing: 24 
+                                leftMargin: 0
+                                rightMargin: 0
+                                clip: true 
+                                model: sectionColumn.sectionItemsModel
                                 
-                                property bool isHovered: false
-
-                                // Mouse handling for the entire card
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onEntered: isHovered = true
-                                    onExited: isHovered = false
-                                    onClicked: {
-                                        console.log("Clicked catalog item:", model.title, "ID:", model.id)
-                                    }
+                                PropertyAnimation {
+                                    id: sectionScrollAnimation
+                                    target: sectionListView
+                                    property: "contentX"
+                                    duration: 300
+                                    easing.type: Easing.OutCubic
                                 }
+                            
+                                delegate: Item {
+                                    width: 240
+                                    height: 400
+                                    
+                                    property bool isHovered: false
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onEntered: isHovered = true
+                                        onExited: isHovered = false
+                                        onClicked: console.log("Clicked:", model.title)
+                                    }
 
                                     Column {
                                         anchors.fill: parent
                                         spacing: 12
 
-                                    // Rounded poster image container (2:3 aspect ratio)
+                                        // Poster
                                         Item {
-                                        id: imageContainer
+                                            id: imageContainer
                                             width: parent.width
-                                        height: 360 // 240 * 3/2 = 360 (2:3 aspect ratio)
-                                            
-                                            // 1. Define the mask shape (invisible, used by layer)
-                                            Rectangle {
-                                                id: maskShape
-                                                anchors.fill: parent
-                                                radius: 8
-                                                visible: false
-                                            }
-
-                                            // 2. Enable Layering and set the OpacityMask
+                                            height: 360 
+                                                
+                                            Rectangle { id: maskShape; anchors.fill: parent; radius: 8; visible: false }
                                             layer.enabled: true
-                                            layer.effect: OpacityMask {
-                                                maskSource: maskShape
-                                            }
+                                            layer.effect: OpacityMask { maskSource: maskShape }
 
-                                            // Background placeholder
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: "#2a2a2a"
-                                            radius: 8
-                                            }
-                                            
-                                            // 3. The Image itself
+                                            Rectangle { anchors.fill: parent; color: "#2a2a2a"; radius: 8 }
+                                                
                                             Image {
                                                 id: img
                                                 anchors.fill: parent
@@ -393,66 +296,109 @@ Item {
                                                 fillMode: Image.PreserveAspectCrop
                                                 asynchronous: true
                                                 smooth: true
-                                                
-                                                // 4. Scale Logic: Zoom from 1.0 to 1.15
-                                                scale: isHovered ? 1.15 : 1.0
-                                                
-                                                Behavior on scale { 
-                                                    NumberAnimation { duration: 300; easing.type: Easing.OutQuad } 
-                                                }
+                                                scale: isHovered ? 1.10 : 1.0 
+                                                Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
                                             }
 
-                                            // Loading/Error state
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: img.status === Image.Error ? "No Image" : ""
-                                                color: "#666"
-                                                visible: img.status !== Image.Ready
-                                            }
-
-                                            // Rating Badge (Inside the masked area)
+                                            // Rating
                                             Rectangle {
-                                                anchors.bottom: parent.bottom
-                                                anchors.right: parent.right
-                                                anchors.margins: 8
-                                                visible: model.rating && model.rating !== ""
-                                                color: "black"
-                                                opacity: 0.8
-                                                radius: 4
-                                                width: 40
-                                                height: 20
-                                                
+                                                anchors.bottom: parent.bottom; anchors.right: parent.right; anchors.margins: 8
+                                                visible: model.rating !== ""; color: "black"; opacity: 0.8; radius: 4
+                                                width: 40; height: 20
                                                 Row {
-                                                    anchors.centerIn: parent
-                                                    spacing: 2
+                                                    anchors.centerIn: parent; spacing: 2
                                                     Text { text: "\u2605"; color: "#bb86fc"; font.pixelSize: 10 }
                                                     Text { text: model.rating; color: "white"; font.pixelSize: 10; font.bold: true }
                                                 }
-                                }
+                                            }
 
-                                        // Border overlay (only on image container)
-                                Rectangle {
-                                    anchors.fill: parent
-                                    color: "transparent"
-                                    radius: 8
-                                    z: 10
-                                    
-                                    border.width: 3
-                                    border.color: isHovered ? "#bb86fc" : "transparent"
-                                    
-                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                            // Border
+                                            Rectangle {
+                                                anchors.fill: parent; color: "transparent"; radius: 8; z: 10
+                                                border.width: 3; border.color: isHovered ? "#bb86fc" : "transparent"
+                                                Behavior on border.color { ColorAnimation { duration: 200 } }
+                                            }
+                                        }
+
+                                        // Title
+                                        Text {
+                                            width: parent.width
+                                            text: model.title
+                                            color: "white"
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            elide: Text.ElideRight
+                                            horizontalAlignment: Text.AlignHCenter
                                         }
                                     }
-
-                                    // Title Text (Outside the rounded rectangle)
-                                    Text {
-                                        width: parent.width
-                                        text: model.title
-                                        color: "white"
-                                        font.pixelSize: 14
-                                        font.bold: true
-                                        elide: Text.ElideRight
-                                        horizontalAlignment: Text.AlignHCenter
+                                }
+                            }
+                            
+                            // Left arrow
+                            Item {
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 48
+                                height: 48
+                                visible: sectionListView.contentX > 0
+                                
+                                property bool isHovered: false
+                                
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: 48
+                                    height: 48
+                                    source: "qrc:/assets/icons/arrow-left.svg"
+                                    fillMode: Image.PreserveAspectFit
+                                    opacity: parent.isHovered ? 1.0 : 0.4
+                                    Behavior on opacity { NumberAnimation { duration: 200 } }
+                                }
+                                
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onEntered: parent.isHovered = true
+                                    onExited: parent.isHovered = false
+                                    onClicked: {
+                                        var targetX = Math.max(0, sectionListView.contentX - sectionListView.width * 0.8)
+                                        sectionScrollAnimation.to = targetX
+                                        sectionScrollAnimation.start()
+                                    }
+                                }
+                            }
+                            
+                            // Right arrow
+                            Item {
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 48
+                                height: 48
+                                visible: sectionListView.contentX < sectionListView.contentWidth - sectionListView.width
+                                
+                                property bool isHovered: false
+                                
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: 48
+                                    height: 48
+                                    source: "qrc:/assets/icons/arrow-right.svg"
+                                    fillMode: Image.PreserveAspectFit
+                                    opacity: parent.isHovered ? 1.0 : 0.4
+                                    Behavior on opacity { NumberAnimation { duration: 200 } }
+                                }
+                                
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onEntered: parent.isHovered = true
+                                    onExited: parent.isHovered = false
+                                    onClicked: {
+                                        var targetX = Math.min(
+                                            sectionListView.contentWidth - sectionListView.width,
+                                            sectionListView.contentX + sectionListView.width * 0.8
+                                        )
+                                        sectionScrollAnimation.to = targetX
+                                        sectionScrollAnimation.start()
                                     }
                                 }
                             }
@@ -462,30 +408,20 @@ Item {
 
                 // 4. Loading & Empty States
                 Rectangle {
-                    width: parent.width
-                    height: 200
+                    width: parent.width; height: 200
                     visible: isLoading
                     color: "transparent"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Loading..."
-                        color: "#666"
-                        font.pixelSize: 16
-                    }
+                    Text { anchors.centerIn: parent; text: "Loading..."; color: "#666"; font.pixelSize: 16 }
                 }
                 
                 Rectangle {
-                    width: parent.width
-                    height: 200
+                    width: parent.width; height: 200
                     visible: !isLoading && catalogSectionsModel.count === 0 && continueWatchingModel.count === 0
                     color: "transparent"
                     Text {
                         anchors.centerIn: parent
                         text: "No Content Found\nInstall addons to populate library"
-                        horizontalAlignment: Text.AlignHCenter
-                        color: "#666"
-                        font.pixelSize: 16
-                        }
+                        horizontalAlignment: Text.AlignHCenter; color: "#666"; font.pixelSize: 16
                     }
                 }
             }

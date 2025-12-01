@@ -12,7 +12,7 @@ Rectangle {
     property int itemHeight: 225
     
     width: parent.width
-    height: itemHeight + 60  // Content height + title height
+    height: (root.title === "Continue Watching" ? 270 : itemHeight) + 60  // Content height + title height (270 for continue watching cards)
     
     color: "transparent"
     
@@ -25,7 +25,7 @@ Rectangle {
             width: parent.width
             height: 32
             spacing: 8
-            leftPadding: 20
+            leftPadding: 50
             
             Text {
                 text: root.icon !== "" ? root.icon + " " : ""
@@ -43,21 +43,31 @@ Rectangle {
         
         // Horizontal scrolling list
         Item {
-            width: parent.width
+            width: parent.width - 100  // Reduce width to leave 50px on each side
             height: itemHeight
+            anchors.horizontalCenter: parent.horizontalCenter
             
             ListView {
                 id: listView
                 anchors.fill: parent
                 orientation: ListView.Horizontal
                 spacing: 12
-                leftMargin: 20
-                rightMargin: 20
+                leftMargin: 0
+                rightMargin: 0
+                clip: true
                 model: root.model
                 
+                PropertyAnimation {
+                    id: scrollAnimation
+                    target: listView
+                    property: "contentX"
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+                
                 delegate: Loader {
-                    width: root.title === "Continue Watching" ? 400 : root.itemWidth
-                    height: root.title === "Continue Watching" ? 225 : root.itemHeight
+                    width: root.title === "Continue Watching" ? 480 : root.itemWidth  // 20% bigger: 400 * 1.2 = 480
+                    height: root.title === "Continue Watching" ? 270 : root.itemHeight  // 20% bigger: 225 * 1.2 = 270
                     
                     source: root.title === "Continue Watching" 
                         ? "qrc:/qml/components/ContinueWatchingCard.qml"
@@ -98,54 +108,70 @@ Rectangle {
                 }
                 
                 // Left arrow
-                Rectangle {
+                Item {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 40
-                    height: 40
-                    radius: 20
-                    color: "#80000000"
+                    width: 48
+                    height: 48
                     visible: listView.contentX > 0
                     
-                    Text {
+                    property bool isHovered: false
+                    
+                    Image {
                         anchors.centerIn: parent
-                        text: "◀"
-                        font.pixelSize: 20
-                        color: "#ffffff"
+                        width: 48
+                        height: 48
+                        source: "qrc:/assets/icons/arrow-left.svg"
+                        fillMode: Image.PreserveAspectFit
+                        opacity: parent.isHovered ? 1.0 : 0.4
+                        Behavior on opacity { NumberAnimation { duration: 200 } }
                     }
                     
                     MouseArea {
                         anchors.fill: parent
+                        hoverEnabled: true
+                        onEntered: parent.isHovered = true
+                        onExited: parent.isHovered = false
                         onClicked: {
-                            listView.contentX = Math.max(0, listView.contentX - listView.width * 0.8)
+                            var targetX = Math.max(0, listView.contentX - listView.width * 0.8)
+                            scrollAnimation.to = targetX
+                            scrollAnimation.start()
                         }
                     }
                 }
                 
                 // Right arrow
-                Rectangle {
+                Item {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 40
-                    height: 40
-                    radius: 20
-                    color: "#80000000"
+                    width: 48
+                    height: 48
                     visible: listView.contentX < listView.contentWidth - listView.width
                     
-                    Text {
+                    property bool isHovered: false
+                    
+                    Image {
                         anchors.centerIn: parent
-                        text: "▶"
-                        font.pixelSize: 20
-                        color: "#ffffff"
+                        width: 48
+                        height: 48
+                        source: "qrc:/assets/icons/arrow-right.svg"
+                        fillMode: Image.PreserveAspectFit
+                        opacity: parent.isHovered ? 1.0 : 0.4
+                        Behavior on opacity { NumberAnimation { duration: 200 } }
                     }
                     
                     MouseArea {
                         anchors.fill: parent
+                        hoverEnabled: true
+                        onEntered: parent.isHovered = true
+                        onExited: parent.isHovered = false
                         onClicked: {
-                            listView.contentX = Math.min(
+                            var targetX = Math.min(
                                 listView.contentWidth - listView.width,
                                 listView.contentX + listView.width * 0.8
                             )
+                            scrollAnimation.to = targetX
+                            scrollAnimation.start()
                         }
                     }
                 }

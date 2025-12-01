@@ -18,8 +18,8 @@ Item {
     
     signal clicked()
     
-    width: 400
-    height: 225  // Landscape aspect ratio
+    width: 480  // 20% bigger: 400 * 1.2 = 480
+    height: 270  // 20% bigger: 225 * 1.2 = 270 (Landscape aspect ratio)
     
     MouseArea {
         anchors.fill: parent
@@ -184,13 +184,11 @@ Item {
             }
             
             Text {
-                text: "S" + (root.season < 10 ? "0" : "") + root.season + 
+                text: "S" + (root.season < 10 ? "0" : "") + root.season +
                       "E" + (root.episode < 10 ? "0" : "") + root.episode
                 color: "#ffffff"
                 font.pixelSize: 21  // 50% bigger: 14 * 1.5 = 21
                 font.bold: true
-                style: Text.Outline
-                styleColor: "#000000"
             }
             
             Text {
@@ -199,8 +197,6 @@ Item {
                 color: "#e0e0e0"
                 font.pixelSize: 18  // 50% bigger: 12 * 1.5 = 18
                 elide: Text.ElideRight
-                style: Text.Outline
-                styleColor: "#000000"
             }
         }
         
