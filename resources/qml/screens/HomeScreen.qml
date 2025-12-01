@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Yantrium.Services 1.0
 
 Item {
@@ -45,6 +46,20 @@ Item {
 
     // --- State ---
     property bool isLoading: false
+    property var heroItems: []
+    property int currentHeroIndex: 0
+    
+    // Timer for auto-rotating hero
+    Timer {
+        id: heroRotationTimer
+        interval: 10000 // 10 seconds
+        running: heroItems.length > 1
+        repeat: true
+        onTriggered: {
+            currentHeroIndex = (currentHeroIndex + 1) % heroItems.length
+            updateHeroSection(heroItems[currentHeroIndex], true)
+        }
+    }
 
     // --- Initialization ---
     Component.onCompleted: {
@@ -73,30 +88,29 @@ Item {
         // 1. Clear existing data
         catalogSectionsModel.clear()
 
-        // 2. Hero Logic (Pick first item of first section)
+        // 2. Hero Logic (Store all items from first section for rotation)
+        heroItems = []
         if (sections[0].items && sections[0].items.length > 0) {
-            updateHeroSection(sections[0].items[0])
+            heroItems = sections[0].items
+            currentHeroIndex = 0
+            updateHeroSection(heroItems[0], false)
+            heroRotationTimer.restart()
         }
 
         // 3. Populate Outer ListModel with explicit data mapping
-        // Create inner ListModel for each section immediately
         for (let i = 0; i < sections.length; i++) {
             let section = sections[i]
             let items = section.items || []
             
-            console.log("[HomeScreen] Section", i, "- name:", section.name, "items type:", typeof items, "isArray:", Array.isArray(items), "length:", items ? items.length : 0)
-
             // Create inner ListModel for cards right away
             let cardModel = Qt.createQmlObject('import QtQuick; ListModel {}', catalogSectionsModel)
             
             // EXPLICIT DATA MAPPING: Convert items to card model
             if (items && items.length > 0) {
-                // Handle both JS arrays and QVariantList from C++
                 let itemsArray = []
                 if (Array.isArray(items)) {
                     itemsArray = items
                 } else {
-                    // Convert QVariantList to array
                     try {
                         for (let j = 0; j < items.length; j++) {
                             itemsArray.push(items[j])
@@ -106,16 +120,9 @@ Item {
                     }
                 }
                 
-                // Debug first item structure
-                if (itemsArray.length > 0) {
-                    console.log("[HomeScreen] First item in section", i, "keys:", Object.keys(itemsArray[0]))
-                }
-                
-                // EXPLICIT MAPPING: Convert raw items to clean card objects
                 for (let j = 0; j < itemsArray.length; j++) {
                     let item = itemsArray[j]
                     
-                    // Extract values explicitly - handle QVariantMap access
                     let posterUrl = item.posterUrl || item.poster || ""
                     let title = item.title || item.name || "Unknown"
                     let year = 0
@@ -139,24 +146,22 @@ Item {
                         id: id
                     })
                 }
-                
-                console.log("[HomeScreen] ✓ Created", cardModel.count, "cards for section:", section.name)
             }
 
-            // Store section with its card model
             catalogSectionsModel.append({
                 sectionTitle: section.name || "Unknown Section",
                 addonId: section.addonId || "",
-                itemsModel: cardModel // Store the pre-created ListModel
+                itemsModel: cardModel 
             })
         }
-
-        console.log("[HomeScreen] ✓ Populated outer ListModel with", catalogSectionsModel.count, "sections")
     }
 
-    function updateHeroSection(data) {
+    function updateHeroSection(data, animate) {
         if (!heroLoader.item) return
+        
+        // Update text content instantly (no animation)
         heroLoader.item.title = data.title || ""
+        heroLoader.item.logoUrl = data.logoUrl || data.logo || ""
         heroLoader.item.description = data.description || "No description available."
         
         let meta = []
@@ -164,7 +169,8 @@ Item {
         if (data.rating) meta.push(data.rating.toString())
         heroLoader.item.metadata = meta
         
-        heroLoader.item.backdropUrl = data.background || data.poster || ""
+        // Update backdrop with animation if requested
+        heroLoader.item.updateBackdrop(data.background || "", animate || false)
     }
 
     function onContinueWatchingLoaded(items) {
@@ -205,48 +211,53 @@ Item {
                 id: contentColumn
                 width: parent.width
                 spacing: 20
-                bottomPadding: 50 // Extra space at bottom
+                bottomPadding: 50
 
-                // 1. Hero Section
+                // 1. Hero Section (full width, independent of margins)
                 Loader {
                     id: heroLoader
                     width: parent.width
-                    height: 500
+                    height: 650
                     source: "qrc:/qml/components/HeroSection.qml"
                 }
-
-                // 2. Continue Watching
-                Loader {
-                    id: cwLoader
+                
+                // Content wrapper with margins for everything except hero
+                Column {
                     width: parent.width
-                    height: (item && item.implicitHeight > 0) ? item.implicitHeight : (active ? 320 : 0)
-                    
-                    source: "qrc:/qml/components/HorizontalList.qml"
-                    active: continueWatchingModel.count > 0
-                    visible: active
-                    
-                    onLoaded: {
-                        if (!item) return
-                        item.title = "Continue Watching"
-                        item.icon = "\U0001f550"
-                        item.itemWidth = 150
-                        item.itemHeight = 225
-                        item.model = continueWatchingModel
-                    }
-                }
+                    spacing: 20
+                    leftPadding: 40
+                    rightPadding: 40
 
-                // 3. Catalog Sections (Nested ListModel Approach)
+                    // 2. Continue Watching
+                    Loader {
+                        id: cwLoader
+                        width: parent.width
+                        height: (item && item.implicitHeight > 0) ? item.implicitHeight : (active ? 320 : 0)
+                        
+                        source: "qrc:/qml/components/HorizontalList.qml"
+                        active: continueWatchingModel.count > 0
+                        visible: active
+                        
+                        onLoaded: {
+                            if (!item) return
+                            item.title = "Continue Watching"
+                            item.icon = "\U0001f550"
+                            item.itemWidth = 150
+                            item.itemHeight = 225
+                            item.model = continueWatchingModel
+                        }
+                    }
+
+                    // 3. Catalog Sections
                 Repeater {
                     id: catalogRepeater
                     model: catalogSectionsModel
 
-                    // Section Container
                     Column {
                         id: sectionColumn
                         width: parent.width
                         spacing: 10
 
-                        // Capture model data as properties
                         readonly property string sectionTitle: model.sectionTitle
                         readonly property var sectionItemsModel: model.itemsModel
 
@@ -258,38 +269,38 @@ Item {
                             color: "white"
                             font.pixelSize: 18
                             font.bold: true
-                            leftPadding: 20
+                            leftPadding: 0
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        // Inner ListView with pre-created ListModel
+                        // Inner ListView
                         ListView {
                             id: sectionListView
                             width: parent.width
-                            height: 380
+                            height: 380 // Total height for delegate
                             orientation: ListView.Horizontal
                             spacing: 20
-                            leftMargin: 20
-                            rightMargin: 20
+                            leftMargin: 0
+                            rightMargin: 0
                             clip: true
                             model: sectionColumn.sectionItemsModel
                             
-                            // Debug model changes
-                            onCountChanged: {
-                                console.log("[HomeScreen] ListView count changed to:", count, "for section:", sectionColumn.sectionTitle)
-                            }
-                            
-                            Component.onCompleted: {
-                                console.log("[HomeScreen] ListView created for section:", sectionColumn.sectionTitle)
-                                console.log("[HomeScreen] Model:", sectionColumn.sectionItemsModel)
-                                console.log("[HomeScreen] Model count:", sectionColumn.sectionItemsModel ? sectionColumn.sectionItemsModel.count : 0)
-                            }
-
                             delegate: Item {
                                 width: 240
                                 height: 360
                                 
                                 property bool isHovered: false
+
+                                // Mouse handling for the entire card
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onEntered: isHovered = true
+                                    onExited: isHovered = false
+                                    onClicked: {
+                                        console.log("Clicked catalog item:", model.title, "ID:", model.id)
+                                    }
+                                }
 
                                 Rectangle {
                                     id: contentRect
@@ -301,14 +312,32 @@ Item {
                                         anchors.fill: parent
                                         spacing: 12
 
-                                        // Poster Wrapper (Clipped)
-                                        Rectangle {
+                                        // --- FIX: Image Wrapper with Scale Animation ---
+                                        Item {
                                             width: parent.width
-                                            height: parent.height - 40
-                                            color: "#2a2a2a"
-                                            radius: 8
-                                            clip: true
+                                            height: parent.height - 40 // Leave space for text
+                                            
+                                            // 1. Define the mask shape (invisible, used by layer)
+                                            Rectangle {
+                                                id: maskShape
+                                                anchors.fill: parent
+                                                radius: 8
+                                                visible: false
+                                            }
 
+                                            // 2. Enable Layering and set the OpacityMask
+                                            layer.enabled: true
+                                            layer.effect: OpacityMask {
+                                                maskSource: maskShape
+                                            }
+
+                                            // Background placeholder
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: "#2a2a2a"
+                                            }
+                                            
+                                            // 3. The Image itself
                                             Image {
                                                 id: img
                                                 anchors.fill: parent
@@ -317,10 +346,15 @@ Item {
                                                 asynchronous: true
                                                 smooth: true
                                                 
-                                                scale: isHovered ? 1.1 : 1.0
-                                                Behavior on scale { NumberAnimation { duration: 300 } }
+                                                // 4. Scale Logic: Zoom from 1.0 to 1.15
+                                                scale: isHovered ? 1.15 : 1.0
+                                                
+                                                Behavior on scale { 
+                                                    NumberAnimation { duration: 300; easing.type: Easing.OutQuad } 
+                                                }
                                             }
-                                            
+
+                                            // Loading/Error state
                                             Text {
                                                 anchors.centerIn: parent
                                                 text: img.status === Image.Error ? "No Image" : ""
@@ -328,7 +362,7 @@ Item {
                                                 visible: img.status !== Image.Ready
                                             }
 
-                                            // Rating Badge
+                                            // Rating Badge (Inside the masked area)
                                             Rectangle {
                                                 anchors.bottom: parent.bottom
                                                 anchors.right: parent.right
@@ -349,7 +383,7 @@ Item {
                                             }
                                         }
 
-                                        // Title Text
+                                        // Title Text (Outside the masked area)
                                         Text {
                                             width: parent.width
                                             text: model.title
@@ -374,47 +408,37 @@ Item {
                                     
                                     Behavior on border.color { ColorAnimation { duration: 200 } }
                                 }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onEntered: isHovered = true
-                                    onExited: isHovered = false
-                                    onClicked: {
-                                        console.log("Clicked catalog item:", model.title, "ID:", model.id)
-                                        // TODO: Open item details modal
-                                    }
-                                }
                             }
                         }
                     }
-                }
-
-                // 4. Loading & Empty States
-                Rectangle {
-                    width: parent.width
-                    height: 200
-                    visible: isLoading
-                    color: "transparent"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Loading..."
-                        color: "#666"
-                        font.pixelSize: 16
                     }
-                }
-                
-                Rectangle {
-                    width: parent.width
-                    height: 200
-                    visible: !isLoading && catalogSectionsModel.count === 0 && continueWatchingModel.count === 0
-                    color: "transparent"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "No Content Found\nInstall addons to populate library"
-                        horizontalAlignment: Text.AlignHCenter
-                        color: "#666"
-                        font.pixelSize: 16
+
+                    // 4. Loading & Empty States
+                    Rectangle {
+                        width: parent.width
+                        height: 200
+                        visible: isLoading
+                        color: "transparent"
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Loading..."
+                            color: "#666"
+                            font.pixelSize: 16
+                        }
+                    }
+                    
+                    Rectangle {
+                        width: parent.width
+                        height: 200
+                        visible: !isLoading && catalogSectionsModel.count === 0 && continueWatchingModel.count === 0
+                        color: "transparent"
+                        Text {
+                            anchors.centerIn: parent
+                            text: "No Content Found\nInstall addons to populate library"
+                            horizontalAlignment: Text.AlignHCenter
+                            color: "#666"
+                            font.pixelSize: 16
+                        }
                     }
                 }
             }

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 
 Rectangle {
     id: root
@@ -26,31 +27,56 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
         
-        // Poster image
-        Rectangle {
+        // Poster image (Using OpacityMask for rounded corners)
+        Item {
             width: parent.width
             height: parent.height - 60
-            color: "#2d2d2d"
-            radius: 8
-            
+
+            // Mask shape (the rounded rectangle)
+            Rectangle {
+                id: maskRect
+                anchors.fill: parent
+                radius: 8
+                visible: false
+            }
+
+            // Image (invisible, used as source for OpacityMask)
             Image {
                 id: posterImage
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
                 source: root.posterUrl
                 asynchronous: true
+                visible: false
+            }
+
+            // OpacityMask combines image and mask
+            OpacityMask {
+                id: maskedImage
+                anchors.fill: parent
+                source: posterImage
+                maskSource: maskRect
+            }
+
+            // Background color (shows when image is loading/error)
+            Rectangle {
+                anchors.fill: parent
+                color: "#2d2d2d"
+                radius: 8
+                z: -1
+            }
+            
+            Rectangle {
+                anchors.fill: parent
+                color: "#40000000"
+                visible: posterImage.status !== Image.Ready
+                z: 1
                 
-                Rectangle {
-                    anchors.fill: parent
-                    color: "#40000000"
-                    visible: posterImage.status !== Image.Ready
-                    
-                    Text {
-                        anchors.centerIn: parent
-                        text: "📽️"
-                        font.pixelSize: 40
-                        color: "#666666"
-                    }
+                Text {
+                    anchors.centerIn: parent
+                    text: "📽️"
+                    font.pixelSize: 40
+                    color: "#666666"
                 }
             }
             
