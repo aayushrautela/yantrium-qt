@@ -25,7 +25,7 @@ TraktCoreService::TraktCoreService(QObject* parent)
     , m_lastApiCall(0)
     , m_queueTimer(new QTimer(this))
     , m_isProcessingQueue(false)
-    , m_completionThreshold(80)
+    , m_completionThreshold(81)  // More than 80% (>80%) is considered watched
     , m_cleanupTimer(new QTimer(this))
 {
     m_queueTimer->setSingleShot(true);

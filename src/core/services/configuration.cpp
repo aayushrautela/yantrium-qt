@@ -137,7 +137,7 @@ QString Configuration::traktApiVersion() const
 
 int Configuration::defaultTraktCompletionThreshold() const
 {
-    return 80; // 80% completion threshold
+    return 81; // More than 80% (>80%) is considered watched
 }
 
 bool Configuration::isTraktConfigured() const

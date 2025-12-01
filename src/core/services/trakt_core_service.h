@@ -123,7 +123,7 @@ private:
     static constexpr int STOP_DEBOUNCE_MS = 1000;  // 1 second
     
     // Completion threshold
-    int m_completionThreshold;  // Default 80%
+    int m_completionThreshold;  // Default 81% (more than 80% is considered watched)
     
     // Cleanup timer
     QTimer* m_cleanupTimer;
