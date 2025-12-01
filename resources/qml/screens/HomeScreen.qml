@@ -49,16 +49,33 @@ Item {
     property var heroItems: []
     property int currentHeroIndex: 0
     
+    // --- Hero Logic ---
+    
+    // Call this to go to next slide (1 = Next, -1 = Prev)
+    function cycleHero(direction) {
+        if (heroItems.length <= 1) return
+        
+        // Calculate new index with wrap-around logic
+        let newIndex = currentHeroIndex + direction
+        if (newIndex >= heroItems.length) newIndex = 0
+        if (newIndex < 0) newIndex = heroItems.length - 1
+        
+        currentHeroIndex = newIndex
+        
+        // Pass the direction to the component to decide animation slide
+        updateHeroSection(heroItems[currentHeroIndex], true, direction)
+        
+        // Restart timer so we don't auto-slide immediately after user clicks
+        heroRotationTimer.restart()
+    }
+    
     // Timer for auto-rotating hero
     Timer {
         id: heroRotationTimer
         interval: 10000 // 10 seconds
         running: heroItems.length > 1
         repeat: true
-        onTriggered: {
-            currentHeroIndex = (currentHeroIndex + 1) % heroItems.length
-            updateHeroSection(heroItems[currentHeroIndex], true)
-        }
+        onTriggered: root.cycleHero(1) // Auto always goes "Next"
     }
 
     // --- Initialization ---
@@ -93,7 +110,8 @@ Item {
         if (sections[0].items && sections[0].items.length > 0) {
             heroItems = sections[0].items
             currentHeroIndex = 0
-            updateHeroSection(heroItems[0], false)
+            // Initial load: no animation (false), direction 0
+            updateHeroSection(heroItems[0], false, 0)
             heroRotationTimer.restart()
         }
 
@@ -156,10 +174,10 @@ Item {
         }
     }
 
-    function updateHeroSection(data, animate) {
+    function updateHeroSection(data, animate, direction) {
         if (!heroLoader.item) return
         
-        // Update text content instantly (no animation)
+        // 1. Text/Data updates instantly
         heroLoader.item.title = data.title || ""
         heroLoader.item.logoUrl = data.logoUrl || data.logo || ""
         heroLoader.item.description = data.description || "No description available."
@@ -169,8 +187,10 @@ Item {
         if (data.rating) meta.push(data.rating.toString())
         heroLoader.item.metadata = meta
         
-        // Update backdrop with animation if requested
-        heroLoader.item.updateBackdrop(data.background || "", animate || false)
+        // 2. Animate Backdrop with specific direction
+        // direction: 1 (Next/Swipe Left), -1 (Prev/Swipe Right), 0 (Instant)
+        let bg = data.background || data.backdrop || ""
+        heroLoader.item.updateBackdrop(bg, animate ? (direction || 1) : 0)
     }
 
     function onContinueWatchingLoaded(items) {
@@ -200,6 +220,11 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: "#09090b"
+        focus: true // Enable focus for keyboard testing
+        
+        // Keyboard keys for testing Left/Right
+        Keys.onRightPressed: cycleHero(1)
+        Keys.onLeftPressed: cycleHero(-1)
 
         ScrollView {
             anchors.fill: parent
@@ -219,6 +244,25 @@ Item {
                     width: parent.width
                     height: 650
                     source: "qrc:/qml/components/HeroSection.qml"
+                    
+                    // Add invisible mouse areas on the sides for clicking "Next/Prev"
+                    MouseArea {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 100
+                        onClicked: root.cycleHero(-1) // Go Left
+                        z: 100
+                    }
+                    
+                    MouseArea {
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 100
+                        onClicked: root.cycleHero(1) // Go Right
+                        z: 100
+                    }
                 }
                 
                 // Content wrapper with margins for everything except hero
