@@ -9,14 +9,29 @@ Item {
     // Services
     property LibraryService libraryService: LibraryService {
         id: libraryService
+        
+        Component.onCompleted: {
+            console.log("[HomeScreen] LibraryService component created")
+        }
+        
+        onCatalogsLoaded: function(sections) {
+            console.log("[HomeScreen] LibraryService.catalogsLoaded signal received directly")
+        }
+        
+        onError: function(message) {
+            console.error("[HomeScreen] LibraryService error signal:", message)
+        }
     }
     
     property CatalogPreferencesService catalogPrefsService: CatalogPreferencesService {
         id: catalogPrefsService
+        
+        Component.onCompleted: {
+            console.log("[HomeScreen] CatalogPreferencesService component created")
+        }
     }
 
     // Connect to LibraryService signals automatically
-    // This replaces the manual .connect() logic and prevents duplicate connections
     Connections {
         target: libraryService
         
@@ -38,48 +53,67 @@ Item {
         id: continueWatchingModel
     }
 
-    ListModel {
-        id: catalogSectionsModel
-    }
+    // Store catalog sections as JS array (QML ListModel can't handle complex nested objects)
+    property var catalogSections: []
 
     // State
     property bool isLoading: false
 
-    // Load data on component completion
+    // --- MERGED COMPONENT.ONCOMPLETED ---
+    // This is the single entry point for initialization
     Component.onCompleted: {
-        console.log("[HomeScreen] Component completed, loading catalogs")
+        console.log("[HomeScreen] ===== Component.onCompleted =====")
+        console.log("[HomeScreen] Component completed")
+        console.log("[HomeScreen] libraryService:", libraryService)
+        
+        if (!libraryService) {
+            console.error("[HomeScreen] ERROR: libraryService is null!")
+            return
+        }
+        
+        console.log("[HomeScreen] Calling loadCatalogs()")
         loadCatalogs()
     }
 
     function loadCatalogs() {
+        console.log("[HomeScreen] ===== loadCatalogs() called =====")
         isLoading = true
-        // No need to manually connect signals here anymore due to the Connections object above
+        catalogSections = []
+        console.log("[HomeScreen] Cleared catalog sections array, calling libraryService.loadCatalogs()")
         libraryService.loadCatalogs()
     }
 
     // Signal handlers
     function onCatalogsLoaded(sections) {
-        console.log("[HomeScreen] Catalogs loaded, sections:", sections ? sections.length : 0)
+        console.log("[HomeScreen] ===== onCatalogsLoaded() called =====")
+        console.log("[HomeScreen] Sections received:", sections ? sections.length : 0)
         isLoading = false
 
-        catalogSectionsModel.clear()
-
-        if (!sections) return
-
-        for (let i = 0; i < sections.length; i++) {
-            let section = sections[i]
-            let items = section.items || []
-            console.log("[HomeScreen] Adding section:", section.name, "with", items.length, "items")
-            
-            catalogSectionsModel.append({
-                name: section.name || "",
-                type: section.type || "",
-                addonId: section.addonId || "",
-                items: items // We store the array here to parse it later in the Loader
-            })
+        if (!sections) {
+            console.log("[HomeScreen] ERROR: sections is null or undefined!")
+            catalogSections = []
+            return
         }
 
-        console.log("[HomeScreen] Total catalog sections:", catalogSectionsModel.count)
+        if (sections.length === 0) {
+            console.log("[HomeScreen] WARNING: sections array is empty!")
+            catalogSections = []
+        }
+
+        // Store sections directly in JS array (QML ListModel can't handle nested objects)
+        catalogSections = sections
+
+        console.log("[HomeScreen] ✓ Stored", catalogSections.length, "sections in JS array")
+
+        // Debug: Log each section
+        for (let i = 0; i < catalogSections.length; i++) {
+            let section = catalogSections[i]
+            console.log("[HomeScreen] Section", i, "- name:", section.name, "items:", section.items ? section.items.length : 0)
+        }
+
+        // Force Repeater update by resetting model
+        catalogRepeater.model = 0
+        catalogRepeater.model = catalogSections.length
     }
 
     function onContinueWatchingLoaded(items) {
@@ -123,54 +157,152 @@ Item {
             anchors.fill: parent
             contentWidth: width
             contentHeight: contentColumn.height
-            clip: true // Good practice to keep content from drawing outside scrollview
+            clip: true 
 
             Column {
                 id: contentColumn
                 width: parent.width
                 spacing: 20
                 
-                // Hero section (featured content) - only show if hero catalogs are configured
+                // Hero section (featured content)
                 Loader {
                     id: heroLoader
                     width: parent.width
                     height: 500
                     source: "qrc:/qml/components/HeroSection.qml"
-                    active: hasHeroCatalogs
+                    active: hasHeroCatalogs && heroItemsModel.count > 0
                     visible: active
                     
                     property bool hasHeroCatalogs: false
+                    property int currentHeroIndex: 0
+                    
+                    function setCurrentHeroIndex(index) {
+                        currentHeroIndex = index
+                    }
+                    
+                    ListModel {
+                        id: heroItemsModel
+                    }
                     
                     Component.onCompleted: {
                         checkHeroCatalogs()
+                        loadHeroItems()
                     }
                     
                     function checkHeroCatalogs() {
                         let heroCatalogs = catalogPrefsService.getHeroCatalogs()
                         hasHeroCatalogs = heroCatalogs.length > 0
+                        console.log("[HomeScreen] Hero catalogs:", heroCatalogs.length)
+                    }
+                    
+                    function loadHeroItems() {
+                        if (!hasHeroCatalogs) return
+                        console.log("[HomeScreen] Loading hero items...")
+                        libraryService.loadHeroItems()
+                    }
+                    
+                    function updateHeroDisplay() {
+                        if (!item || heroItemsModel.count === 0) return
+                        
+                        let heroItem = heroItemsModel.get(heroLoader.currentHeroIndex)
+                        if (!heroItem) return
+                        
+                        item.title = heroItem.title || heroItem.name || ""
+                        item.description = heroItem.description || ""
+                        
+                        // Build metadata array
+                        let meta = []
+                        if (heroItem.year) meta.push(heroItem.year.toString())
+                        if (heroItem.rating) meta.push(heroItem.rating.toString())
+                        if (heroItem.genres && heroItem.genres.length > 0) {
+                            meta.push(heroItem.genres[0])
+                        }
+                        item.metadata = meta
+                        
+                        // Set images
+                        item.backdropUrl = heroItem.background || heroItem.backdropUrl || heroItem.poster || ""
+                        item.posterUrl = heroItem.poster || heroItem.posterUrl || ""
+                        
+                        // Enable navigation if multiple items
+                        item.hasMultipleItems = heroItemsModel.count > 1
                     }
                     
                     onLoaded: {
                         if (!item) return
-                        // For now, use placeholder data
-                        // TODO: Load actual hero items from hero catalogs
-                        item.title = "Zootopia"
-                        item.description = "After cracking the biggest case in Zootopia's history, rookie cops Judy Hopps and Nick Wilde find themselves on the twisting trail of a great mystery when Gary De'Snake arrives and turns the animal metropolis upside down."
-                        item.metadata = ["26-11-2025", "PG", "Animation", "Family"]
-                        item.hasMultipleItems = false
+                        updateHeroDisplay()
                     }
                     
-                    // Use Connections for Loader items to ensure clean signal handling
+                    Connections {
+                        target: libraryService
+                        ignoreUnknownSignals: true
+                        
+                        function onHeroItemsLoaded(items) {
+                            console.log("[HomeScreen] Hero items loaded:", items ? items.length : 0)
+                            heroItemsModel.clear()
+                            
+                            if (!items || items.length === 0) {
+                                hasHeroCatalogs = false
+                                return
+                            }
+                            
+                            // Limit to 10 items
+                            let itemsToAdd = items.slice(0, 10)
+                            for (let i = 0; i < itemsToAdd.length; i++) {
+                                let item = itemsToAdd[i]
+                                heroItemsModel.append({
+                                    title: item.title || item.name || "",
+                                    name: item.name || item.title || "",
+                                    description: item.description || "",
+                                    background: item.background || item.backdropUrl || "",
+                                    poster: item.poster || item.posterUrl || "",
+                                    year: item.year || 0,
+                                    rating: item.rating || "",
+                                    genres: item.genres || [],
+                                    id: item.id || "",
+                                    type: item.type || "",
+                                    imdbId: item.imdbId || ""
+                                })
+                            }
+                            
+                            heroLoader.setCurrentHeroIndex(0)
+                            heroLoader.updateHeroDisplay()
+                        }
+                    }
+                    
                     Connections {
                         target: heroLoader.item
                         ignoreUnknownSignals: true 
                         
                         function onPlayClicked() {
-                            console.log("Play clicked")
+                            let heroItem = heroItemsModel.get(heroLoader.currentHeroIndex)
+                            if (heroItem) {
+                                console.log("[HomeScreen] Play clicked for:", heroItem.title)
+                                // TODO: Navigate to player
+                            }
                         }
                         
                         function onAddToLibraryClicked() {
-                            console.log("Add to library clicked")
+                            let heroItem = heroItemsModel.get(heroLoader.currentHeroIndex)
+                            if (heroItem) {
+                                console.log("[HomeScreen] Add to library clicked for:", heroItem.title)
+                                // TODO: Add to library
+                            }
+                        }
+                        
+                        function onPreviousClicked() {
+                            let newIndex = heroLoader.currentHeroIndex > 0 
+                                ? heroLoader.currentHeroIndex - 1 
+                                : heroItemsModel.count - 1
+                            heroLoader.setCurrentHeroIndex(newIndex)
+                            heroLoader.updateHeroDisplay()
+                        }
+                        
+                        function onNextClicked() {
+                            let newIndex = heroLoader.currentHeroIndex < heroItemsModel.count - 1
+                                ? heroLoader.currentHeroIndex + 1
+                                : 0
+                            heroLoader.setCurrentHeroIndex(newIndex)
+                            heroLoader.updateHeroDisplay()
                         }
                     }
                     
@@ -180,15 +312,19 @@ Item {
                         
                         function onCatalogsUpdated() {
                             heroLoader.checkHeroCatalogs()
+                            heroLoader.loadHeroItems()
                         }
                     }
                 }
                 
                 // Continue Watching section
                 Loader {
+                    id: cwLoader
                     width: parent.width
+                    height: item ? item.implicitHeight : (active ? 320 : 0)
+                    
                     source: "qrc:/qml/components/HorizontalList.qml"
-                    active: continueWatchingModel.count > 0 // Only load if there is data
+                    active: continueWatchingModel.count > 0
                     visible: active
                     
                     onLoaded: {
@@ -201,35 +337,117 @@ Item {
                     }
                 }
                 
-                // Catalog sections (dynamically created)
+                // Catalog sections - SIMPLE DIRECT APPROACH
+                
+                // Catalog sections - CARDS DISPLAY (JS array storage, dynamic models)
                 Repeater {
                     id: catalogRepeater
-                    model: catalogSectionsModel
-                    
-                    Loader {
+                    model: catalogSections.length
+
+                    Column {
                         width: parent.width
-                        source: "qrc:/qml/components/HorizontalList.qml"
-                        
-                        // Capture the model data for this specific row
-                        property var sectionData: modelData
-                        
-                        onLoaded: {
-                            if (!item) return
-                            item.title = sectionData.name || ""
-                            item.icon = ""
-                            item.itemWidth = 150
-                            item.itemHeight = 225
-                            
-                            // Create ListModel from items array dynamically
-                            // Updated import to generic QtQuick to avoid version conflicts
-                            let sectionItems = sectionData.items || []
-                            let sectionItemsModel = Qt.createQmlObject('import QtQuick; ListModel {}', item)
-                            
-                            for (let i = 0; i < sectionItems.length; i++) {
-                                sectionItemsModel.append(sectionItems[i])
+                        spacing: 10
+
+                        // Section title
+                        Text {
+                            width: parent.width
+                            height: 40
+                            text: (catalogSections[index].name || "Unknown") + " (" + (catalogSections[index].items ? catalogSections[index].items.length : 0) + " items)"
+                            color: "white"
+                            font.pixelSize: 18
+                            font.bold: true
+                            leftPadding: 20
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        // Horizontal scrolling list of cards
+                        ListView {
+                            id: sectionListView
+                            width: parent.width
+                            height: 250
+                            orientation: ListView.Horizontal
+                            spacing: 12
+                            leftMargin: 20
+                            rightMargin: 20
+
+                            Component.onCompleted: {
+                                // Create model dynamically from JS array (processed items)
+                                let section = catalogSections[index]
+                                if (!section || !section.items) {
+                                    console.log("[HomeScreen] No section data or items for index:", index)
+                                    return
+                                }
+
+                                let sectionModel = Qt.createQmlObject('import QtQuick; ListModel {}', sectionListView)
+                                let items = section.items
+
+                                for (let i = 0; i < items.length; i++) {
+                                    let item = items[i]
+                                    sectionModel.append({
+                                        title: item.title || "",
+                                        poster: item.poster || item.posterUrl || "",
+                                        background: item.background || item.backdropUrl || "",
+                                        year: item.year || 0,
+                                        rating: item.rating || "",
+                                        id: item.id || ""
+                                    })
+                                }
+
+                                sectionListView.model = sectionModel
+                                console.log("[HomeScreen] ✓ Created section", section.name, "with", sectionModel.count, "items")
                             }
-                            
-                            item.model = sectionItemsModel
+
+                            delegate: Rectangle {
+                                width: 150
+                                height: 225
+                                color: "#1a1a1a"
+                                radius: 8
+
+                                Column {
+                                    anchors.fill: parent
+                                    spacing: 8
+
+                                    // Poster image (processed data has resolved URLs)
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 200
+                                        color: "#2a2a2a"
+                                        radius: 4
+
+                                        Image {
+                                            anchors.fill: parent
+                                            source: model.poster || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            asynchronous: true
+
+                                            onStatusChanged: {
+                                                if (status === Image.Error) {
+                                                    console.log("[HomeScreen] Image failed to load:", source)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Title (processed data uses 'title' field)
+                                    Text {
+                                        width: parent.width
+                                        height: 25
+                                        text: model.title || ""
+                                        color: "white"
+                                        font.pixelSize: 12
+                                        elide: Text.ElideRight
+                                        leftPadding: 4
+                                        rightPadding: 4
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        console.log("Clicked on:", model.title)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -240,7 +458,7 @@ Item {
                     height: 200
                     color: "transparent"
                     visible: isLoading
-                    
+
                     Text {
                         anchors.centerIn: parent
                         text: "Loading catalogs..."
@@ -248,13 +466,13 @@ Item {
                         color: "#aaaaaa"
                     }
                 }
-                
+
                 // Empty state
                 Rectangle {
                     width: parent.width
                     height: 200
                     color: "transparent"
-                    visible: !isLoading && catalogSectionsModel.count === 0 && continueWatchingModel.count === 0
+                    visible: !isLoading && catalogSections.length === 0 && continueWatchingModel.count === 0
 
                     Column {
                         anchors.centerIn: parent

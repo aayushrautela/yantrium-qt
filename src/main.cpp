@@ -19,6 +19,7 @@
 #include "core/services/trakt_watchlist_service.h"
 #include "core/services/library_service.h"
 #include "core/services/catalog_preferences_service.h"
+#include "core/services/file_export_service.h"
 
 // Force logging to console
 Q_LOGGING_CATEGORY(yantrium, "yantrium")
@@ -106,6 +107,12 @@ int main(int argc, char *argv[])
     std::cout << "[MAIN] Registered CatalogPreferencesService" << std::endl;
     std::cout.flush();
     qDebug() << "Registered CatalogPreferencesService";
+    
+    // Register File Export service
+    qmlRegisterType<FileExportService>("Yantrium.Services", 1, 0, "FileExportService");
+    std::cout << "[MAIN] Registered FileExportService" << std::endl;
+    std::cout.flush();
+    qDebug() << "Registered FileExportService";
 
     QQmlApplicationEngine engine;
     const QUrl url(QStringLiteral("qrc:/qml/MainApp.qml"));

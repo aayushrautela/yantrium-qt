@@ -73,6 +73,8 @@ set(PROJECT_SOURCES
     src/core/services/library_service.h
     src/core/services/catalog_preferences_service.cpp
     src/core/services/catalog_preferences_service.h
+    src/core/services/file_export_service.cpp
+    src/core/services/file_export_service.h
     resources/qml.qrc
 )
 

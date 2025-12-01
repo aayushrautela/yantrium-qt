@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import Yantrium.Components 1.0
 import Yantrium.Services 1.0
 
@@ -443,6 +444,72 @@ Item {
                                     refreshCatalogList()
                                 }
                             }
+                            
+                            Button {
+                                width: 180
+                                height: 44
+                                text: "Export (Processed)"
+                                
+                                background: Rectangle {
+                                    color: parent.pressed ? "#985eff" : "#bb86fc"
+                                    radius: 4
+                                }
+                                
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: "#000000"
+                                    font.bold: true
+                                    font.pixelSize: 12
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                
+                                onClicked: {
+                                    console.log("[Settings] ===== Export (Processed) button clicked =====")
+                                    
+                                    // Try to get existing catalog sections first
+                                    let existingSections = exportLibraryService.getCatalogSections()
+                                    console.log("[Settings] Existing catalog sections:", existingSections ? existingSections.length : 0)
+                                    
+                                    if (existingSections && existingSections.length > 0) {
+                                        console.log("[Settings] Using existing catalog data")
+                                        exportCatalogDataToFile(existingSections, false)
+                                    } else {
+                                        console.log("[Settings] No existing data, loading catalogs...")
+                                        catalogStatusText.text = "Loading catalogs... (check console for progress)"
+                                        catalogStatusText.color = "#2196F3"
+                                        exportCatalogData()
+                                    }
+                                }
+                            }
+                            
+                            Button {
+                                width: 180
+                                height: 44
+                                text: "Export (Raw)"
+                                
+                                background: Rectangle {
+                                    color: parent.pressed ? "#985eff" : "#bb86fc"
+                                    radius: 4
+                                }
+                                
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: "#000000"
+                                    font.bold: true
+                                    font.pixelSize: 12
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                
+                                onClicked: {
+                                    console.log("[Settings] ===== Export (Raw) button clicked =====")
+                                    catalogStatusText.text = "Loading raw catalog data... (check console for progress)"
+                                    catalogStatusText.color = "#2196F3"
+                                    exportTimeout.start()
+                                    exportLibraryService.loadCatalogsRaw()
+                                }
+                            }
                         }
                         
                         Text {
@@ -662,6 +729,173 @@ Item {
         
         catalogStatusText.text = "Total catalogs: " + catalogListModel.count
         catalogStatusText.color = "#4CAF50"
+    }
+    
+    // File export service
+    property FileExportService fileExportService: FileExportService {
+        id: fileExportService
+        
+        onFileWritten: function(filePath) {
+            console.log("[Settings] File written successfully:", filePath)
+            catalogStatusText.text = "✓ File saved to: " + filePath
+            catalogStatusText.color = "#4CAF50"
+        }
+        
+        onError: function(message) {
+            console.error("[Settings] File export error:", message)
+            catalogStatusText.text = "✗ Error saving file: " + message
+            catalogStatusText.color = "#F44336"
+        }
+    }
+    
+    // Library service for exporting catalog data
+    property LibraryService libraryService: LibraryService {
+        id: exportLibraryService
+        
+        Component.onCompleted: {
+            console.log("[Settings] Export LibraryService created")
+        }
+        
+        onCatalogsLoaded: function(sections) {
+            console.log("[Settings] Export: catalogsLoaded signal received, sections:", sections ? sections.length : 0)
+            exportTimeout.stop()
+            exportCatalogDataToFile(sections, false) // false = processed data
+        }
+        
+        onRawCatalogsLoaded: function(rawData) {
+            console.log("[Settings] Export: rawCatalogsLoaded signal received, sections:", rawData ? rawData.length : 0)
+            exportTimeout.stop()
+            exportCatalogDataToFile(rawData, true) // true = raw data
+        }
+        
+        onError: function(message) {
+            console.error("[Settings] Export error:", message)
+            catalogStatusText.text = "✗ Export error: " + message
+            catalogStatusText.color = "#F44336"
+        }
+    }
+    
+    property Timer exportTimeout: Timer {
+        id: exportTimeout
+        interval: 30000 // 30 seconds timeout
+        onTriggered: {
+            console.error("[Settings] Export timeout - catalogs did not load within 30 seconds")
+            catalogStatusText.text = "✗ Export timeout: Catalogs did not load. Check console for errors."
+            catalogStatusText.color = "#F44336"
+        }
+    }
+    
+    function exportCatalogData() {
+        console.log("[Settings] ===== exportCatalogData() called =====")
+        console.log("[Settings] exportLibraryService:", exportLibraryService)
+        
+        if (!exportLibraryService) {
+            console.error("[Settings] ERROR: exportLibraryService is null!")
+            catalogStatusText.text = "✗ Error: LibraryService not available"
+            catalogStatusText.color = "#F44336"
+            return
+        }
+        
+        catalogStatusText.text = "Loading catalogs for export... (this may take a moment)"
+        catalogStatusText.color = "#2196F3"
+        exportTimeout.start()
+        console.log("[Settings] Started export timeout timer (30s)")
+        console.log("[Settings] Calling exportLibraryService.loadCatalogs()")
+        exportLibraryService.loadCatalogs()
+    }
+    
+    function exportCatalogDataToFile(sections, isRaw) {
+        console.log("[Settings] ===== exportCatalogDataToFile() called =====")
+        console.log("[Settings] Exporting", sections ? sections.length : 0, "sections to file (raw:", isRaw, ")")
+        
+        if (!sections || sections.length === 0) {
+            console.warn("[Settings] No sections to export!")
+            catalogStatusText.text = "✗ No catalog data to export. Make sure addons are enabled and catalogs are loaded."
+            catalogStatusText.color = "#FF9800"
+            return
+        }
+        
+        // Convert to JSON
+        let jsonData = {
+            timestamp: new Date().toISOString(),
+            dataType: isRaw ? "raw" : "processed",
+            sectionsCount: sections.length,
+            sections: []
+        }
+
+        for (let i = 0; i < sections.length; i++) {
+            let section = sections[i]
+            let sectionData = {
+                name: section.name || section.catalogName || "",
+                type: section.type || section.catalogType || "",
+                addonId: section.addonId || "",
+                catalogId: section.catalogId || "",
+                itemsCount: (section.items || []).length,
+                items: []
+            }
+
+            let items = section.items || []
+            for (let j = 0; j < items.length; j++) {
+                let item = items[j]
+                
+                if (isRaw) {
+                    // For raw data, include everything as-is
+                    sectionData.items.push(item)
+                } else {
+                    // For processed data, extract specific fields
+                    sectionData.items.push({
+                        id: item.id || "",
+                        title: item.title || item.name || "",
+                        type: item.type || "",
+                        poster: item.poster || item.posterUrl || "",
+                        background: item.background || item.backdropUrl || "",
+                        logo: item.logo || item.logoUrl || "",
+                        description: item.description || "",
+                        year: item.year || 0,
+                        rating: item.rating || "",
+                        imdbId: item.imdbId || "",
+                        tmdbId: item.tmdbId || "",
+                        traktId: item.traktId || ""
+                    })
+                }
+            }
+
+            jsonData.sections.push(sectionData)
+        }
+
+        // Convert to JSON string
+        let jsonString = JSON.stringify(jsonData, null, 2)
+        
+        // Generate filename with timestamp
+        let timestamp = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19)
+        let dataType = isRaw ? "raw" : "processed"
+        let fileName = "catalog_data_" + dataType + "_" + timestamp + ".json"
+        
+        // Get Downloads directory path
+        let downloadsPath = fileExportService.getDownloadsPath()
+        let filePath = downloadsPath + "/" + fileName
+        
+        console.log("[Settings] Writing file to:", filePath)
+        console.log("[Settings] JSON length:", jsonString.length, "characters")
+        
+        // Write to file
+        let success = fileExportService.writeTextFile(filePath, jsonString)
+        
+        if (success) {
+            let totalItems = jsonData.sections.reduce((sum, s) => sum + s.itemsCount, 0)
+            catalogStatusText.text = "✓ Exported " + sections.length + " sections with " + totalItems + 
+                                     " items to:\n" + filePath
+            catalogStatusText.color = "#4CAF50"
+            
+            // Also output to console for backup
+            console.log("=== CATALOG DATA EXPORT ===")
+            console.log("File saved to:", filePath)
+            console.log("Total sections:", sections.length)
+            console.log("Total items:", totalItems)
+        } else {
+            catalogStatusText.text = "✗ Failed to write file. Check console for details."
+            catalogStatusText.color = "#F44336"
+        }
     }
     
     Component.onCompleted: {

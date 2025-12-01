@@ -29,17 +29,26 @@ public:
     Q_INVOKABLE void searchCatalogs(const QString& query);
     Q_INVOKABLE QVariantList getCatalogSections();
     Q_INVOKABLE QVariantList getContinueWatching();
+    Q_INVOKABLE void loadCatalogsRaw(); // Load catalogs without processing (for raw export)
+    Q_INVOKABLE void loadHeroItems(); // Load items from hero catalogs
+    
+private:
+    void loadCatalogsRaw(bool rawMode); // Internal method with raw mode flag
     
 signals:
     void catalogsLoaded(const QVariantList& sections);
     void continueWatchingLoaded(const QVariantList& items);
     void searchResultsLoaded(const QVariantList& results);
+    void rawCatalogsLoaded(const QVariantList& rawData); // Raw unprocessed catalog data
+    void heroItemsLoaded(const QVariantList& items); // Hero items loaded
     void error(const QString& message);
 
 private slots:
     void onCatalogFetched(const QString& type, const QJsonArray& metas);
     void onClientError(const QString& errorMessage);
     void onPlaybackProgressFetched(const QVariantList& progress);
+    void onHeroCatalogFetched(const QString& type, const QJsonArray& metas);
+    void onHeroClientError(const QString& errorMessage);
 
 private:
     struct CatalogSection {
@@ -50,7 +59,7 @@ private:
     };
     
     void processCatalogData(const QString& addonId, const QString& catalogName, const QString& type, const QJsonArray& metas);
-    QVariantMap catalogItemToVariantMap(const QJsonObject& item);
+    QVariantMap catalogItemToVariantMap(const QJsonObject& item, const QString& baseUrl = QString());
     QVariantMap traktPlaybackItemToVariantMap(const QVariantMap& traktItem);
     void finishLoadingCatalogs();
     
@@ -62,6 +71,13 @@ private:
     QVariantList m_continueWatching;
     int m_pendingCatalogRequests;
     bool m_isLoadingCatalogs;
+    bool m_isRawExport;
+    QVariantList m_rawCatalogData;
+    
+    // Hero items loading
+    QVariantList m_heroItems;
+    int m_pendingHeroRequests;
+    bool m_isLoadingHeroItems;
 };
 
 #endif // LIBRARY_SERVICE_H
