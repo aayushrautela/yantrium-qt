@@ -53,3 +53,4 @@ private:
 
 #endif // CATALOG_PREFERENCES_DAO_H
 
+

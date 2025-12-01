@@ -299,3 +299,4 @@ void TraktWatchlistService::onCollectionItemRemoved()
     emit collectionItemRemoved(true);
 }
 
+

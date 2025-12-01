@@ -62,3 +62,4 @@ QJsonObject CatalogDefinition::toJson() const
     return json;
 }
 
+

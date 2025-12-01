@@ -251,6 +251,30 @@ src/core/database/addon_dao.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/database/addon_dao.cpp.s
 .PHONY : src/core/database/addon_dao.cpp.s
 
+src/core/database/catalog_preferences_dao.o: src/core/database/catalog_preferences_dao.cpp.o
+.PHONY : src/core/database/catalog_preferences_dao.o
+
+# target to build an object file
+src/core/database/catalog_preferences_dao.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/database/catalog_preferences_dao.cpp.o
+.PHONY : src/core/database/catalog_preferences_dao.cpp.o
+
+src/core/database/catalog_preferences_dao.i: src/core/database/catalog_preferences_dao.cpp.i
+.PHONY : src/core/database/catalog_preferences_dao.i
+
+# target to preprocess a source file
+src/core/database/catalog_preferences_dao.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/database/catalog_preferences_dao.cpp.i
+.PHONY : src/core/database/catalog_preferences_dao.cpp.i
+
+src/core/database/catalog_preferences_dao.s: src/core/database/catalog_preferences_dao.cpp.s
+.PHONY : src/core/database/catalog_preferences_dao.s
+
+# target to generate assembly for a file
+src/core/database/catalog_preferences_dao.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/database/catalog_preferences_dao.cpp.s
+.PHONY : src/core/database/catalog_preferences_dao.cpp.s
+
 src/core/database/database_manager.o: src/core/database/database_manager.cpp.o
 .PHONY : src/core/database/database_manager.o
 
@@ -347,6 +371,30 @@ src/core/models/trakt_models.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/models/trakt_models.cpp.s
 .PHONY : src/core/models/trakt_models.cpp.s
 
+src/core/services/catalog_preferences_service.o: src/core/services/catalog_preferences_service.cpp.o
+.PHONY : src/core/services/catalog_preferences_service.o
+
+# target to build an object file
+src/core/services/catalog_preferences_service.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/catalog_preferences_service.cpp.o
+.PHONY : src/core/services/catalog_preferences_service.cpp.o
+
+src/core/services/catalog_preferences_service.i: src/core/services/catalog_preferences_service.cpp.i
+.PHONY : src/core/services/catalog_preferences_service.i
+
+# target to preprocess a source file
+src/core/services/catalog_preferences_service.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/catalog_preferences_service.cpp.i
+.PHONY : src/core/services/catalog_preferences_service.cpp.i
+
+src/core/services/catalog_preferences_service.s: src/core/services/catalog_preferences_service.cpp.s
+.PHONY : src/core/services/catalog_preferences_service.s
+
+# target to generate assembly for a file
+src/core/services/catalog_preferences_service.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/catalog_preferences_service.cpp.s
+.PHONY : src/core/services/catalog_preferences_service.cpp.s
+
 src/core/services/configuration.o: src/core/services/configuration.cpp.o
 .PHONY : src/core/services/configuration.o
 
@@ -370,6 +418,30 @@ src/core/services/configuration.s: src/core/services/configuration.cpp.s
 src/core/services/configuration.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/configuration.cpp.s
 .PHONY : src/core/services/configuration.cpp.s
+
+src/core/services/file_export_service.o: src/core/services/file_export_service.cpp.o
+.PHONY : src/core/services/file_export_service.o
+
+# target to build an object file
+src/core/services/file_export_service.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/file_export_service.cpp.o
+.PHONY : src/core/services/file_export_service.cpp.o
+
+src/core/services/file_export_service.i: src/core/services/file_export_service.cpp.i
+.PHONY : src/core/services/file_export_service.i
+
+# target to preprocess a source file
+src/core/services/file_export_service.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/file_export_service.cpp.i
+.PHONY : src/core/services/file_export_service.cpp.i
+
+src/core/services/file_export_service.s: src/core/services/file_export_service.cpp.s
+.PHONY : src/core/services/file_export_service.s
+
+# target to generate assembly for a file
+src/core/services/file_export_service.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Yantrium.dir/build.make CMakeFiles/Yantrium.dir/src/core/services/file_export_service.cpp.s
+.PHONY : src/core/services/file_export_service.cpp.s
 
 src/core/services/id_parser.o: src/core/services/id_parser.cpp.o
 .PHONY : src/core/services/id_parser.o
@@ -826,6 +898,9 @@ help:
 	@echo "... src/core/database/addon_dao.o"
 	@echo "... src/core/database/addon_dao.i"
 	@echo "... src/core/database/addon_dao.s"
+	@echo "... src/core/database/catalog_preferences_dao.o"
+	@echo "... src/core/database/catalog_preferences_dao.i"
+	@echo "... src/core/database/catalog_preferences_dao.s"
 	@echo "... src/core/database/database_manager.o"
 	@echo "... src/core/database/database_manager.i"
 	@echo "... src/core/database/database_manager.s"
@@ -838,9 +913,15 @@ help:
 	@echo "... src/core/models/trakt_models.o"
 	@echo "... src/core/models/trakt_models.i"
 	@echo "... src/core/models/trakt_models.s"
+	@echo "... src/core/services/catalog_preferences_service.o"
+	@echo "... src/core/services/catalog_preferences_service.i"
+	@echo "... src/core/services/catalog_preferences_service.s"
 	@echo "... src/core/services/configuration.o"
 	@echo "... src/core/services/configuration.i"
 	@echo "... src/core/services/configuration.s"
+	@echo "... src/core/services/file_export_service.o"
+	@echo "... src/core/services/file_export_service.i"
+	@echo "... src/core/services/file_export_service.s"
 	@echo "... src/core/services/id_parser.o"
 	@echo "... src/core/services/id_parser.i"
 	@echo "... src/core/services/id_parser.s"

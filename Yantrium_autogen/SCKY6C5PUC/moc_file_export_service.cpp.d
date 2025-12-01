@@ -1,16 +1,5 @@
-/home/raut/Downloads/yantrium-qt/Yantrium_autogen/SCKY6C5PUC/moc_library_service.cpp: /home/raut/Downloads/yantrium-qt/src/core/services/library_service.h \
+/home/raut/Downloads/yantrium-qt/Yantrium_autogen/SCKY6C5PUC/moc_file_export_service.cpp: /home/raut/Downloads/yantrium-qt/src/core/services/file_export_service.h \
   /home/raut/Downloads/yantrium-qt/Yantrium_autogen/moc_predefs.h \
-  /home/raut/Downloads/yantrium-qt/src/core/database/addon_dao.h \
-  /home/raut/Downloads/yantrium-qt/src/core/database/catalog_preferences_dao.h \
-  /home/raut/Downloads/yantrium-qt/src/core/database/database_manager.h \
-  /home/raut/Downloads/yantrium-qt/src/core/database/trakt_auth_dao.h \
-  /home/raut/Downloads/yantrium-qt/src/core/models/trakt_models.h \
-  /home/raut/Downloads/yantrium-qt/src/core/services/trakt_core_service.h \
-  /home/raut/Downloads/yantrium-qt/src/features/addons/logic/addon_client.h \
-  /home/raut/Downloads/yantrium-qt/src/features/addons/logic/addon_repository.h \
-  /home/raut/Downloads/yantrium-qt/src/features/addons/models/addon_config.h \
-  /home/raut/Downloads/yantrium-qt/src/features/addons/models/addon_manifest.h \
-  /home/raut/Downloads/yantrium-qt/src/features/addons/models/catalog_definition.h \
   /usr/include/alloca.h \
   /usr/include/asm-generic/bitsperlong.h \
   /usr/include/asm-generic/errno-base.h \
@@ -193,12 +182,10 @@
   /usr/include/c++/15/bits/stl_list.h \
   /usr/include/c++/15/bits/stl_map.h \
   /usr/include/c++/15/bits/stl_multimap.h \
-  /usr/include/c++/15/bits/stl_multiset.h \
   /usr/include/c++/15/bits/stl_numeric.h \
   /usr/include/c++/15/bits/stl_pair.h \
   /usr/include/c++/15/bits/stl_raw_storage_iter.h \
   /usr/include/c++/15/bits/stl_relops.h \
-  /usr/include/c++/15/bits/stl_set.h \
   /usr/include/c++/15/bits/stl_tempbuf.h \
   /usr/include/c++/15/bits/stl_tree.h \
   /usr/include/c++/15/bits/stl_uninitialized.h \
@@ -211,13 +198,11 @@
   /usr/include/c++/15/bits/uniform_int_dist.h \
   /usr/include/c++/15/bits/unique_ptr.h \
   /usr/include/c++/15/bits/unordered_map.h \
-  /usr/include/c++/15/bits/unordered_set.h \
   /usr/include/c++/15/bits/uses_allocator.h \
   /usr/include/c++/15/bits/uses_allocator_args.h \
   /usr/include/c++/15/bits/utility.h \
   /usr/include/c++/15/bits/vector.tcc \
   /usr/include/c++/15/bits/version.h \
-  /usr/include/c++/15/cassert \
   /usr/include/c++/15/cctype \
   /usr/include/c++/15/cerrno \
   /usr/include/c++/15/charconv \
@@ -266,7 +251,6 @@
   /usr/include/c++/15/pstl/glue_numeric_defs.h \
   /usr/include/c++/15/pstl/pstl_config.h \
   /usr/include/c++/15/ratio \
-  /usr/include/c++/15/set \
   /usr/include/c++/15/sstream \
   /usr/include/c++/15/stdexcept \
   /usr/include/c++/15/streambuf \
@@ -289,7 +273,6 @@
   /usr/include/c++/15/type_traits \
   /usr/include/c++/15/typeinfo \
   /usr/include/c++/15/unordered_map \
-  /usr/include/c++/15/unordered_set \
   /usr/include/c++/15/utility \
   /usr/include/c++/15/variant \
   /usr/include/c++/15/vector \
@@ -325,37 +308,14 @@
   /usr/include/linux/types.h \
   /usr/include/locale.h \
   /usr/include/pthread.h \
-  /usr/include/qt6/QtCore/QDateTime \
-  /usr/include/qt6/QtCore/QFlags \
-  /usr/include/qt6/QtCore/QIODevice \
-  /usr/include/qt6/QtCore/QJsonArray \
-  /usr/include/qt6/QtCore/QJsonObject \
-  /usr/include/qt6/QtCore/QList \
-  /usr/include/qt6/QtCore/QMap \
-  /usr/include/qt6/QtCore/QMetaType \
   /usr/include/qt6/QtCore/QObject \
-  /usr/include/qt6/QtCore/QQueue \
-  /usr/include/qt6/QtCore/QSet \
-  /usr/include/qt6/QtCore/QSharedDataPointer \
   /usr/include/qt6/QtCore/QString \
-  /usr/include/qt6/QtCore/QStringList \
-  /usr/include/qt6/QtCore/QTimer \
-  /usr/include/qt6/QtCore/QUrl \
-  /usr/include/qt6/QtCore/QVariant \
-  /usr/include/qt6/QtCore/QVariantList \
-  /usr/include/qt6/QtCore/QVariantMap \
   /usr/include/qt6/QtCore/q17memory.h \
   /usr/include/qt6/QtCore/q20functional.h \
-  /usr/include/qt6/QtCore/q20iterator.h \
   /usr/include/qt6/QtCore/q20memory.h \
   /usr/include/qt6/QtCore/q20type_traits.h \
-  /usr/include/qt6/QtCore/q20utility.h \
   /usr/include/qt6/QtCore/q23type_traits.h \
-  /usr/include/qt6/QtCore/q23utility.h \
-  /usr/include/qt6/QtCore/q26numeric.h \
-  /usr/include/qt6/QtCore/qabstracteventdispatcher.h \
   /usr/include/qt6/QtCore/qalgorithms.h \
-  /usr/include/qt6/QtCore/qalloc.h \
   /usr/include/qt6/QtCore/qanystringview.h \
   /usr/include/qt6/QtCore/qarraydata.h \
   /usr/include/qt6/QtCore/qarraydataops.h \
@@ -364,15 +324,11 @@
   /usr/include/qt6/QtCore/qatomic.h \
   /usr/include/qt6/QtCore/qatomic_cxx11.h \
   /usr/include/qt6/QtCore/qbasicatomic.h \
-  /usr/include/qt6/QtCore/qbasictimer.h \
   /usr/include/qt6/QtCore/qbindingstorage.h \
   /usr/include/qt6/QtCore/qbytearray.h \
   /usr/include/qt6/QtCore/qbytearrayalgorithms.h \
   /usr/include/qt6/QtCore/qbytearraylist.h \
   /usr/include/qt6/QtCore/qbytearrayview.h \
-  /usr/include/qt6/QtCore/qcalendar.h \
-  /usr/include/qt6/QtCore/qcborcommon.h \
-  /usr/include/qt6/QtCore/qcborvalue.h \
   /usr/include/qt6/QtCore/qchar.h \
   /usr/include/qt6/QtCore/qcompare.h \
   /usr/include/qt6/QtCore/qcompare_impl.h \
@@ -384,15 +340,8 @@
   /usr/include/qt6/QtCore/qcontainerfwd.h \
   /usr/include/qt6/QtCore/qcontainerinfo.h \
   /usr/include/qt6/QtCore/qcontainertools_impl.h \
-  /usr/include/qt6/QtCore/qcontiguouscache.h \
-  /usr/include/qt6/QtCore/qcryptographichash.h \
   /usr/include/qt6/QtCore/qdarwinhelpers.h \
   /usr/include/qt6/QtCore/qdatastream.h \
-  /usr/include/qt6/QtCore/qdatetime.h \
-  /usr/include/qt6/QtCore/qdeadlinetimer.h \
-  /usr/include/qt6/QtCore/qdebug.h \
-  /usr/include/qt6/QtCore/qendian.h \
-  /usr/include/qt6/QtCore/qeventloop.h \
   /usr/include/qt6/QtCore/qexceptionhandling.h \
   /usr/include/qt6/QtCore/qflags.h \
   /usr/include/qt6/QtCore/qfloat16.h \
@@ -402,26 +351,16 @@
   /usr/include/qt6/QtCore/qgenericatomic.h \
   /usr/include/qt6/QtCore/qglobal.h \
   /usr/include/qt6/QtCore/qglobalstatic.h \
-  /usr/include/qt6/QtCore/qhash.h \
   /usr/include/qt6/QtCore/qhashfunctions.h \
-  /usr/include/qt6/QtCore/qiodevice.h \
   /usr/include/qt6/QtCore/qiodevicebase.h \
   /usr/include/qt6/QtCore/qiterable.h \
   /usr/include/qt6/QtCore/qiterator.h \
-  /usr/include/qt6/QtCore/qjsonarray.h \
-  /usr/include/qt6/QtCore/qjsondocument.h \
-  /usr/include/qt6/QtCore/qjsonobject.h \
-  /usr/include/qt6/QtCore/qjsonparseerror.h \
-  /usr/include/qt6/QtCore/qjsonvalue.h \
   /usr/include/qt6/QtCore/qlatin1stringview.h \
   /usr/include/qt6/QtCore/qlist.h \
-  /usr/include/qt6/QtCore/qlocale.h \
   /usr/include/qt6/QtCore/qlogging.h \
   /usr/include/qt6/QtCore/qmalloc.h \
-  /usr/include/qt6/QtCore/qmap.h \
   /usr/include/qt6/QtCore/qmath.h \
   /usr/include/qt6/QtCore/qmetacontainer.h \
-  /usr/include/qt6/QtCore/qmetaobject.h \
   /usr/include/qt6/QtCore/qmetatype.h \
   /usr/include/qt6/QtCore/qminmax.h \
   /usr/include/qt6/QtCore/qnamespace.h \
@@ -433,17 +372,9 @@
   /usr/include/qt6/QtCore/qoverload.h \
   /usr/include/qt6/QtCore/qpair.h \
   /usr/include/qt6/QtCore/qprocessordetection.h \
-  /usr/include/qt6/QtCore/qqueue.h \
   /usr/include/qt6/QtCore/qrefcount.h \
-  /usr/include/qt6/QtCore/qregularexpression.h \
   /usr/include/qt6/QtCore/qscopedpointer.h \
   /usr/include/qt6/QtCore/qscopeguard.h \
-  /usr/include/qt6/QtCore/qset.h \
-  /usr/include/qt6/QtCore/qshareddata.h \
-  /usr/include/qt6/QtCore/qshareddata_impl.h \
-  /usr/include/qt6/QtCore/qsharedpointer.h \
-  /usr/include/qt6/QtCore/qsharedpointer_impl.h \
-  /usr/include/qt6/QtCore/qspan.h \
   /usr/include/qt6/QtCore/qstdlibdetection.h \
   /usr/include/qt6/QtCore/qstring.h \
   /usr/include/qt6/QtCore/qstringalgorithms.h \
@@ -468,9 +399,7 @@
   /usr/include/qt6/QtCore/qtdeprecationdefinitions.h \
   /usr/include/qt6/QtCore/qtdeprecationmarkers.h \
   /usr/include/qt6/QtCore/qtenvironmentvariables.h \
-  /usr/include/qt6/QtCore/qtextstream.h \
   /usr/include/qt6/QtCore/qtformat_impl.h \
-  /usr/include/qt6/QtCore/qtimer.h \
   /usr/include/qt6/QtCore/qtmetamacros.h \
   /usr/include/qt6/QtCore/qtnoop.h \
   /usr/include/qt6/QtCore/qtpreprocessorsupport.h \
@@ -481,42 +410,10 @@
   /usr/include/qt6/QtCore/qtversionchecks.h \
   /usr/include/qt6/QtCore/qtypeinfo.h \
   /usr/include/qt6/QtCore/qtypes.h \
-  /usr/include/qt6/QtCore/qurl.h \
   /usr/include/qt6/QtCore/qutf8stringview.h \
-  /usr/include/qt6/QtCore/quuid.h \
-  /usr/include/qt6/QtCore/qvariant.h \
-  /usr/include/qt6/QtCore/qvariantlist.h \
-  /usr/include/qt6/QtCore/qvariantmap.h \
-  /usr/include/qt6/QtCore/qvarlengtharray.h \
   /usr/include/qt6/QtCore/qversiontagging.h \
   /usr/include/qt6/QtCore/qxptype_traits.h \
   /usr/include/qt6/QtCore/qyieldcpu.h \
-  /usr/include/qt6/QtNetwork/QNetworkAccessManager \
-  /usr/include/qt6/QtNetwork/QNetworkReply \
-  /usr/include/qt6/QtNetwork/QNetworkRequest \
-  /usr/include/qt6/QtNetwork/QSslConfiguration \
-  /usr/include/qt6/QtNetwork/QSslPreSharedKeyAuthenticator \
-  /usr/include/qt6/QtNetwork/qabstractsocket.h \
-  /usr/include/qt6/QtNetwork/qhostaddress.h \
-  /usr/include/qt6/QtNetwork/qhttpheaders.h \
-  /usr/include/qt6/QtNetwork/qnetworkaccessmanager.h \
-  /usr/include/qt6/QtNetwork/qnetworkreply.h \
-  /usr/include/qt6/QtNetwork/qnetworkrequest.h \
-  /usr/include/qt6/QtNetwork/qssl.h \
-  /usr/include/qt6/QtNetwork/qsslcertificate.h \
-  /usr/include/qt6/QtNetwork/qsslconfiguration.h \
-  /usr/include/qt6/QtNetwork/qsslerror.h \
-  /usr/include/qt6/QtNetwork/qsslpresharedkeyauthenticator.h \
-  /usr/include/qt6/QtNetwork/qsslsocket.h \
-  /usr/include/qt6/QtNetwork/qtcpsocket.h \
-  /usr/include/qt6/QtNetwork/qtnetwork-config.h \
-  /usr/include/qt6/QtNetwork/qtnetworkexports.h \
-  /usr/include/qt6/QtNetwork/qtnetworkglobal.h \
-  /usr/include/qt6/QtSql/QSqlDatabase \
-  /usr/include/qt6/QtSql/qsqldatabase.h \
-  /usr/include/qt6/QtSql/qtsql-config.h \
-  /usr/include/qt6/QtSql/qtsqlexports.h \
-  /usr/include/qt6/QtSql/qtsqlglobal.h \
   /usr/include/sched.h \
   /usr/include/stdc-predef.h \
   /usr/include/stdint.h \

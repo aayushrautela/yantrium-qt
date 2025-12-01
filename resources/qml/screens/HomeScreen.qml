@@ -6,32 +6,17 @@ import Yantrium.Services 1.0
 Item {
     id: root
 
-    // Services
+    // --- Services ---
     property LibraryService libraryService: LibraryService {
         id: libraryService
-        
-        Component.onCompleted: {
-            console.log("[HomeScreen] LibraryService component created")
-        }
-        
-        onCatalogsLoaded: function(sections) {
-            console.log("[HomeScreen] LibraryService.catalogsLoaded signal received directly")
-        }
-        
-        onError: function(message) {
-            console.error("[HomeScreen] LibraryService error signal:", message)
-        }
-    }
-    
-    property CatalogPreferencesService catalogPrefsService: CatalogPreferencesService {
-        id: catalogPrefsService
-        
-        Component.onCompleted: {
-            console.log("[HomeScreen] CatalogPreferencesService component created")
-        }
+        Component.onCompleted: console.log("[HomeScreen] LibraryService ready")
     }
 
-    // Connect to LibraryService signals automatically
+    property CatalogPreferencesService catalogPrefsService: CatalogPreferencesService {
+        id: catalogPrefsService
+    }
+
+    // --- Connections ---
     Connections {
         target: libraryService
         
@@ -48,79 +33,142 @@ Item {
         }
     }
 
-    // Models for data
+    // --- Models ---
     ListModel {
         id: continueWatchingModel
     }
 
-    // Store catalog sections as JS array (QML ListModel can't handle complex nested objects)
-    property var catalogSections: []
+    // Outer ListModel: Stores section metadata + raw items array
+    ListModel {
+        id: catalogSectionsModel
+    }
 
-    // State
+    // --- State ---
     property bool isLoading: false
 
-    // --- MERGED COMPONENT.ONCOMPLETED ---
-    // This is the single entry point for initialization
+    // --- Initialization ---
     Component.onCompleted: {
-        console.log("[HomeScreen] ===== Component.onCompleted =====")
-        console.log("[HomeScreen] Component completed")
-        console.log("[HomeScreen] libraryService:", libraryService)
-        
-        if (!libraryService) {
-            console.error("[HomeScreen] ERROR: libraryService is null!")
-            return
+        if (libraryService) {
+            loadCatalogs()
         }
-        
-        console.log("[HomeScreen] Calling loadCatalogs()")
-        loadCatalogs()
     }
 
     function loadCatalogs() {
-        console.log("[HomeScreen] ===== loadCatalogs() called =====")
+        console.log("[HomeScreen] Requesting catalogs...")
         isLoading = true
-        catalogSections = []
-        console.log("[HomeScreen] Cleared catalog sections array, calling libraryService.loadCatalogs()")
+        catalogSectionsModel.clear()
         libraryService.loadCatalogs()
     }
 
-    // Signal handlers
+    // --- Logic ---
     function onCatalogsLoaded(sections) {
-        console.log("[HomeScreen] ===== onCatalogsLoaded() called =====")
-        console.log("[HomeScreen] Sections received:", sections ? sections.length : 0)
+        console.log("[HomeScreen] Sections loaded:", sections ? sections.length : 0)
         isLoading = false
 
-        if (!sections) {
-            console.log("[HomeScreen] ERROR: sections is null or undefined!")
-            catalogSections = []
+        if (!sections || sections.length === 0) {
+            catalogSectionsModel.clear()
             return
         }
 
-        if (sections.length === 0) {
-            console.log("[HomeScreen] WARNING: sections array is empty!")
-            catalogSections = []
+        // 1. Clear existing data
+        catalogSectionsModel.clear()
+
+        // 2. Hero Logic (Pick first item of first section)
+        if (sections[0].items && sections[0].items.length > 0) {
+            updateHeroSection(sections[0].items[0])
         }
 
-        // Store sections directly in JS array (QML ListModel can't handle nested objects)
-        catalogSections = sections
+        // 3. Populate Outer ListModel with explicit data mapping
+        // Create inner ListModel for each section immediately
+        for (let i = 0; i < sections.length; i++) {
+            let section = sections[i]
+            let items = section.items || []
+            
+            console.log("[HomeScreen] Section", i, "- name:", section.name, "items type:", typeof items, "isArray:", Array.isArray(items), "length:", items ? items.length : 0)
 
-        console.log("[HomeScreen] ✓ Stored", catalogSections.length, "sections in JS array")
+            // Create inner ListModel for cards right away
+            let cardModel = Qt.createQmlObject('import QtQuick; ListModel {}', catalogSectionsModel)
+            
+            // EXPLICIT DATA MAPPING: Convert items to card model
+            if (items && items.length > 0) {
+                // Handle both JS arrays and QVariantList from C++
+                let itemsArray = []
+                if (Array.isArray(items)) {
+                    itemsArray = items
+                } else {
+                    // Convert QVariantList to array
+                    try {
+                        for (let j = 0; j < items.length; j++) {
+                            itemsArray.push(items[j])
+                        }
+                    } catch (e) {
+                        console.error("[HomeScreen] Error converting items array:", e)
+                    }
+                }
+                
+                // Debug first item structure
+                if (itemsArray.length > 0) {
+                    console.log("[HomeScreen] First item in section", i, "keys:", Object.keys(itemsArray[0]))
+                }
+                
+                // EXPLICIT MAPPING: Convert raw items to clean card objects
+                for (let j = 0; j < itemsArray.length; j++) {
+                    let item = itemsArray[j]
+                    
+                    // Extract values explicitly - handle QVariantMap access
+                    let posterUrl = item.posterUrl || item.poster || ""
+                    let title = item.title || item.name || "Unknown"
+                    let year = 0
+                    if (item.year !== undefined) {
+                        year = typeof item.year === 'number' ? item.year : parseInt(item.year) || 0
+                    }
+                    let rating = item.rating || ""
+                    let progress = item.progress || 0
+                    let badgeText = item.badgeText || ""
+                    let isHighlighted = item.isHighlighted || false
+                    let id = item.id || ""
+                    
+                    cardModel.append({
+                        posterUrl: posterUrl,
+                        title: title,
+                        year: year,
+                        rating: rating,
+                        progress: progress,
+                        badgeText: badgeText,
+                        isHighlighted: isHighlighted,
+                        id: id
+                    })
+                }
+                
+                console.log("[HomeScreen] ✓ Created", cardModel.count, "cards for section:", section.name)
+            }
 
-        // Debug: Log each section
-        for (let i = 0; i < catalogSections.length; i++) {
-            let section = catalogSections[i]
-            console.log("[HomeScreen] Section", i, "- name:", section.name, "items:", section.items ? section.items.length : 0)
+            // Store section with its card model
+            catalogSectionsModel.append({
+                sectionTitle: section.name || "Unknown Section",
+                addonId: section.addonId || "",
+                itemsModel: cardModel // Store the pre-created ListModel
+            })
         }
 
-        // Force Repeater update by resetting model
-        catalogRepeater.model = 0
-        catalogRepeater.model = catalogSections.length
+        console.log("[HomeScreen] ✓ Populated outer ListModel with", catalogSectionsModel.count, "sections")
+    }
+
+    function updateHeroSection(data) {
+        if (!heroLoader.item) return
+        heroLoader.item.title = data.title || ""
+        heroLoader.item.description = data.description || "No description available."
+        
+        let meta = []
+        if (data.year) meta.push(data.year.toString())
+        if (data.rating) meta.push(data.rating.toString())
+        heroLoader.item.metadata = meta
+        
+        heroLoader.item.backdropUrl = data.background || data.poster || ""
     }
 
     function onContinueWatchingLoaded(items) {
-        console.log("[HomeScreen] Continue watching loaded, items:", items ? items.length : 0)
-
         continueWatchingModel.clear()
-
         if (!items) return
 
         for (let i = 0; i < items.length; i++) {
@@ -130,14 +178,9 @@ Item {
                 title: item.title || "",
                 year: item.year || 0,
                 rating: item.rating || "",
-                progress: item.progressPercent || item.progress || 0,
-                progressPercent: item.progressPercent || item.progress || 0,
+                progress: item.progress || 0,
                 badgeText: (item.progress > 0) ? "UP NEXT" : "",
-                isHighlighted: false,
-                type: item.type || "",
-                imdbId: item.imdbId || "",
-                season: item.season || 0,
-                episode: item.episode || 0
+                imdbId: item.imdbId || ""
             })
         }
     }
@@ -147,181 +190,36 @@ Item {
         isLoading = false
     }
 
+    // --- UI Layout ---
     Rectangle {
-        id: backgroundRect
         anchors.fill: parent
         color: "#09090b"
 
-        // Main content area
         ScrollView {
             anchors.fill: parent
             contentWidth: width
             contentHeight: contentColumn.height
-            clip: true 
+            clip: true
 
             Column {
                 id: contentColumn
                 width: parent.width
                 spacing: 20
-                
-                // Hero section (featured content)
+                bottomPadding: 50 // Extra space at bottom
+
+                // 1. Hero Section
                 Loader {
                     id: heroLoader
                     width: parent.width
                     height: 500
                     source: "qrc:/qml/components/HeroSection.qml"
-                    active: hasHeroCatalogs && heroItemsModel.count > 0
-                    visible: active
-                    
-                    property bool hasHeroCatalogs: false
-                    property int currentHeroIndex: 0
-                    
-                    function setCurrentHeroIndex(index) {
-                        currentHeroIndex = index
-                    }
-                    
-                    ListModel {
-                        id: heroItemsModel
-                    }
-                    
-                    Component.onCompleted: {
-                        checkHeroCatalogs()
-                        loadHeroItems()
-                    }
-                    
-                    function checkHeroCatalogs() {
-                        let heroCatalogs = catalogPrefsService.getHeroCatalogs()
-                        hasHeroCatalogs = heroCatalogs.length > 0
-                        console.log("[HomeScreen] Hero catalogs:", heroCatalogs.length)
-                    }
-                    
-                    function loadHeroItems() {
-                        if (!hasHeroCatalogs) return
-                        console.log("[HomeScreen] Loading hero items...")
-                        libraryService.loadHeroItems()
-                    }
-                    
-                    function updateHeroDisplay() {
-                        if (!item || heroItemsModel.count === 0) return
-                        
-                        let heroItem = heroItemsModel.get(heroLoader.currentHeroIndex)
-                        if (!heroItem) return
-                        
-                        item.title = heroItem.title || heroItem.name || ""
-                        item.description = heroItem.description || ""
-                        
-                        // Build metadata array
-                        let meta = []
-                        if (heroItem.year) meta.push(heroItem.year.toString())
-                        if (heroItem.rating) meta.push(heroItem.rating.toString())
-                        if (heroItem.genres && heroItem.genres.length > 0) {
-                            meta.push(heroItem.genres[0])
-                        }
-                        item.metadata = meta
-                        
-                        // Set images
-                        item.backdropUrl = heroItem.background || heroItem.backdropUrl || heroItem.poster || ""
-                        item.posterUrl = heroItem.poster || heroItem.posterUrl || ""
-                        
-                        // Enable navigation if multiple items
-                        item.hasMultipleItems = heroItemsModel.count > 1
-                    }
-                    
-                    onLoaded: {
-                        if (!item) return
-                        updateHeroDisplay()
-                    }
-                    
-                    Connections {
-                        target: libraryService
-                        ignoreUnknownSignals: true
-                        
-                        function onHeroItemsLoaded(items) {
-                            console.log("[HomeScreen] Hero items loaded:", items ? items.length : 0)
-                            heroItemsModel.clear()
-                            
-                            if (!items || items.length === 0) {
-                                hasHeroCatalogs = false
-                                return
-                            }
-                            
-                            // Limit to 10 items
-                            let itemsToAdd = items.slice(0, 10)
-                            for (let i = 0; i < itemsToAdd.length; i++) {
-                                let item = itemsToAdd[i]
-                                heroItemsModel.append({
-                                    title: item.title || item.name || "",
-                                    name: item.name || item.title || "",
-                                    description: item.description || "",
-                                    background: item.background || item.backdropUrl || "",
-                                    poster: item.poster || item.posterUrl || "",
-                                    year: item.year || 0,
-                                    rating: item.rating || "",
-                                    genres: item.genres || [],
-                                    id: item.id || "",
-                                    type: item.type || "",
-                                    imdbId: item.imdbId || ""
-                                })
-                            }
-                            
-                            heroLoader.setCurrentHeroIndex(0)
-                            heroLoader.updateHeroDisplay()
-                        }
-                    }
-                    
-                    Connections {
-                        target: heroLoader.item
-                        ignoreUnknownSignals: true 
-                        
-                        function onPlayClicked() {
-                            let heroItem = heroItemsModel.get(heroLoader.currentHeroIndex)
-                            if (heroItem) {
-                                console.log("[HomeScreen] Play clicked for:", heroItem.title)
-                                // TODO: Navigate to player
-                            }
-                        }
-                        
-                        function onAddToLibraryClicked() {
-                            let heroItem = heroItemsModel.get(heroLoader.currentHeroIndex)
-                            if (heroItem) {
-                                console.log("[HomeScreen] Add to library clicked for:", heroItem.title)
-                                // TODO: Add to library
-                            }
-                        }
-                        
-                        function onPreviousClicked() {
-                            let newIndex = heroLoader.currentHeroIndex > 0 
-                                ? heroLoader.currentHeroIndex - 1 
-                                : heroItemsModel.count - 1
-                            heroLoader.setCurrentHeroIndex(newIndex)
-                            heroLoader.updateHeroDisplay()
-                        }
-                        
-                        function onNextClicked() {
-                            let newIndex = heroLoader.currentHeroIndex < heroItemsModel.count - 1
-                                ? heroLoader.currentHeroIndex + 1
-                                : 0
-                            heroLoader.setCurrentHeroIndex(newIndex)
-                            heroLoader.updateHeroDisplay()
-                        }
-                    }
-                    
-                    Connections {
-                        target: catalogPrefsService
-                        ignoreUnknownSignals: true
-                        
-                        function onCatalogsUpdated() {
-                            heroLoader.checkHeroCatalogs()
-                            heroLoader.loadHeroItems()
-                        }
-                    }
                 }
-                
-                // Continue Watching section
+
+                // 2. Continue Watching
                 Loader {
                     id: cwLoader
                     width: parent.width
-                    height: item ? item.implicitHeight : (active ? 320 : 0)
+                    height: (item && item.implicitHeight > 0) ? item.implicitHeight : (active ? 320 : 0)
                     
                     source: "qrc:/qml/components/HorizontalList.qml"
                     active: continueWatchingModel.count > 0
@@ -336,23 +234,27 @@ Item {
                         item.model = continueWatchingModel
                     }
                 }
-                
-                // Catalog sections - SIMPLE DIRECT APPROACH
-                
-                // Catalog sections - CARDS DISPLAY (JS array storage, dynamic models)
+
+                // 3. Catalog Sections (Nested ListModel Approach)
                 Repeater {
                     id: catalogRepeater
-                    model: catalogSections.length
+                    model: catalogSectionsModel
 
+                    // Section Container
                     Column {
+                        id: sectionColumn
                         width: parent.width
                         spacing: 10
 
-                        // Section title
+                        // Capture model data as properties
+                        readonly property string sectionTitle: model.sectionTitle
+                        readonly property var sectionItemsModel: model.itemsModel
+
+                        // Section Title
                         Text {
                             width: parent.width
                             height: 40
-                            text: (catalogSections[index].name || "Unknown") + " (" + (catalogSections[index].items ? catalogSections[index].items.length : 0) + " items)"
+                            text: sectionColumn.sectionTitle
                             color: "white"
                             font.pixelSize: 18
                             font.bold: true
@@ -360,137 +262,159 @@ Item {
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        // Horizontal scrolling list of cards
+                        // Inner ListView with pre-created ListModel
                         ListView {
                             id: sectionListView
                             width: parent.width
-                            height: 250
+                            height: 380
                             orientation: ListView.Horizontal
-                            spacing: 12
+                            spacing: 20
                             leftMargin: 20
                             rightMargin: 20
-
+                            clip: true
+                            model: sectionColumn.sectionItemsModel
+                            
+                            // Debug model changes
+                            onCountChanged: {
+                                console.log("[HomeScreen] ListView count changed to:", count, "for section:", sectionColumn.sectionTitle)
+                            }
+                            
                             Component.onCompleted: {
-                                // Create model dynamically from JS array (processed items)
-                                let section = catalogSections[index]
-                                if (!section || !section.items) {
-                                    console.log("[HomeScreen] No section data or items for index:", index)
-                                    return
-                                }
-
-                                let sectionModel = Qt.createQmlObject('import QtQuick; ListModel {}', sectionListView)
-                                let items = section.items
-
-                                for (let i = 0; i < items.length; i++) {
-                                    let item = items[i]
-                                    sectionModel.append({
-                                        title: item.title || "",
-                                        poster: item.poster || item.posterUrl || "",
-                                        background: item.background || item.backdropUrl || "",
-                                        year: item.year || 0,
-                                        rating: item.rating || "",
-                                        id: item.id || ""
-                                    })
-                                }
-
-                                sectionListView.model = sectionModel
-                                console.log("[HomeScreen] ✓ Created section", section.name, "with", sectionModel.count, "items")
+                                console.log("[HomeScreen] ListView created for section:", sectionColumn.sectionTitle)
+                                console.log("[HomeScreen] Model:", sectionColumn.sectionItemsModel)
+                                console.log("[HomeScreen] Model count:", sectionColumn.sectionItemsModel ? sectionColumn.sectionItemsModel.count : 0)
                             }
 
-                            delegate: Rectangle {
-                                width: 150
-                                height: 225
-                                color: "#1a1a1a"
-                                radius: 8
+                            delegate: Item {
+                                width: 240
+                                height: 360
+                                
+                                property bool isHovered: false
 
-                                Column {
+                                Rectangle {
+                                    id: contentRect
                                     anchors.fill: parent
-                                    spacing: 8
+                                    color: "transparent"
+                                    radius: 8
+                                    
+                                    Column {
+                                        anchors.fill: parent
+                                        spacing: 12
 
-                                    // Poster image (processed data has resolved URLs)
-                                    Rectangle {
-                                        width: parent.width
-                                        height: 200
-                                        color: "#2a2a2a"
-                                        radius: 4
+                                        // Poster Wrapper (Clipped)
+                                        Rectangle {
+                                            width: parent.width
+                                            height: parent.height - 40
+                                            color: "#2a2a2a"
+                                            radius: 8
+                                            clip: true
 
-                                        Image {
-                                            anchors.fill: parent
-                                            source: model.poster || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            asynchronous: true
+                                            Image {
+                                                id: img
+                                                anchors.fill: parent
+                                                source: model.posterUrl || model.poster || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                asynchronous: true
+                                                smooth: true
+                                                
+                                                scale: isHovered ? 1.1 : 1.0
+                                                Behavior on scale { NumberAnimation { duration: 300 } }
+                                            }
+                                            
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: img.status === Image.Error ? "No Image" : ""
+                                                color: "#666"
+                                                visible: img.status !== Image.Ready
+                                            }
 
-                                            onStatusChanged: {
-                                                if (status === Image.Error) {
-                                                    console.log("[HomeScreen] Image failed to load:", source)
+                                            // Rating Badge
+                                            Rectangle {
+                                                anchors.bottom: parent.bottom
+                                                anchors.right: parent.right
+                                                anchors.margins: 8
+                                                visible: model.rating && model.rating !== ""
+                                                color: "black"
+                                                opacity: 0.8
+                                                radius: 4
+                                                width: 40
+                                                height: 20
+                                                
+                                                Row {
+                                                    anchors.centerIn: parent
+                                                    spacing: 2
+                                                    Text { text: "\u2605"; color: "#bb86fc"; font.pixelSize: 10 }
+                                                    Text { text: model.rating; color: "white"; font.pixelSize: 10; font.bold: true }
                                                 }
                                             }
                                         }
-                                    }
 
-                                    // Title (processed data uses 'title' field)
-                                    Text {
-                                        width: parent.width
-                                        height: 25
-                                        text: model.title || ""
-                                        color: "white"
-                                        font.pixelSize: 12
-                                        elide: Text.ElideRight
-                                        leftPadding: 4
-                                        rightPadding: 4
+                                        // Title Text
+                                        Text {
+                                            width: parent.width
+                                            text: model.title
+                                            color: "white"
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            elide: Text.ElideRight
+                                            horizontalAlignment: Text.AlignHCenter
+                                        }
                                     }
+                                }
+
+                                // Border overlay
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: "transparent"
+                                    radius: 8
+                                    z: 10
+                                    
+                                    border.width: 3
+                                    border.color: isHovered ? "#bb86fc" : "transparent"
+                                    
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
                                 }
 
                                 MouseArea {
                                     anchors.fill: parent
+                                    hoverEnabled: true
+                                    onEntered: isHovered = true
+                                    onExited: isHovered = false
                                     onClicked: {
-                                        console.log("Clicked on:", model.title)
+                                        console.log("Clicked catalog item:", model.title, "ID:", model.id)
+                                        // TODO: Open item details modal
                                     }
                                 }
                             }
                         }
                     }
                 }
-                
-                // Loading indicator
+
+                // 4. Loading & Empty States
                 Rectangle {
                     width: parent.width
                     height: 200
-                    color: "transparent"
                     visible: isLoading
-
+                    color: "transparent"
                     Text {
                         anchors.centerIn: parent
-                        text: "Loading catalogs..."
+                        text: "Loading..."
+                        color: "#666"
                         font.pixelSize: 16
-                        color: "#aaaaaa"
                     }
                 }
-
-                // Empty state
+                
                 Rectangle {
                     width: parent.width
                     height: 200
+                    visible: !isLoading && catalogSectionsModel.count === 0 && continueWatchingModel.count === 0
                     color: "transparent"
-                    visible: !isLoading && catalogSections.length === 0 && continueWatchingModel.count === 0
-
-                    Column {
+                    Text {
                         anchors.centerIn: parent
-                        spacing: 12
-
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: "No content available"
-                            font.pixelSize: 18
-                            color: "#aaaaaa"
-                        }
-
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: "Install addons to see catalogs"
-                            font.pixelSize: 14
-                            color: "#666666"
-                        }
+                        text: "No Content Found\nInstall addons to populate library"
+                        horizontalAlignment: Text.AlignHCenter
+                        color: "#666"
+                        font.pixelSize: 16
                     }
                 }
             }

@@ -23,3 +23,4 @@ echo "After installing, check database:"
 echo "  sqlite3 ~/.local/share/Yantrium/yantrium.db \"SELECT id, name, version, enabled FROM addons;\""
 echo ""
 
+

@@ -521,3 +521,4 @@ QJsonObject TmdbService::convertTvToCatalogItem(const QJsonObject& tmdbData, con
     return result;
 }
 
+

@@ -617,7 +617,94 @@ QVariantMap LibraryService::catalogItemToVariantMap(const QJsonObject& item, con
         }
         map["genres"] = genreList;
     }
-    
+
+    // === DATA NORMALIZATION FOR QML COMPATIBILITY ===
+    // Ensure ALL expected fields exist with proper types and defaults
+
+    // Required string fields with fallbacks
+    if (map["title"].toString().isEmpty()) {
+        map["title"] = map["name"].toString();  // Fallback to name
+    }
+    if (map["title"].toString().isEmpty()) {
+        map["title"] = "Unknown Title";  // Final fallback
+    }
+
+    if (map["posterUrl"].toString().isEmpty()) {
+        map["posterUrl"] = map["poster"].toString();  // Use poster as posterUrl
+    }
+    if (map["posterUrl"].toString().isEmpty()) {
+        map["posterUrl"] = "";  // Explicit empty string
+    }
+
+    // Required numeric fields with validation
+    if (!map.contains("year") || map["year"].toInt() <= 0) {
+        map["year"] = 0;  // Default to 0
+    }
+
+    // Required string fields
+    if (!map.contains("rating")) {
+        map["rating"] = "";  // Default empty
+    }
+
+    if (!map.contains("description")) {
+        map["description"] = "";  // Default empty
+    }
+
+    if (!map.contains("id")) {
+        map["id"] = "";  // Default empty
+    }
+
+    // Optional fields for ListModel compatibility
+    if (!map.contains("progress")) {
+        map["progress"] = 0.0;
+    }
+
+    if (!map.contains("progressPercent")) {
+        map["progressPercent"] = 0.0;
+    }
+
+    if (!map.contains("badgeText")) {
+        map["badgeText"] = "";
+    }
+
+    if (!map.contains("isHighlighted")) {
+        map["isHighlighted"] = false;
+    }
+
+    if (!map.contains("type")) {
+        map["type"] = "";
+    }
+
+    // Ensure all URL fields are strings
+    if (!map.contains("background")) {
+        map["background"] = "";
+    }
+
+    if (!map.contains("backdropUrl")) {
+        map["backdropUrl"] = "";
+    }
+
+    if (!map.contains("logo")) {
+        map["logo"] = "";
+    }
+
+    if (!map.contains("logoUrl")) {
+        map["logoUrl"] = "";
+    }
+
+    // ID fields
+    if (!map.contains("imdbId")) {
+        map["imdbId"] = "";
+    }
+
+    if (!map.contains("tmdbId")) {
+        map["tmdbId"] = "";
+    }
+
+    if (!map.contains("traktId")) {
+        map["traktId"] = "";
+    }
+
     return map;
 }
 
@@ -665,7 +752,58 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
     
     // Extract watched_at
     map["watchedAt"] = traktItem["paused_at"].toString();
-    
+
+    // === DATA NORMALIZATION FOR QML COMPATIBILITY ===
+    // Ensure ALL expected fields exist with proper types and defaults
+
+    if (map["title"].toString().isEmpty()) {
+        map["title"] = "Unknown";
+    }
+
+    if (!map.contains("posterUrl")) {
+        map["posterUrl"] = "";
+    }
+
+    if (!map.contains("year") || map["year"].toInt() <= 0) {
+        map["year"] = 0;
+    }
+
+    if (!map.contains("rating")) {
+        map["rating"] = "";
+    }
+
+    if (!map.contains("progress")) {
+        map["progress"] = 0.0;
+    }
+
+    if (!map.contains("progressPercent")) {
+        map["progressPercent"] = 0.0;
+    }
+
+    if (!map.contains("badgeText")) {
+        map["badgeText"] = "";
+    }
+
+    if (!map.contains("isHighlighted")) {
+        map["isHighlighted"] = false;
+    }
+
+    if (!map.contains("imdbId")) {
+        map["imdbId"] = "";
+    }
+
+    if (!map.contains("type")) {
+        map["type"] = "";
+    }
+
+    if (!map.contains("season")) {
+        map["season"] = 0;
+    }
+
+    if (!map.contains("episode")) {
+        map["episode"] = 0;
+    }
+
     return map;
 }
 

@@ -46,3 +46,4 @@ private:
 
 #endif // CATALOG_PREFERENCES_SERVICE_H
 
+

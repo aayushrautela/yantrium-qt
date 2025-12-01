@@ -78,3 +78,4 @@ private:
 
 #endif // ADDON_MANIFEST_H
 
+

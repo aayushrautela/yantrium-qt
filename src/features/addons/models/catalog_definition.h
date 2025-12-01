@@ -45,3 +45,4 @@ private:
 
 #endif // CATALOG_DEFINITION_H
 
+
