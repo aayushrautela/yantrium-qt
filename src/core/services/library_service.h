@@ -14,6 +14,8 @@
 #include "features/addons/models/addon_config.h"
 #include "features/addons/models/addon_manifest.h"
 #include "core/services/trakt_core_service.h"
+#include "core/services/tmdb_service.h"
+#include "core/services/tmdb_data_extractor.h"
 #include "core/database/catalog_preferences_dao.h"
 
 class LibraryService : public QObject
@@ -47,6 +49,10 @@ private slots:
     void onCatalogFetched(const QString& type, const QJsonArray& metas);
     void onClientError(const QString& errorMessage);
     void onPlaybackProgressFetched(const QVariantList& progress);
+    void onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& data);
+    void onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data);
+    void onTmdbIdFound(const QString& imdbId, int tmdbId);
+    void onTmdbError(const QString& message);
     void onHeroCatalogFetched(const QString& type, const QJsonArray& metas);
     void onHeroClientError(const QString& errorMessage);
 
@@ -61,10 +67,12 @@ private:
     void processCatalogData(const QString& addonId, const QString& catalogName, const QString& type, const QJsonArray& metas);
     QVariantMap catalogItemToVariantMap(const QJsonObject& item, const QString& baseUrl = QString());
     QVariantMap traktPlaybackItemToVariantMap(const QVariantMap& traktItem);
+    QVariantMap continueWatchingItemToVariantMap(const QVariantMap& traktItem, const QJsonObject& tmdbData = QJsonObject()); // Dedicated function for continue watching cards
     void finishLoadingCatalogs();
     
     AddonRepository* m_addonRepository;
     TraktCoreService* m_traktService;
+    TmdbService* m_tmdbService;
     CatalogPreferencesDao* m_catalogPreferencesDao;
     QList<AddonClient*> m_activeClients;
     QList<CatalogSection> m_catalogSections;
@@ -78,6 +86,12 @@ private:
     QVariantList m_heroItems;
     int m_pendingHeroRequests;
     bool m_isLoadingHeroItems;
+    
+    // Continue watching TMDB loading
+    QMap<QString, QVariantMap> m_pendingContinueWatchingItems; // IMDB ID -> Trakt item data
+    QMap<int, QString> m_tmdbIdToImdbId; // TMDB ID -> IMDB ID
+    int m_pendingTmdbRequests;
+    void finishContinueWatchingLoading();
 };
 
 #endif // LIBRARY_SERVICE_H

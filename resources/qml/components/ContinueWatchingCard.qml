@@ -7,6 +7,7 @@ Item {
     
     property string backdropUrl: ""
     property string logoUrl: ""
+    property string posterUrl: ""  // Fallback for backdrop
     property string title: ""
     property string type: ""  // "movie" or "episode"
     property int season: 0
@@ -54,11 +55,11 @@ Item {
             radius: 8
         }
         
-        // Backdrop Image
+        // Backdrop Image (fallback to poster if backdrop not available)
         Image {
             id: backdropImage
             anchors.fill: parent
-            source: root.backdropUrl
+            source: root.backdropUrl || root.posterUrl || ""
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             smooth: true
@@ -69,14 +70,62 @@ Item {
             Behavior on scale { 
                 NumberAnimation { duration: 300; easing.type: Easing.OutQuad } 
             }
+            
         }
 
-        // Loading/Error state
-        Text {
-            anchors.centerIn: parent
-            text: backdropImage.status === Image.Error ? "No Image" : ""
-            color: "#666"
-            visible: backdropImage.status !== Image.Ready
+        // Loading/Error state with debug info
+        Rectangle {
+            anchors.fill: parent
+            color: "#80000000"
+            visible: backdropImage.status !== Image.Ready || root.backdropUrl === ""
+            z: 100
+            
+            Column {
+                anchors.centerIn: parent
+                spacing: 8
+                
+                Text {
+                    text: backdropImage.status === Image.Error ? "❌ Image Error" : 
+                          backdropImage.status === Image.Loading ? "⏳ Loading..." : 
+                          "⚠️ No Image URL"
+                    color: "#ffffff"
+                    font.pixelSize: 14
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                }
+                
+                Text {
+                    text: "Backdrop: " + (root.backdropUrl || "empty")
+                    color: "#cccccc"
+                    font.pixelSize: 10
+                    width: 350
+                    elide: Text.ElideMiddle
+                }
+                
+                Text {
+                    text: "Poster: " + (root.posterUrl || "empty")
+                    color: "#cccccc"
+                    font.pixelSize: 10
+                    width: 350
+                    elide: Text.ElideMiddle
+                }
+                
+                Text {
+                    text: "Logo: " + (root.logoUrl || "empty")
+                    color: "#cccccc"
+                    font.pixelSize: 10
+                    width: 350
+                    elide: Text.ElideMiddle
+                }
+                
+                Text {
+                    text: "Title: " + (root.title || "empty")
+                    color: "#cccccc"
+                    font.pixelSize: 10
+                    width: 350
+                    elide: Text.ElideMiddle
+                }
+            }
         }
         
         // Gradient overlay (darker bottom left)
@@ -105,8 +154,8 @@ Item {
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.margins: 16
-            width: 120
-            height: 40
+            width: 180  // 50% bigger: 120 * 1.5 = 180
+            height: 60  // 50% bigger: 40 * 1.5 = 60
             
             Image {
                 id: logoImage
@@ -138,7 +187,7 @@ Item {
                 text: "S" + (root.season < 10 ? "0" : "") + root.season + 
                       "E" + (root.episode < 10 ? "0" : "") + root.episode
                 color: "#ffffff"
-                font.pixelSize: 14
+                font.pixelSize: 21  // 50% bigger: 14 * 1.5 = 21
                 font.bold: true
                 style: Text.Outline
                 styleColor: "#000000"
@@ -148,7 +197,7 @@ Item {
                 width: 200
                 text: root.episodeTitle || ""
                 color: "#e0e0e0"
-                font.pixelSize: 12
+                font.pixelSize: 18  // 50% bigger: 12 * 1.5 = 18
                 elide: Text.ElideRight
                 style: Text.Outline
                 styleColor: "#000000"

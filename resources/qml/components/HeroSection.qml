@@ -105,8 +105,8 @@ Item {
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             width: parent.width
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
             visible: false
             x: parent.width 
         }
@@ -147,101 +147,101 @@ Item {
             width: Math.min(parent.width, 550)
             height: 160
             
-            Image {
+        Image {
                 anchors.left: parent.left
                 width: Math.min(parent.width, 550)
                 height: 160
-                fillMode: Image.PreserveAspectFit
+            fillMode: Image.PreserveAspectFit
                 source: root.logoUrl
                 visible: root.logoUrl !== ""
-                asynchronous: true
+            asynchronous: true
                 
                 // Fallback to title if logo is not available
                 Text {
                     anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.title
-                    font.pixelSize: 48
-                    font.bold: true
-                    color: "#ffffff"
-                    wrapMode: Text.WordWrap
+            anchors.verticalCenter: parent.verticalCenter
+                text: root.title
+                font.pixelSize: 48
+                font.bold: true
+                color: "#ffffff"
+                wrapMode: Text.WordWrap
                     visible: parent.status === Image.Error || root.logoUrl === ""
                 }
             }
-        }
-        
-        // Metadata tags
-        Row {
-            spacing: 8
+            }
+            
+            // Metadata tags
+            Row {
+                spacing: 8
             visible: root.metadata.length > 0
-            Repeater {
-                model: root.metadata
-                Rectangle {
-                    height: 28
-                    width: metadataText.width + 16
-                    radius: 4
-                    color: "#40ffffff"
-                    
-                    Text {
-                        id: metadataText
-                        anchors.centerIn: parent
-                        text: modelData
-                        font.pixelSize: 12
+                Repeater {
+                    model: root.metadata
+                    Rectangle {
+                        height: 28
+                        width: metadataText.width + 16
+                        radius: 4
+                        color: "#40ffffff"
+                        
+                        Text {
+                            id: metadataText
+                            anchors.centerIn: parent
+                            text: modelData
+                            font.pixelSize: 12
+                            color: "#ffffff"
+                        }
+                    }
+                }
+            }
+            
+            // Description
+            Text {
+            width: Math.min(parent.width * 0.75, 600)
+                text: root.description
+            color: "#e0e0e0"
+                font.pixelSize: 16
+                wrapMode: Text.WordWrap
+            }
+            
+        // Buttons
+            Row {
+                spacing: 12
+                
+                Button {
+                    width: 140
+                    height: 44
+                    text: "▶ Play Now"
+                    background: Rectangle {
+                        color: "#ff0000"
+                        radius: 4
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: 16
+                        font.bold: true
                         color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                
+                Button {
+                    width: 160
+                    height: 44
+                    text: "+ Add to Library"
+                    background: Rectangle {
+                        color: "#40000000"
+                        border.width: 1
+                        border.color: "#ffffff"
+                        radius: 4
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: 16
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
             }
         }
-        
-        // Description
-        Text {
-            width: Math.min(parent.width * 0.75, 600)
-            text: root.description
-            color: "#e0e0e0"
-            font.pixelSize: 16
-            wrapMode: Text.WordWrap
-        }
-        
-        // Buttons
-        Row {
-            spacing: 12
-            
-            Button {
-                width: 140
-                height: 44
-                text: "▶ Play Now"
-                background: Rectangle {
-                    color: "#ff0000"
-                    radius: 4
-                }
-                contentItem: Text {
-                    text: parent.text
-                    font.pixelSize: 16
-                    font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-            
-            Button {
-                width: 160
-                height: 44
-                text: "+ Add to Library"
-                background: Rectangle {
-                    color: "#40000000"
-                    border.width: 1
-                    border.color: "#ffffff"
-                    radius: 4
-                }
-                contentItem: Text {
-                    text: parent.text
-                    font.pixelSize: 16
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-        }
     }
-}

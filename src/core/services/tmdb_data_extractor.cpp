@@ -311,3 +311,4 @@ QString TmdbDataExtractor::extractLogoUrl(const QJsonObject& tmdbData, const QSt
 }
 
 
+

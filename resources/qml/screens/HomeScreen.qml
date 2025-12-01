@@ -197,52 +197,10 @@ Item {
         continueWatchingModel.clear()
         if (!items) return
 
-        // Filter: Remove items that are >80% watched (>=81%)
-        let filteredItems = []
+        // Items are already filtered and grouped in C++ (LibraryService)
+        // Just add them directly to the model
         for (let i = 0; i < items.length; i++) {
             let item = items[i]
-            let progress = item.progress || item.progressPercent || 0
-            if (progress < 81) {  // Only include items <81% watched
-                filteredItems.push(item)
-            }
-        }
-
-        // For episodes: Group by show and keep only the highest episode
-        let showEpisodes = {}  // Key: show title or imdbId, Value: highest episode item
-        
-        for (let i = 0; i < filteredItems.length; i++) {
-            let item = filteredItems[i]
-            
-            if (item.type === "episode") {
-                // Use show title + imdbId as key to group episodes
-                let key = (item.title || "") + "|" + (item.imdbId || "")
-                
-                if (!showEpisodes[key]) {
-                    // First episode for this show
-                    showEpisodes[key] = item
-                } else {
-                    // Compare with existing episode
-                    let existing = showEpisodes[key]
-                    let existingSeason = existing.season || 0
-                    let existingEpisode = existing.episode || 0
-                    let currentSeason = item.season || 0
-                    let currentEpisode = item.episode || 0
-                    
-                    // Keep the highest episode (higher season, or same season with higher episode)
-                    if (currentSeason > existingSeason || 
-                        (currentSeason === existingSeason && currentEpisode > existingEpisode)) {
-                        showEpisodes[key] = item
-                    }
-                }
-            } else {
-                // Movies: add directly (no grouping needed)
-                showEpisodes["movie_" + i] = item
-            }
-        }
-
-        // Add filtered and grouped items to model
-        for (let key in showEpisodes) {
-            let item = showEpisodes[key]
             continueWatchingModel.append({
                 backdropUrl: item.backdropUrl || item.backdrop || "",
                 logoUrl: item.logoUrl || item.logo || "",
@@ -286,7 +244,7 @@ Item {
                 id: contentColumn
                 width: parent.width
                 spacing: 20
-                bottomPadding: 50
+                bottomPadding: 50 
 
                 // 1. Hero Section (full width, independent of margins)
                 Loader {
@@ -322,27 +280,27 @@ Item {
                     leftPadding: 40
                     rightPadding: 40
 
-                    // 2. Continue Watching
-                    Loader {
-                        id: cwLoader
-                        width: parent.width
-                        height: (item && item.implicitHeight > 0) ? item.implicitHeight : (active ? 320 : 0)
-                        
-                        source: "qrc:/qml/components/HorizontalList.qml"
-                        active: continueWatchingModel.count > 0
-                        visible: active
-                        
-                        onLoaded: {
-                            if (!item) return
-                            item.title = "Continue Watching"
-                            item.icon = "\U0001f550"
+                // 2. Continue Watching
+                Loader {
+                    id: cwLoader
+                    width: parent.width
+                    height: (item && item.implicitHeight > 0) ? item.implicitHeight : (active ? 320 : 0)
+                    
+                    source: "qrc:/qml/components/HorizontalList.qml"
+                    active: continueWatchingModel.count > 0
+                    visible: active
+                    
+                    onLoaded: {
+                        if (!item) return
+                        item.title = "Continue Watching"
+                        item.icon = "\U0001f550"
                             item.itemWidth = 400
-                            item.itemHeight = 225
-                            item.model = continueWatchingModel
-                        }
+                        item.itemHeight = 225
+                        item.model = continueWatchingModel
                     }
+                }
 
-                    // 3. Catalog Sections
+                // 3. Catalog Sections
                 Repeater {
                     id: catalogRepeater
                     model: catalogSectionsModel
@@ -396,93 +354,93 @@ Item {
                                     }
                                 }
 
-                                Column {
-                                    anchors.fill: parent
-                                    spacing: 12
+                                    Column {
+                                        anchors.fill: parent
+                                        spacing: 12
 
                                     // Rounded poster image container (2:3 aspect ratio)
-                                    Item {
+                                        Item {
                                         id: imageContainer
-                                        width: parent.width
+                                            width: parent.width
                                         height: 360 // 240 * 3/2 = 360 (2:3 aspect ratio)
-                                        
-                                        // 1. Define the mask shape (invisible, used by layer)
-                                        Rectangle {
-                                            id: maskShape
-                                            anchors.fill: parent
-                                            radius: 8
-                                            visible: false
-                                        }
-
-                                        // 2. Enable Layering and set the OpacityMask
-                                        layer.enabled: true
-                                        layer.effect: OpacityMask {
-                                            maskSource: maskShape
-                                        }
-
-                                        // Background placeholder
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: "#2a2a2a"
-                                            radius: 8
-                                        }
-                                        
-                                        // 3. The Image itself
-                                        Image {
-                                            id: img
-                                            anchors.fill: parent
-                                            source: model.posterUrl || model.poster || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            asynchronous: true
-                                            smooth: true
                                             
-                                            // 4. Scale Logic: Zoom from 1.0 to 1.15
-                                            scale: isHovered ? 1.15 : 1.0
-                                            
-                                            Behavior on scale { 
-                                                NumberAnimation { duration: 300; easing.type: Easing.OutQuad } 
+                                            // 1. Define the mask shape (invisible, used by layer)
+                                            Rectangle {
+                                                id: maskShape
+                                                anchors.fill: parent
+                                                radius: 8
+                                                visible: false
                                             }
-                                        }
 
-                                        // Loading/Error state
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: img.status === Image.Error ? "No Image" : ""
-                                            color: "#666"
-                                            visible: img.status !== Image.Ready
-                                        }
+                                            // 2. Enable Layering and set the OpacityMask
+                                            layer.enabled: true
+                                            layer.effect: OpacityMask {
+                                                maskSource: maskShape
+                                            }
 
-                                        // Rating Badge (Inside the masked area)
-                                        Rectangle {
-                                            anchors.bottom: parent.bottom
-                                            anchors.right: parent.right
-                                            anchors.margins: 8
-                                            visible: model.rating && model.rating !== ""
-                                            color: "black"
-                                            opacity: 0.8
-                                            radius: 4
-                                            width: 40
-                                            height: 20
+                                            // Background placeholder
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: "#2a2a2a"
+                                            radius: 8
+                                            }
                                             
-                                            Row {
+                                            // 3. The Image itself
+                                            Image {
+                                                id: img
+                                                anchors.fill: parent
+                                                source: model.posterUrl || model.poster || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                asynchronous: true
+                                                smooth: true
+                                                
+                                                // 4. Scale Logic: Zoom from 1.0 to 1.15
+                                                scale: isHovered ? 1.15 : 1.0
+                                                
+                                                Behavior on scale { 
+                                                    NumberAnimation { duration: 300; easing.type: Easing.OutQuad } 
+                                                }
+                                            }
+
+                                            // Loading/Error state
+                                            Text {
                                                 anchors.centerIn: parent
-                                                spacing: 2
-                                                Text { text: "\u2605"; color: "#bb86fc"; font.pixelSize: 10 }
-                                                Text { text: model.rating; color: "white"; font.pixelSize: 10; font.bold: true }
+                                                text: img.status === Image.Error ? "No Image" : ""
+                                                color: "#666"
+                                                visible: img.status !== Image.Ready
                                             }
-                                        }
-                                        
+
+                                            // Rating Badge (Inside the masked area)
+                                            Rectangle {
+                                                anchors.bottom: parent.bottom
+                                                anchors.right: parent.right
+                                                anchors.margins: 8
+                                                visible: model.rating && model.rating !== ""
+                                                color: "black"
+                                                opacity: 0.8
+                                                radius: 4
+                                                width: 40
+                                                height: 20
+                                                
+                                                Row {
+                                                    anchors.centerIn: parent
+                                                    spacing: 2
+                                                    Text { text: "\u2605"; color: "#bb86fc"; font.pixelSize: 10 }
+                                                    Text { text: model.rating; color: "white"; font.pixelSize: 10; font.bold: true }
+                                                }
+                                }
+
                                         // Border overlay (only on image container)
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: "transparent"
-                                            radius: 8
-                                            z: 10
-                                            
-                                            border.width: 3
-                                            border.color: isHovered ? "#bb86fc" : "transparent"
-                                            
-                                            Behavior on border.color { ColorAnimation { duration: 200 } }
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: "transparent"
+                                    radius: 8
+                                    z: 10
+                                    
+                                    border.width: 3
+                                    border.color: isHovered ? "#bb86fc" : "transparent"
+                                    
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
                                         }
                                     }
 
@@ -500,33 +458,33 @@ Item {
                             }
                         }
                     }
-                    }
+                }
 
-                    // 4. Loading & Empty States
-                    Rectangle {
-                        width: parent.width
-                        height: 200
-                        visible: isLoading
-                        color: "transparent"
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Loading..."
-                            color: "#666"
-                            font.pixelSize: 16
-                        }
+                // 4. Loading & Empty States
+                Rectangle {
+                    width: parent.width
+                    height: 200
+                    visible: isLoading
+                    color: "transparent"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Loading..."
+                        color: "#666"
+                        font.pixelSize: 16
                     }
-                    
-                    Rectangle {
-                        width: parent.width
-                        height: 200
-                        visible: !isLoading && catalogSectionsModel.count === 0 && continueWatchingModel.count === 0
-                        color: "transparent"
-                        Text {
-                            anchors.centerIn: parent
-                            text: "No Content Found\nInstall addons to populate library"
-                            horizontalAlignment: Text.AlignHCenter
-                            color: "#666"
-                            font.pixelSize: 16
+                }
+                
+                Rectangle {
+                    width: parent.width
+                    height: 200
+                    visible: !isLoading && catalogSectionsModel.count === 0 && continueWatchingModel.count === 0
+                    color: "transparent"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "No Content Found\nInstall addons to populate library"
+                        horizontalAlignment: Text.AlignHCenter
+                        color: "#666"
+                        font.pixelSize: 16
                         }
                     }
                 }

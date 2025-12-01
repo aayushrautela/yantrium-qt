@@ -67,25 +67,29 @@ Rectangle {
                         if (!item) return
                         
                         if (root.title === "Continue Watching") {
-                            item.backdropUrl = model.backdropUrl || ""
-                            item.logoUrl = model.logoUrl || ""
-                            item.title = model.title || ""
-                            item.type = model.type || ""
-                            item.season = model.season || 0
-                            item.episode = model.episode || 0
-                            item.episodeTitle = model.episodeTitle || ""
-                            item.progress = model.progress || model.progressPercent || 0
+                            // Use property bindings for reactive updates
+                            item.backdropUrl = Qt.binding(function() { return model.backdropUrl || "" })
+                            item.logoUrl = Qt.binding(function() { return model.logoUrl || "" })
+                            item.posterUrl = Qt.binding(function() { return model.posterUrl || "" })
+                            item.title = Qt.binding(function() { return model.title || "" })
+                            item.type = Qt.binding(function() { return model.type || "" })
+                            item.season = Qt.binding(function() { return model.season || 0 })
+                            item.episode = Qt.binding(function() { return model.episode || 0 })
+                            item.episodeTitle = Qt.binding(function() { return model.episodeTitle || "" })
+                            item.progress = Qt.binding(function() { return model.progress || model.progressPercent || 0 })
+                            
+                            
                             item.clicked.connect(function() {
                                 console.log("Clicked on:", model.title)
                             })
                         } else {
-                            item.posterUrl = model.posterUrl || model.poster || ""
-                            item.title = model.title || ""
-                            item.year = model.year || 0
-                            item.rating = model.rating || ""
-                            item.progress = model.progressPercent || model.progress || 0
-                            item.badgeText = model.badgeText || ""
-                            item.isHighlighted = model.isHighlighted || false
+                            item.posterUrl = Qt.binding(function() { return model.posterUrl || model.poster || "" })
+                            item.title = Qt.binding(function() { return model.title || "" })
+                            item.year = Qt.binding(function() { return model.year || 0 })
+                            item.rating = Qt.binding(function() { return model.rating || "" })
+                            item.progress = Qt.binding(function() { return model.progressPercent || model.progress || 0 })
+                            item.badgeText = Qt.binding(function() { return model.badgeText || "" })
+                            item.isHighlighted = Qt.binding(function() { return model.isHighlighted || false })
                             item.clicked.connect(function() {
                                 console.log("Clicked on:", model.title)
                             })

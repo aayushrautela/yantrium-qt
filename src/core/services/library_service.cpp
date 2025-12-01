@@ -9,12 +9,14 @@ LibraryService::LibraryService(QObject* parent)
     : QObject(parent)
     , m_addonRepository(new AddonRepository(this))
     , m_traktService(&TraktCoreService::instance())
+    , m_tmdbService(new TmdbService(this))
     , m_catalogPreferencesDao(new CatalogPreferencesDao(DatabaseManager::instance().database()))
     , m_pendingCatalogRequests(0)
     , m_isLoadingCatalogs(false)
     , m_isRawExport(false)
     , m_pendingHeroRequests(0)
     , m_isLoadingHeroItems(false)
+    , m_pendingTmdbRequests(0)
 {
     qDebug() << "[LibraryService] ===== Constructor called =====";
     qDebug() << "[LibraryService] LibraryService instance created";
@@ -23,7 +25,17 @@ LibraryService::LibraryService(QObject* parent)
     connect(m_traktService, &TraktCoreService::playbackProgressFetched,
             this, &LibraryService::onPlaybackProgressFetched);
     
-    qDebug() << "[LibraryService] Connected to Trakt service signals";
+    // Connect to TMDB service for fetching images
+    connect(m_tmdbService, &TmdbService::movieMetadataFetched,
+            this, &LibraryService::onTmdbMovieMetadataFetched);
+    connect(m_tmdbService, &TmdbService::tvMetadataFetched,
+            this, &LibraryService::onTmdbTvMetadataFetched);
+    connect(m_tmdbService, &TmdbService::tmdbIdFound,
+            this, &LibraryService::onTmdbIdFound);
+    connect(m_tmdbService, &TmdbService::error,
+            this, &LibraryService::onTmdbError);
+    
+    qDebug() << "[LibraryService] Connected to Trakt and TMDB service signals";
 }
 
 LibraryService::~LibraryService()
@@ -405,17 +417,103 @@ void LibraryService::onClientError(const QString& errorMessage)
 
 void LibraryService::onPlaybackProgressFetched(const QVariantList& progress)
 {
-    m_continueWatching.clear();
+    qDebug() << "[LibraryService] onPlaybackProgressFetched: received" << progress.size() << "items";
     
+    m_continueWatching.clear();
+    m_pendingContinueWatchingItems.clear();
+    m_tmdbIdToImdbId.clear();
+    m_pendingTmdbRequests = 0;
+    
+    const int watchedThreshold = 81; // More than 80% is considered watched
+    
+    // Step 1: Filter out items that are >80% watched (>=81%)
+    QVariantList filteredItems;
     for (const QVariant& itemVar : progress) {
         QVariantMap item = itemVar.toMap();
-        QVariantMap continueItem = traktPlaybackItemToVariantMap(item);
-        if (!continueItem.isEmpty()) {
-            m_continueWatching.append(continueItem);
+        double progressPercent = item["progress"].toDouble();
+        if (progressPercent < watchedThreshold) {
+            filteredItems.append(item);
         }
     }
     
-    emit continueWatchingLoaded(m_continueWatching);
+    qDebug() << "[LibraryService] After filtering >80% watched:" << filteredItems.size() << "items";
+    
+    // Step 2: For episodes, group by show and keep only the highest episode
+    QMap<QString, QVariantMap> showEpisodes; // Key: show title + imdbId, Value: highest episode item
+    QVariantList movies;
+    
+    for (const QVariant& itemVar : filteredItems) {
+        QVariantMap item = itemVar.toMap();
+        QString type = item["type"].toString();
+        
+        if (type == "episode") {
+            QVariantMap show = item["show"].toMap();
+            QVariantMap showIds = show["ids"].toMap();
+            QString showImdbId = showIds["imdb"].toString();
+            QString showTitle = show["title"].toString();
+            QString key = showTitle + "|" + showImdbId;
+            
+            QVariantMap episode = item["episode"].toMap();
+            int season = episode["season"].toInt();
+            int episodeNum = episode["number"].toInt();
+            
+            if (!showEpisodes.contains(key)) {
+                // First episode for this show
+                showEpisodes[key] = item;
+            } else {
+                // Compare with existing episode
+                QVariantMap existing = showEpisodes[key];
+                QVariantMap existingEpisode = existing["episode"].toMap();
+                int existingSeason = existingEpisode["season"].toInt();
+                int existingEpisodeNum = existingEpisode["number"].toInt();
+                
+                // Keep the highest episode (higher season, or same season with higher episode)
+                if (season > existingSeason || (season == existingSeason && episodeNum > existingEpisodeNum)) {
+                    showEpisodes[key] = item;
+                }
+            }
+        } else if (type == "movie") {
+            movies.append(item);
+        }
+    }
+    
+    qDebug() << "[LibraryService] After grouping episodes:" << showEpisodes.size() << "shows," << movies.size() << "movies";
+    
+    // Step 3: Only fetch TMDB metadata for items that will actually appear
+    // Add movies first
+    for (const QVariant& itemVar : movies) {
+        QVariantMap item = itemVar.toMap();
+        QVariantMap movie = item["movie"].toMap();
+        QVariantMap ids = movie["ids"].toMap();
+        QString imdbId = ids["imdb"].toString();
+        
+        if (!imdbId.isEmpty()) {
+            m_pendingContinueWatchingItems[imdbId] = item;
+            m_pendingTmdbRequests++;
+            m_tmdbService->getTmdbIdFromImdb(imdbId);
+        }
+    }
+    
+    // Add highest episodes
+    for (auto it = showEpisodes.constBegin(); it != showEpisodes.constEnd(); ++it) {
+        QVariantMap item = it.value();
+        QVariantMap show = item["show"].toMap();
+        QVariantMap showIds = show["ids"].toMap();
+        QString imdbId = showIds["imdb"].toString();
+        
+        if (!imdbId.isEmpty()) {
+            m_pendingContinueWatchingItems[imdbId] = item;
+            m_pendingTmdbRequests++;
+            m_tmdbService->getTmdbIdFromImdb(imdbId);
+        }
+    }
+    
+    qDebug() << "[LibraryService] Will fetch TMDB metadata for" << m_pendingTmdbRequests << "items";
+    
+    // If no items to process, emit empty
+    if (m_pendingTmdbRequests == 0) {
+        emit continueWatchingLoaded(QVariantList());
+    }
 }
 
 void LibraryService::processCatalogData(const QString& addonId, const QString& catalogName, 
@@ -735,13 +833,21 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
         
         QVariantMap images = movie["images"].toMap();
         QVariantMap poster = images["poster"].toMap();
-        map["posterUrl"] = poster["full"].toString();
+        QString posterUrl = poster["full"].toString();
+        map["posterUrl"] = posterUrl;
         
         QVariantMap backdrop = images["backdrop"].toMap();
-        map["backdropUrl"] = backdrop["full"].toString();
+        QString backdropUrl = backdrop["full"].toString();
+        // Fallback to poster if backdrop not available
+        if (backdropUrl.isEmpty()) {
+            backdropUrl = posterUrl;
+        }
+        map["backdropUrl"] = backdropUrl;
         
         QVariantMap logo = images["logo"].toMap();
         map["logoUrl"] = logo["full"].toString();
+        
+        qDebug() << "[LibraryService] Movie" << map["title"] << "backdrop:" << backdropUrl << "logo:" << map["logoUrl"].toString();
     } else if (type == "episode" && !show.isEmpty() && !episode.isEmpty()) {
         QVariantMap showIds = show["ids"].toMap();
         map["imdbId"] = showIds["imdb"].toString();
@@ -753,20 +859,31 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
         
         QVariantMap showImages = show["images"].toMap();
         QVariantMap poster = showImages["poster"].toMap();
-        map["posterUrl"] = poster["full"].toString();
+        QString posterUrl = poster["full"].toString();
+        map["posterUrl"] = posterUrl;
         
-        // Try episode backdrop first, fallback to show backdrop
+        // Try episode backdrop first, fallback to show backdrop, then poster
         QVariantMap episodeImages = episode["images"].toMap();
         QVariantMap episodeBackdrop = episodeImages["screenshot"].toMap();
-        if (episodeBackdrop["full"].toString().isEmpty()) {
+        QString backdropUrl = episodeBackdrop["full"].toString();
+        
+        if (backdropUrl.isEmpty()) {
             QVariantMap backdrop = showImages["backdrop"].toMap();
-            map["backdropUrl"] = backdrop["full"].toString();
-        } else {
-            map["backdropUrl"] = episodeBackdrop["full"].toString();
+            backdropUrl = backdrop["full"].toString();
         }
+        
+        // Final fallback to poster if no backdrop available
+        if (backdropUrl.isEmpty()) {
+            backdropUrl = posterUrl;
+        }
+        
+        map["backdropUrl"] = backdropUrl;
         
         QVariantMap logo = showImages["logo"].toMap();
         map["logoUrl"] = logo["full"].toString();
+        
+        qDebug() << "[LibraryService] Episode" << map["title"] << "S" << map["season"] << "E" << map["episode"] 
+                 << "backdrop:" << backdropUrl << "logo:" << map["logoUrl"].toString();
     }
     
     // Extract watched_at
@@ -847,6 +964,126 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
         map["episode"] = 0;
     }
 
+    return map;
+}
+
+QVariantMap LibraryService::continueWatchingItemToVariantMap(const QVariantMap& traktItem, const QJsonObject& tmdbData)
+{
+    QVariantMap map;
+    
+    // Extract type
+    QString type = traktItem["type"].toString();
+    map["type"] = type;
+    
+    // Extract progress
+    double progress = traktItem["progress"].toDouble();
+    map["progress"] = progress;
+    map["progressPercent"] = progress;
+    
+    // Extract content data from Trakt
+    QVariantMap movie = traktItem["movie"].toMap();
+    QVariantMap show = traktItem["show"].toMap();
+    QVariantMap episode = traktItem["episode"].toMap();
+    
+    if (type == "movie" && !movie.isEmpty()) {
+        // Movie data from Trakt
+        QVariantMap ids = movie["ids"].toMap();
+        map["id"] = ids["imdb"].toString();
+        map["imdbId"] = ids["imdb"].toString();
+        map["title"] = movie["title"].toString();
+        map["year"] = movie["year"].toInt();
+        
+        // Extract images from TMDB (same as catalog items)
+        QString posterUrl = TmdbDataExtractor::extractPosterUrl(tmdbData);
+        QString backdropUrl = TmdbDataExtractor::extractBackdropUrl(tmdbData);
+        QString logoUrl = TmdbDataExtractor::extractLogoUrl(tmdbData);
+        
+        // Fallback: backdrop -> poster
+        if (backdropUrl.isEmpty() && !posterUrl.isEmpty()) {
+            backdropUrl = posterUrl;
+        }
+        
+        map["posterUrl"] = posterUrl;
+        map["backdropUrl"] = backdropUrl;
+        map["logoUrl"] = logoUrl;
+        
+    } else if (type == "episode" && !show.isEmpty() && !episode.isEmpty()) {
+        // Episode/Show data from Trakt
+        QVariantMap showIds = show["ids"].toMap();
+        map["imdbId"] = showIds["imdb"].toString();
+        map["title"] = show["title"].toString();
+        map["year"] = show["year"].toInt();
+        map["season"] = episode["season"].toInt();
+        map["episode"] = episode["number"].toInt();
+        map["episodeTitle"] = episode["title"].toString();
+        
+        // Extract images from TMDB (same as catalog items)
+        QString posterUrl = TmdbDataExtractor::extractPosterUrl(tmdbData);
+        QString backdropUrl = TmdbDataExtractor::extractBackdropUrl(tmdbData);
+        QString logoUrl = TmdbDataExtractor::extractLogoUrl(tmdbData);
+        
+        // Fallback: backdrop -> poster
+        if (backdropUrl.isEmpty() && !posterUrl.isEmpty()) {
+            backdropUrl = posterUrl;
+        }
+        
+        map["posterUrl"] = posterUrl;
+        map["backdropUrl"] = backdropUrl;
+        map["logoUrl"] = logoUrl;
+    }
+    
+    // Extract watched_at
+    map["watchedAt"] = traktItem["paused_at"].toString();
+    
+    // === DATA NORMALIZATION FOR QML COMPATIBILITY (same as catalog) ===
+    if (map["title"].toString().isEmpty()) {
+        map["title"] = "Unknown";
+    }
+    
+    if (!map.contains("posterUrl")) {
+        map["posterUrl"] = "";
+    }
+    
+    if (!map.contains("backdropUrl")) {
+        map["backdropUrl"] = "";
+    }
+    
+    if (!map.contains("logoUrl")) {
+        map["logoUrl"] = "";
+    }
+    
+    if (!map.contains("type")) {
+        map["type"] = "";
+    }
+    
+    if (!map.contains("season")) {
+        map["season"] = 0;
+    }
+    
+    if (!map.contains("episode")) {
+        map["episode"] = 0;
+    }
+    
+    if (!map.contains("episodeTitle")) {
+        map["episodeTitle"] = "";
+    }
+    
+    if (!map.contains("year") || map["year"].toInt() <= 0) {
+        map["year"] = 0;
+    }
+    
+    if (!map.contains("progress")) {
+        map["progress"] = 0.0;
+    }
+    
+    if (!map.contains("progressPercent")) {
+        map["progressPercent"] = 0.0;
+    }
+    
+    if (!map.contains("imdbId")) {
+        map["imdbId"] = "";
+    }
+    
     return map;
 }
 
@@ -951,5 +1188,127 @@ void LibraryService::onHeroClientError(const QString& errorMessage)
         qDebug() << "[LibraryService] Emitting hero items (after error):" << m_heroItems.size();
         emit heroItemsLoaded(m_heroItems.mid(0, 10));
     }
+}
+
+void LibraryService::onTmdbIdFound(const QString& imdbId, int tmdbId)
+{
+    qDebug() << "[LibraryService] TMDB ID found for IMDB" << imdbId << "-> TMDB" << tmdbId;
+    
+    if (!m_pendingContinueWatchingItems.contains(imdbId)) {
+        qWarning() << "[LibraryService] Received TMDB ID for unknown IMDB ID:" << imdbId;
+        m_pendingTmdbRequests--;
+        if (m_pendingTmdbRequests == 0) {
+            finishContinueWatchingLoading();
+        }
+        return;
+    }
+    
+    QVariantMap traktItem = m_pendingContinueWatchingItems[imdbId];
+    QString type = traktItem["type"].toString();
+    
+    m_tmdbIdToImdbId[tmdbId] = imdbId;
+    
+    // Fetch TMDB metadata
+    if (type == "movie") {
+        m_tmdbService->getMovieMetadata(tmdbId);
+    } else if (type == "episode") {
+        m_tmdbService->getTvMetadata(tmdbId);
+    } else {
+        qWarning() << "[LibraryService] Unknown type for TMDB fetch:" << type;
+        m_pendingTmdbRequests--;
+        if (m_pendingTmdbRequests == 0) {
+            finishContinueWatchingLoading();
+        }
+    }
+}
+
+void LibraryService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& data)
+{
+    qDebug() << "[LibraryService] TMDB movie metadata fetched for TMDB ID:" << tmdbId;
+    
+    if (!m_tmdbIdToImdbId.contains(tmdbId)) {
+        qWarning() << "[LibraryService] Received movie metadata for unknown TMDB ID:" << tmdbId;
+        m_pendingTmdbRequests--;
+        if (m_pendingTmdbRequests == 0) {
+            finishContinueWatchingLoading();
+        }
+        return;
+    }
+    
+    QString imdbId = m_tmdbIdToImdbId[tmdbId];
+    if (!m_pendingContinueWatchingItems.contains(imdbId)) {
+        qWarning() << "[LibraryService] Movie metadata for unknown IMDB ID:" << imdbId;
+        m_pendingTmdbRequests--;
+        if (m_pendingTmdbRequests == 0) {
+            finishContinueWatchingLoading();
+        }
+        return;
+    }
+    
+    QVariantMap traktItem = m_pendingContinueWatchingItems[imdbId];
+    QVariantMap continueItem = continueWatchingItemToVariantMap(traktItem, data);
+    
+    if (!continueItem.isEmpty()) {
+        m_continueWatching.append(continueItem);
+    }
+    
+    m_pendingTmdbRequests--;
+    if (m_pendingTmdbRequests == 0) {
+        finishContinueWatchingLoading();
+    }
+}
+
+void LibraryService::onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data)
+{
+    qDebug() << "[LibraryService] TMDB TV metadata fetched for TMDB ID:" << tmdbId;
+    
+    if (!m_tmdbIdToImdbId.contains(tmdbId)) {
+        qWarning() << "[LibraryService] Received TV metadata for unknown TMDB ID:" << tmdbId;
+        m_pendingTmdbRequests--;
+        if (m_pendingTmdbRequests == 0) {
+            finishContinueWatchingLoading();
+        }
+        return;
+    }
+    
+    QString imdbId = m_tmdbIdToImdbId[tmdbId];
+    if (!m_pendingContinueWatchingItems.contains(imdbId)) {
+        qWarning() << "[LibraryService] TV metadata for unknown IMDB ID:" << imdbId;
+        m_pendingTmdbRequests--;
+        if (m_pendingTmdbRequests == 0) {
+            finishContinueWatchingLoading();
+        }
+        return;
+    }
+    
+    QVariantMap traktItem = m_pendingContinueWatchingItems[imdbId];
+    QVariantMap continueItem = continueWatchingItemToVariantMap(traktItem, data);
+    
+    if (!continueItem.isEmpty()) {
+        m_continueWatching.append(continueItem);
+    }
+    
+    m_pendingTmdbRequests--;
+    if (m_pendingTmdbRequests == 0) {
+        finishContinueWatchingLoading();
+    }
+}
+
+void LibraryService::onTmdbError(const QString& message)
+{
+    qWarning() << "[LibraryService] TMDB error:" << message;
+    // Decrement pending requests and finish if all done
+    m_pendingTmdbRequests--;
+    if (m_pendingTmdbRequests == 0) {
+        finishContinueWatchingLoading();
+    }
+}
+
+void LibraryService::finishContinueWatchingLoading()
+{
+    qDebug() << "[LibraryService] Finishing continue watching loading, items:" << m_continueWatching.size();
+    emit continueWatchingLoaded(m_continueWatching);
+    m_pendingContinueWatchingItems.clear();
+    m_tmdbIdToImdbId.clear();
 }
 
