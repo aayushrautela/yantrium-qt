@@ -42,3 +42,4 @@ CMakeLists.txt
 
 # Build script with API keys (keep private)
 build.sh
+test_tmdb_raw.cpp

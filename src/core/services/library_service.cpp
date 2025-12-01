@@ -502,6 +502,16 @@ void LibraryService::onPlaybackProgressFetched(const QVariantList& progress)
         QString imdbId = showIds["imdb"].toString();
         
         if (!imdbId.isEmpty()) {
+            // Debug: Verify episode data is in the item before storing
+            if (item.contains("episode")) {
+                QVariantMap episode = item["episode"].toMap();
+                qDebug() << "[LibraryService] Storing episode item - IMDB:" << imdbId
+                         << "S" << episode["season"].toInt() << "E" << episode["number"].toInt()
+                         << "Title:" << episode["title"].toString();
+            } else {
+                qWarning() << "[LibraryService] Episode item missing episode data before storing!";
+            }
+            
             m_pendingContinueWatchingItems[imdbId] = item;
             m_pendingTmdbRequests++;
             m_tmdbService->getTmdbIdFromImdb(imdbId);
@@ -971,71 +981,103 @@ QVariantMap LibraryService::continueWatchingItemToVariantMap(const QVariantMap& 
 {
     QVariantMap map;
     
-    // Extract type
+    // Extract type from Trakt (only for identification)
     QString type = traktItem["type"].toString();
     map["type"] = type;
     
-    // Extract progress
+    // Extract progress from Trakt (only Trakt provides watch progress)
     double progress = traktItem["progress"].toDouble();
     map["progress"] = progress;
     map["progressPercent"] = progress;
     
-    // Extract content data from Trakt
-    QVariantMap movie = traktItem["movie"].toMap();
-    QVariantMap show = traktItem["show"].toMap();
-    QVariantMap episode = traktItem["episode"].toMap();
-    
-    if (type == "movie" && !movie.isEmpty()) {
-        // Movie data from Trakt
-        QVariantMap ids = movie["ids"].toMap();
-        map["id"] = ids["imdb"].toString();
-        map["imdbId"] = ids["imdb"].toString();
-        map["title"] = movie["title"].toString();
-        map["year"] = movie["year"].toInt();
-        
-        // Extract images from TMDB (same as catalog items)
-        QString posterUrl = TmdbDataExtractor::extractPosterUrl(tmdbData);
-        QString backdropUrl = TmdbDataExtractor::extractBackdropUrl(tmdbData);
-        QString logoUrl = TmdbDataExtractor::extractLogoUrl(tmdbData);
-        
-        // Fallback: backdrop -> poster
-        if (backdropUrl.isEmpty() && !posterUrl.isEmpty()) {
-            backdropUrl = posterUrl;
+    // Extract episode information from Trakt (only Trakt provides episode-level data)
+    if (type == "episode") {
+        QVariantMap episode = traktItem["episode"].toMap();
+        if (!episode.isEmpty()) {
+            map["season"] = episode["season"].toInt();
+            map["episode"] = episode["number"].toInt();
+            map["episodeTitle"] = episode["title"].toString(); // Episode title from Trakt
+            qDebug() << "[LibraryService] Extracted episode data - S" << map["season"].toInt() 
+                     << "E" << map["episode"].toInt() << ":" << map["episodeTitle"].toString();
+        } else {
+            qWarning() << "[LibraryService] Episode type but no episode data in Trakt item!";
+            // Set defaults to avoid missing data
+            map["season"] = 0;
+            map["episode"] = 0;
+            map["episodeTitle"] = "";
         }
-        
-        map["posterUrl"] = posterUrl;
-        map["backdropUrl"] = backdropUrl;
-        map["logoUrl"] = logoUrl;
-        
-    } else if (type == "episode" && !show.isEmpty() && !episode.isEmpty()) {
-        // Episode/Show data from Trakt
-        QVariantMap showIds = show["ids"].toMap();
-        map["imdbId"] = showIds["imdb"].toString();
-        map["title"] = show["title"].toString();
-        map["year"] = show["year"].toInt();
-        map["season"] = episode["season"].toInt();
-        map["episode"] = episode["number"].toInt();
-        map["episodeTitle"] = episode["title"].toString();
-        
-        // Extract images from TMDB (same as catalog items)
-        QString posterUrl = TmdbDataExtractor::extractPosterUrl(tmdbData);
-        QString backdropUrl = TmdbDataExtractor::extractBackdropUrl(tmdbData);
-        QString logoUrl = TmdbDataExtractor::extractLogoUrl(tmdbData);
-        
-        // Fallback: backdrop -> poster
-        if (backdropUrl.isEmpty() && !posterUrl.isEmpty()) {
-            backdropUrl = posterUrl;
-        }
-        
-        map["posterUrl"] = posterUrl;
-        map["backdropUrl"] = backdropUrl;
-        map["logoUrl"] = logoUrl;
     }
     
-    // Extract watched_at
+    // Extract IMDB ID from Trakt (needed for identification, but display data comes from TMDB)
+    QString imdbId;
+    if (type == "movie") {
+        QVariantMap movie = traktItem["movie"].toMap();
+        QVariantMap ids = movie["ids"].toMap();
+        imdbId = ids["imdb"].toString();
+    } else if (type == "episode") {
+        QVariantMap show = traktItem["show"].toMap();
+        QVariantMap showIds = show["ids"].toMap();
+        imdbId = showIds["imdb"].toString();
+    }
+    map["imdbId"] = imdbId;
+    map["id"] = imdbId;
+    
+    // ALL display data comes from TMDB
+    if (type == "movie") {
+        // Movie display data from TMDB
+        map["title"] = tmdbData["title"].toString();
+        
+        // Extract year from release date
+        QString releaseDate = tmdbData["release_date"].toString();
+        if (!releaseDate.isEmpty() && releaseDate.length() >= 4) {
+            map["year"] = releaseDate.left(4).toInt();
+        }
+        
+        // Extract images from TMDB
+        QString posterUrl = TmdbDataExtractor::extractPosterUrl(tmdbData);
+        QString backdropUrl = TmdbDataExtractor::extractBackdropUrl(tmdbData);
+        QString logoUrl = TmdbDataExtractor::extractLogoUrl(tmdbData);
+        
+        // Fallback: backdrop -> poster
+        if (backdropUrl.isEmpty() && !posterUrl.isEmpty()) {
+            backdropUrl = posterUrl;
+        }
+        
+        map["posterUrl"] = posterUrl;
+        map["backdropUrl"] = backdropUrl;
+        map["logoUrl"] = logoUrl;
+        map["description"] = tmdbData["overview"].toString();
+        
+    } else if (type == "episode") {
+        // TV Show display data from TMDB (show-level, not episode-level)
+        map["title"] = tmdbData["name"].toString();
+        
+        // Extract year from first air date
+        QString firstAirDate = tmdbData["first_air_date"].toString();
+        if (!firstAirDate.isEmpty() && firstAirDate.length() >= 4) {
+            map["year"] = firstAirDate.left(4).toInt();
+        }
+        
+        // Extract images from TMDB
+        QString posterUrl = TmdbDataExtractor::extractPosterUrl(tmdbData);
+        QString backdropUrl = TmdbDataExtractor::extractBackdropUrl(tmdbData);
+        QString logoUrl = TmdbDataExtractor::extractLogoUrl(tmdbData);
+        
+        // Fallback: backdrop -> poster
+        if (backdropUrl.isEmpty() && !posterUrl.isEmpty()) {
+            backdropUrl = posterUrl;
+        }
+        
+        map["posterUrl"] = posterUrl;
+        map["backdropUrl"] = backdropUrl;
+        map["logoUrl"] = logoUrl;
+        map["description"] = tmdbData["overview"].toString();
+    }
+    
+    // Extract watched_at from Trakt (metadata, not display)
     map["watchedAt"] = traktItem["paused_at"].toString();
     
-    // === DATA NORMALIZATION FOR QML COMPATIBILITY (same as catalog) ===
+    // === DATA NORMALIZATION FOR QML COMPATIBILITY ===
     if (map["title"].toString().isEmpty()) {
         map["title"] = "Unknown";
     }
@@ -1082,6 +1124,10 @@ QVariantMap LibraryService::continueWatchingItemToVariantMap(const QVariantMap& 
     
     if (!map.contains("imdbId")) {
         map["imdbId"] = "";
+    }
+    
+    if (!map.contains("description")) {
+        map["description"] = "";
     }
     
     return map;
@@ -1282,7 +1328,24 @@ void LibraryService::onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data
     }
     
     QVariantMap traktItem = m_pendingContinueWatchingItems[imdbId];
+    
+    // Debug: Log episode data from Trakt
+    if (traktItem.contains("episode")) {
+        QVariantMap episode = traktItem["episode"].toMap();
+        qDebug() << "[LibraryService] Trakt episode data - season:" << episode["season"].toInt() 
+                 << "episode:" << episode["number"].toInt() 
+                 << "title:" << episode["title"].toString();
+    } else {
+        qWarning() << "[LibraryService] Trakt item missing episode data!";
+    }
+    
     QVariantMap continueItem = continueWatchingItemToVariantMap(traktItem, data);
+    
+    // Debug: Log what we extracted
+    qDebug() << "[LibraryService] Continue watching item - season:" << continueItem["season"].toInt()
+             << "episode:" << continueItem["episode"].toInt()
+             << "episodeTitle:" << continueItem["episodeTitle"].toString()
+             << "title:" << continueItem["title"].toString();
     
     if (!continueItem.isEmpty()) {
         m_continueWatching.append(continueItem);

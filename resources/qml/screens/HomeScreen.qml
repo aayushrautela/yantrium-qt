@@ -141,6 +141,9 @@ Item {
                 posterUrl: item.posterUrl || "",
                 title: item.title || "",
                 type: item.type || "",
+                season: item.season || 0,
+                episode: item.episode || 0,
+                episodeTitle: item.episodeTitle || "",
                 progress: item.progress || item.progressPercent || 0,
                 rating: item.rating || ""
             })
