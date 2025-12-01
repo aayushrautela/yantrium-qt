@@ -321,7 +321,7 @@ Item {
                         ListView {
                             id: sectionListView
                             width: parent.width
-                            height: 380 // Total height for delegate
+                            height: 400 // Total height for delegate (360 poster + 40 text)
                             orientation: ListView.Horizontal
                             spacing: 20
                             leftMargin: 0
@@ -331,7 +331,7 @@ Item {
                             
                             delegate: Item {
                                 width: 240
-                                height: 360
+                                height: 400
                                 
                                 property bool isHovered: false
 
@@ -346,111 +346,106 @@ Item {
                                     }
                                 }
 
-                                Rectangle {
-                                    id: contentRect
+                                Column {
                                     anchors.fill: parent
-                                    color: "transparent"
-                                    radius: 8
-                                    
-                                    Column {
-                                        anchors.fill: parent
-                                        spacing: 12
+                                    spacing: 12
 
-                                        // --- FIX: Image Wrapper with Scale Animation ---
-                                        Item {
-                                            width: parent.width
-                                            height: parent.height - 40 // Leave space for text
+                                    // Rounded poster image container (2:3 aspect ratio)
+                                    Item {
+                                        id: imageContainer
+                                        width: parent.width
+                                        height: 360 // 240 * 3/2 = 360 (2:3 aspect ratio)
+                                        
+                                        // 1. Define the mask shape (invisible, used by layer)
+                                        Rectangle {
+                                            id: maskShape
+                                            anchors.fill: parent
+                                            radius: 8
+                                            visible: false
+                                        }
+
+                                        // 2. Enable Layering and set the OpacityMask
+                                        layer.enabled: true
+                                        layer.effect: OpacityMask {
+                                            maskSource: maskShape
+                                        }
+
+                                        // Background placeholder
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: "#2a2a2a"
+                                            radius: 8
+                                        }
+                                        
+                                        // 3. The Image itself
+                                        Image {
+                                            id: img
+                                            anchors.fill: parent
+                                            source: model.posterUrl || model.poster || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            asynchronous: true
+                                            smooth: true
                                             
-                                            // 1. Define the mask shape (invisible, used by layer)
-                                            Rectangle {
-                                                id: maskShape
-                                                anchors.fill: parent
-                                                radius: 8
-                                                visible: false
-                                            }
-
-                                            // 2. Enable Layering and set the OpacityMask
-                                            layer.enabled: true
-                                            layer.effect: OpacityMask {
-                                                maskSource: maskShape
-                                            }
-
-                                            // Background placeholder
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: "#2a2a2a"
-                                            }
+                                            // 4. Scale Logic: Zoom from 1.0 to 1.15
+                                            scale: isHovered ? 1.15 : 1.0
                                             
-                                            // 3. The Image itself
-                                            Image {
-                                                id: img
-                                                anchors.fill: parent
-                                                source: model.posterUrl || model.poster || ""
-                                                fillMode: Image.PreserveAspectCrop
-                                                asynchronous: true
-                                                smooth: true
-                                                
-                                                // 4. Scale Logic: Zoom from 1.0 to 1.15
-                                                scale: isHovered ? 1.15 : 1.0
-                                                
-                                                Behavior on scale { 
-                                                    NumberAnimation { duration: 300; easing.type: Easing.OutQuad } 
-                                                }
-                                            }
-
-                                            // Loading/Error state
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: img.status === Image.Error ? "No Image" : ""
-                                                color: "#666"
-                                                visible: img.status !== Image.Ready
-                                            }
-
-                                            // Rating Badge (Inside the masked area)
-                                            Rectangle {
-                                                anchors.bottom: parent.bottom
-                                                anchors.right: parent.right
-                                                anchors.margins: 8
-                                                visible: model.rating && model.rating !== ""
-                                                color: "black"
-                                                opacity: 0.8
-                                                radius: 4
-                                                width: 40
-                                                height: 20
-                                                
-                                                Row {
-                                                    anchors.centerIn: parent
-                                                    spacing: 2
-                                                    Text { text: "\u2605"; color: "#bb86fc"; font.pixelSize: 10 }
-                                                    Text { text: model.rating; color: "white"; font.pixelSize: 10; font.bold: true }
-                                                }
+                                            Behavior on scale { 
+                                                NumberAnimation { duration: 300; easing.type: Easing.OutQuad } 
                                             }
                                         }
 
-                                        // Title Text (Outside the masked area)
+                                        // Loading/Error state
                                         Text {
-                                            width: parent.width
-                                            text: model.title
-                                            color: "white"
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                            horizontalAlignment: Text.AlignHCenter
+                                            anchors.centerIn: parent
+                                            text: img.status === Image.Error ? "No Image" : ""
+                                            color: "#666"
+                                            visible: img.status !== Image.Ready
+                                        }
+
+                                        // Rating Badge (Inside the masked area)
+                                        Rectangle {
+                                            anchors.bottom: parent.bottom
+                                            anchors.right: parent.right
+                                            anchors.margins: 8
+                                            visible: model.rating && model.rating !== ""
+                                            color: "black"
+                                            opacity: 0.8
+                                            radius: 4
+                                            width: 40
+                                            height: 20
+                                            
+                                            Row {
+                                                anchors.centerIn: parent
+                                                spacing: 2
+                                                Text { text: "\u2605"; color: "#bb86fc"; font.pixelSize: 10 }
+                                                Text { text: model.rating; color: "white"; font.pixelSize: 10; font.bold: true }
+                                            }
+                                        }
+                                        
+                                        // Border overlay (only on image container)
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: "transparent"
+                                            radius: 8
+                                            z: 10
+                                            
+                                            border.width: 3
+                                            border.color: isHovered ? "#bb86fc" : "transparent"
+                                            
+                                            Behavior on border.color { ColorAnimation { duration: 200 } }
                                         }
                                     }
-                                }
 
-                                // Border overlay
-                                Rectangle {
-                                    anchors.fill: parent
-                                    color: "transparent"
-                                    radius: 8
-                                    z: 10
-                                    
-                                    border.width: 3
-                                    border.color: isHovered ? "#bb86fc" : "transparent"
-                                    
-                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    // Title Text (Outside the rounded rectangle)
+                                    Text {
+                                        width: parent.width
+                                        text: model.title
+                                        color: "white"
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                        horizontalAlignment: Text.AlignHCenter
+                                    }
                                 }
                             }
                         }
