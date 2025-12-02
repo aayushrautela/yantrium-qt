@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import Qt5Compat.GraphicalEffects
 
 Rectangle {
     id: root
@@ -20,11 +21,28 @@ Rectangle {
         anchors.rightMargin: 12
         spacing: 8
         
-        Text {
+        Item {
             anchors.verticalCenter: parent.verticalCenter
-            text: "🔍"
-            font.pixelSize: 16
-            color: "#aaaaaa"
+            width: 16
+            height: 16
+            
+            Image {
+                id: searchIcon
+                anchors.fill: parent
+                source: "qrc:/assets/icons/search.svg"
+                sourceSize.width: 32
+                sourceSize.height: 32
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                antialiasing: true
+                visible: false
+            }
+            
+            ColorOverlay {
+                anchors.fill: searchIcon
+                source: searchIcon
+                color: "#ffffff"
+            }
         }
         
         TextField {
@@ -79,6 +97,7 @@ Rectangle {
         }
     }
 }
+
 
 
 

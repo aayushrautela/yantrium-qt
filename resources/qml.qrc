@@ -23,6 +23,12 @@
         <file>qml/TestLauncher.qml</file>
         <file>assets/icons/arrow-left.svg</file>
         <file>assets/icons/arrow-right.svg</file>
+        <file>assets/icons/tmdb.svg</file>
+        <file>assets/icons/imdb.svg</file>
+        <file>assets/icons/metacritic.svg</file>
+        <file>assets/icons/rotten_tomatoes.svg</file>
+        <file>assets/icons/play_button.svg</file>
+        <file>assets/icons/search.svg</file>
     </qresource>
 </RCC>
 

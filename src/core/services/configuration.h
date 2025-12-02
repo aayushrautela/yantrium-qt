@@ -9,6 +9,10 @@
 #define TMDB_API_KEY ""
 #endif
 
+#ifndef OMDB_API_KEY
+#define OMDB_API_KEY ""
+#endif
+
 #ifndef TRAKT_CLIENT_ID
 #define TRAKT_CLIENT_ID ""
 #endif
@@ -30,6 +34,7 @@ public:
     QString tmdbApiKey() const;
     QString tmdbBaseUrl() const;
     QString tmdbImageBaseUrl() const;
+    QString omdbApiKey() const;
     
     // Trakt configuration
     QString traktClientId() const;
@@ -52,6 +57,7 @@ private:
     QString m_tmdbApiKey;
     QString m_tmdbBaseUrl;
     QString m_tmdbImageBaseUrl;
+    QString m_omdbApiKey;
     
     // Trakt configuration
     QString m_traktClientId;

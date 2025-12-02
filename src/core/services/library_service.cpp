@@ -12,6 +12,7 @@ LibraryService::LibraryService(QObject* parent)
     , m_addonRepository(new AddonRepository(this))
     , m_traktService(&TraktCoreService::instance())
     , m_tmdbService(new TmdbService(this))
+    , m_omdbService(new OmdbService(this))
     , m_catalogPreferencesDao(new CatalogPreferencesDao(DatabaseManager::instance().database()))
     , m_pendingCatalogRequests(0)
     , m_isLoadingCatalogs(false)
@@ -41,7 +42,13 @@ LibraryService::LibraryService(QObject* parent)
     connect(m_tmdbService, &TmdbService::similarTvFetched,
             this, &LibraryService::onSimilarTvFetched);
     
-    qDebug() << "[LibraryService] Connected to Trakt and TMDB service signals";
+    // Connect to OMDB service for ratings
+    connect(m_omdbService, &OmdbService::ratingsFetched,
+            this, &LibraryService::onOmdbRatingsFetched);
+    connect(m_omdbService, &OmdbService::error,
+            this, &LibraryService::onOmdbError);
+    
+    qDebug() << "[LibraryService] Connected to Trakt, TMDB, and OMDB service signals";
 }
 
 LibraryService::~LibraryService()
@@ -1463,10 +1470,26 @@ void LibraryService::onTmdbMovieDetailsFetched(int tmdbId, const QJsonObject& da
     QString imdbId = m_tmdbIdToImdbIdForDetails.value(tmdbId, m_pendingDetailsContentId);
     QVariantMap details = tmdbDataToDetailVariantMap(data, imdbId, "movie");
     
-    if (!details.isEmpty()) {
-        emit itemDetailsLoaded(details);
-    } else {
+    if (details.isEmpty()) {
         emit error("Failed to convert TMDB movie data to detail map");
+        return;
+    }
+    
+    // Fetch OMDB ratings if we have an IMDB ID and API key is configured
+    Configuration& config = Configuration::instance();
+    if (!imdbId.isEmpty() && imdbId.startsWith("tt") && !config.omdbApiKey().isEmpty()) {
+        // Store details keyed by IMDB ID for matching when OMDB response arrives
+        m_pendingDetailsByImdbId[imdbId] = details;
+        qDebug() << "[LibraryService] Fetching OMDB ratings for IMDB ID:" << imdbId;
+        m_omdbService->getRatings(imdbId);
+    } else {
+        // No IMDB ID or no API key, emit details without OMDB ratings
+        if (imdbId.isEmpty() || !imdbId.startsWith("tt")) {
+            qDebug() << "[LibraryService] No IMDB ID available, skipping OMDB ratings";
+        } else {
+            qDebug() << "[LibraryService] OMDB API key not configured, skipping ratings fetch";
+        }
+        emit itemDetailsLoaded(details);
     }
 }
 
@@ -1477,10 +1500,26 @@ void LibraryService::onTmdbTvDetailsFetched(int tmdbId, const QJsonObject& data)
     QString imdbId = m_tmdbIdToImdbIdForDetails.value(tmdbId, m_pendingDetailsContentId);
     QVariantMap details = tmdbDataToDetailVariantMap(data, imdbId, "series");
     
-    if (!details.isEmpty()) {
-        emit itemDetailsLoaded(details);
-    } else {
+    if (details.isEmpty()) {
         emit error("Failed to convert TMDB TV data to detail map");
+        return;
+    }
+    
+    // Fetch OMDB ratings if we have an IMDB ID and API key is configured
+    Configuration& config = Configuration::instance();
+    if (!imdbId.isEmpty() && imdbId.startsWith("tt") && !config.omdbApiKey().isEmpty()) {
+        // Store details keyed by IMDB ID for matching when OMDB response arrives
+        m_pendingDetailsByImdbId[imdbId] = details;
+        qDebug() << "[LibraryService] Fetching OMDB ratings for IMDB ID:" << imdbId;
+        m_omdbService->getRatings(imdbId);
+    } else {
+        // No IMDB ID or no API key, emit details without OMDB ratings
+        if (imdbId.isEmpty() || !imdbId.startsWith("tt")) {
+            qDebug() << "[LibraryService] No IMDB ID available, skipping OMDB ratings";
+        } else {
+            qDebug() << "[LibraryService] OMDB API key not configured, skipping ratings fetch";
+        }
+        emit itemDetailsLoaded(details);
     }
 }
 
@@ -1741,5 +1780,75 @@ void LibraryService::onSimilarTvFetched(int tmdbId, const QJsonArray& results)
     }
     
     emit similarItemsLoaded(items);
+}
+
+void LibraryService::onOmdbRatingsFetched(const QString& imdbId, const QJsonObject& data)
+{
+    qDebug() << "[LibraryService] OMDB ratings fetched for IMDB ID:" << imdbId;
+    
+    // Get the details map for this IMDB ID
+    if (!m_pendingDetailsByImdbId.contains(imdbId)) {
+        qWarning() << "[LibraryService] OMDB ratings received for IMDB ID" << imdbId << "but no pending details found!";
+        return;
+    }
+    
+    QVariantMap details = m_pendingDetailsByImdbId[imdbId];
+    m_pendingDetailsByImdbId.remove(imdbId); // Remove from pending map
+    
+    // Parse ratings from OMDB response
+    QVariantList ratingsList;
+    if (data.contains("Ratings")) {
+        QJsonArray ratings = data["Ratings"].toArray();
+        for (const QJsonValue& ratingValue : ratings) {
+            QJsonObject rating = ratingValue.toObject();
+            QString source = rating["Source"].toString();
+            QString value = rating["Value"].toString();
+            
+            if (!source.isEmpty() && !value.isEmpty()) {
+                QVariantMap ratingMap;
+                ratingMap["source"] = source;
+                ratingMap["value"] = value;
+                ratingsList.append(ratingMap);
+            }
+        }
+    }
+    
+    // Add ratings to details map
+    if (!ratingsList.isEmpty()) {
+        details["omdbRatings"] = ratingsList;
+        qDebug() << "[LibraryService] Added" << ratingsList.size() << "OMDB ratings to details";
+    }
+    
+    // Also add individual ratings if available
+    if (data.contains("imdbRating") && !data["imdbRating"].toString().isEmpty()) {
+        details["imdbRating"] = data["imdbRating"].toString();
+    }
+    if (data.contains("Metascore") && !data["Metascore"].toString().isEmpty() && data["Metascore"].toString() != "N/A") {
+        details["metascore"] = data["Metascore"].toString();
+    }
+    
+    // Emit the updated details with ratings
+    emit itemDetailsLoaded(details);
+}
+
+void LibraryService::onOmdbError(const QString& message, const QString& imdbId)
+{
+    qDebug() << "[LibraryService] OMDB error:" << message << "for IMDB ID:" << imdbId;
+    
+    // Get the details map for this IMDB ID
+    if (!imdbId.isEmpty() && m_pendingDetailsByImdbId.contains(imdbId)) {
+        qDebug() << "[LibraryService] Emitting details without OMDB ratings due to error";
+        QVariantMap detailsToEmit = m_pendingDetailsByImdbId[imdbId];
+        m_pendingDetailsByImdbId.remove(imdbId);
+        emit itemDetailsLoaded(detailsToEmit);
+    } else if (!m_pendingDetailsByImdbId.isEmpty()) {
+        // Fallback: emit the first pending details if IMDB ID doesn't match
+        qDebug() << "[LibraryService] Emitting first pending details without OMDB ratings due to error";
+        QVariantMap detailsToEmit = m_pendingDetailsByImdbId.begin().value();
+        m_pendingDetailsByImdbId.clear();
+        emit itemDetailsLoaded(detailsToEmit);
+    } else {
+        qDebug() << "[LibraryService] OMDB error but no pending details found (may have been cleared)";
+    }
 }
 

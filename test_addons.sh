@@ -24,5 +24,3 @@ echo "  sqlite3 ~/.local/share/Yantrium/yantrium.db \"SELECT id, name, version, 
 echo ""
 
 
-
-

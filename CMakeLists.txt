@@ -61,6 +61,8 @@ set(PROJECT_SOURCES
     src/core/services/tmdb_service.h
     src/core/services/tmdb_search_service.cpp
     src/core/services/tmdb_search_service.h
+    src/core/services/omdb_service.cpp
+    src/core/services/omdb_service.h
     src/core/services/trakt_core_service.cpp
     src/core/services/trakt_core_service.h
     src/core/services/trakt_auth_service.cpp
@@ -114,6 +116,16 @@ if(TRAKT_CLIENT_SECRET)
 else()
     message(WARNING "TRAKT_CLIENT_SECRET not set. Set it via: -DTRAKT_CLIENT_SECRET=your_secret")
     target_compile_definitions(Yantrium PRIVATE TRAKT_CLIENT_SECRET="")
+endif()
+
+# OMDB API Key configuration (optional)
+option(OMDB_API_KEY "OMDB API Key (optional, for additional ratings)" "")
+if(OMDB_API_KEY)
+    target_compile_definitions(Yantrium PRIVATE OMDB_API_KEY="${OMDB_API_KEY}")
+    message(STATUS "OMDB API Key configured")
+else()
+    message(STATUS "OMDB_API_KEY not set (optional). Additional ratings will not be available.")
+    target_compile_definitions(Yantrium PRIVATE OMDB_API_KEY="")
 endif()
 
 # 5. Link Qt Libraries

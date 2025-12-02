@@ -43,6 +43,35 @@ Configuration::Configuration(QObject* parent)
         qDebug() << "TMDB API key loaded (length:" << m_tmdbApiKey.length() << ")";
     }
     
+    // Load OMDB API key
+    QString omdbApiKey = QString::fromUtf8(OMDB_API_KEY);
+    if (omdbApiKey.isEmpty()) {
+        omdbApiKey = QString::fromLocal8Bit(qgetenv("OMDB_API_KEY"));
+    }
+    if (omdbApiKey.isEmpty()) {
+        QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QDir dir;
+        if (dir.exists(dataDir)) {
+            QString configFile = dataDir + "/omdb_config.txt";
+            QFile file(configFile);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream in(&file);
+                omdbApiKey = in.readLine().trimmed();
+                file.close();
+            }
+        }
+    }
+    m_omdbApiKey = omdbApiKey;
+    
+    if (m_omdbApiKey.isEmpty()) {
+        qDebug() << "OMDB API key not set (optional). Additional ratings will not be available.";
+        qDebug() << "To enable OMDB ratings, set it via CMake: -DOMDB_API_KEY=your_key";
+        qDebug() << "Or set environment variable: OMDB_API_KEY=your_key";
+        qDebug() << "Or create file: ~/.local/share/Yantrium/omdb_config.txt with your API key";
+    } else {
+        qDebug() << "OMDB API key loaded (length:" << m_omdbApiKey.length() << ")";
+    }
+    
     // Load Trakt client ID
     QString clientId = QString::fromUtf8(TRAKT_CLIENT_ID);
     if (clientId.isEmpty()) {
@@ -88,6 +117,11 @@ QString Configuration::tmdbBaseUrl() const
 QString Configuration::tmdbImageBaseUrl() const
 {
     return m_tmdbImageBaseUrl;
+}
+
+QString Configuration::omdbApiKey() const
+{
+    return m_omdbApiKey;
 }
 
 QString Configuration::traktClientId() const
