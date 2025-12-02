@@ -7,6 +7,12 @@
 #include <QJsonObject>
 #include <QDebug>
 
+TraktAuthService& TraktAuthService::instance()
+{
+    static TraktAuthService instance;
+    return instance;
+}
+
 TraktAuthService::TraktAuthService(QObject* parent)
     : QObject(parent)
     , m_config(Configuration::instance())
@@ -46,14 +52,14 @@ bool TraktAuthService::isAuthenticated() const
 void TraktAuthService::checkAuthentication()
 {
     m_coreService.checkAuthentication();
-    // Connect only if not already connected
-    static bool connected = false;
-    if (!connected) {
-        connect(&m_coreService, &TraktCoreService::authenticationStatusChanged, this, [this](bool authenticated) {
+    // Connect to authentication status changes (singleton ensures this only happens once)
+    // Use a lambda with capture to ensure we're always connected
+    static QMetaObject::Connection connection;
+    if (!connection) {
+        connection = connect(&m_coreService, &TraktCoreService::authenticationStatusChanged, this, [this](bool authenticated) {
             m_isAuthenticated = authenticated;
             emit authenticationStatusChanged(authenticated);
         });
-        connected = true;
     }
 }
 

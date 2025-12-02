@@ -644,17 +644,18 @@ Item {
                         color: "#FFFFFF"
                     }
 
-                    TraktAuthService {
-                        id: traktAuth
+                    // TraktAuthService is a singleton, accessed directly
+                    Connections {
+                        target: TraktAuthService
                         
-                        onDeviceCodeGenerated: function(userCode, verificationUrl, expiresIn) {
+                        function onDeviceCodeGenerated(userCode, verificationUrl, expiresIn) {
                             traktStatusText.text = "✓ Device code generated!\nUser Code: " + userCode + "\nVisit: " + verificationUrl
                             traktStatusText.color = "#4CAF50"
                             traktUserCodeText.text = "User Code: " + userCode
                             traktVerificationUrlText.text = "Visit: " + verificationUrl
                         }
                         
-                        onAuthenticationStatusChanged: function(authenticated) {
+                        function onAuthenticationStatusChanged(authenticated) {
                             if (authenticated) {
                                 traktStatusText.text = "✓ Authenticated with Trakt"
                                 traktStatusText.color = "#4CAF50"
@@ -664,12 +665,12 @@ Item {
                             }
                         }
                         
-                        onUserInfoFetched: function(username, slug) {
+                        function onUserInfoFetched(username, slug) {
                             traktStatusText.text = "✓ User: " + username + " (" + slug + ")"
                             traktStatusText.color = "#4CAF50"
                         }
                         
-                        onError: function(errorMessage) {
+                        function onError(errorMessage) {
                             traktStatusText.text = "✗ Error: " + errorMessage
                             traktStatusText.color = "#F44336"
                         }
@@ -799,38 +800,38 @@ Item {
 
                                 Button {
                                     text: "Generate Device Code"
-                                    enabled: traktAuth.isConfigured
+                                    enabled: TraktAuthService.isConfigured
                                     onClicked: {
                                         traktStatusText.text = "Generating device code..."
                                         traktStatusText.color = "#FFA500"
-                                        traktAuth.generateDeviceCode()
+                                        TraktAuthService.generateDeviceCode()
                                     }
                                 }
 
                                 Button {
                                     text: "Check Auth Status"
                                     onClicked: {
-                                        traktAuth.checkAuthentication()
+                                        TraktAuthService.checkAuthentication()
                                     }
                                 }
 
                                 Button {
                                     text: "Get User Info"
                                     onClicked: {
-                                        traktAuth.getCurrentUser()
+                                        TraktAuthService.getCurrentUser()
                                     }
                                 }
 
                                 Button {
                                     text: "Logout"
                                     onClicked: {
-                                        traktAuth.logout()
+                                        TraktAuthService.logout()
                                     }
                                 }
                             }
 
                             Text {
-                                text: "Configured: " + (traktAuth.isConfigured ? "Yes" : "No") + " | Authenticated: " + (traktAuth.isAuthenticated ? "Yes" : "No")
+                                text: "Configured: " + (TraktAuthService.isConfigured ? "Yes" : "No") + " | Authenticated: " + (TraktAuthService.isAuthenticated ? "Yes" : "No")
                                 color: "#AAAAAA"
                                 font.pixelSize: 12
                             }

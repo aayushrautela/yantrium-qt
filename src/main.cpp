@@ -15,11 +15,13 @@
 #include "core/services/tmdb_data_service.h"
 #include "core/services/media_metadata_service.h"
 #include "core/services/trakt_auth_service.h"
+#include "core/services/trakt_core_service.h"
 #include "core/services/trakt_scrobble_service.h"
 #include "core/services/trakt_watchlist_service.h"
 #include "core/services/library_service.h"
 #include "core/services/catalog_preferences_service.h"
 #include "core/services/file_export_service.h"
+#include "core/services/local_library_service.h"
 
 // Force logging to console
 Q_LOGGING_CATEGORY(yantrium, "yantrium")
@@ -92,7 +94,10 @@ int main(int argc, char *argv[])
     qDebug() << "Registered TMDB services";
     
     // Register Trakt services
-    qmlRegisterType<TraktAuthService>("Yantrium.Services", 1, 0, "TraktAuthService");
+    // Register TraktAuthService as singleton so all QML components share the same instance
+    qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TraktAuthService", &TraktAuthService::instance());
+    // Register TraktCoreService as singleton so all QML components share the same instance
+    qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TraktCoreService", &TraktCoreService::instance());
     qmlRegisterType<TraktScrobbleService>("Yantrium.Services", 1, 0, "TraktScrobbleService");
     qmlRegisterType<TraktWatchlistService>("Yantrium.Services", 1, 0, "TraktWatchlistService");
     std::cout << "[MAIN] Registered Trakt services" << std::endl;
@@ -116,6 +121,12 @@ int main(int argc, char *argv[])
     std::cout << "[MAIN] Registered FileExportService" << std::endl;
     std::cout.flush();
     qDebug() << "Registered FileExportService";
+    
+    // Register Local Library service
+    qmlRegisterType<LocalLibraryService>("Yantrium.Services", 1, 0, "LocalLibraryService");
+    std::cout << "[MAIN] Registered LocalLibraryService" << std::endl;
+    std::cout.flush();
+    qDebug() << "Registered LocalLibraryService";
 
     QQmlApplicationEngine engine;
     const QUrl url(QStringLiteral("qrc:/qml/MainApp.qml"));

@@ -12,6 +12,19 @@ Item {
         id: libraryService
     }
     
+    // TraktAuthService is a singleton, accessed directly
+    property TraktAuthService traktAuthService: TraktAuthService
+    
+    property TraktWatchlistService traktWatchlist: TraktWatchlistService {
+        id: traktWatchlistService
+    }
+    
+    property LocalLibraryService localLibrary: LocalLibraryService {
+        id: localLibraryService
+    }
+    
+    property bool isInLibrary: false
+    
     Connections {
         target: libraryService
         function onItemDetailsLoaded(details) {
@@ -26,6 +39,9 @@ Item {
                 var tmdbId = parseInt(details.tmdbId) || details.tmdbId
                 libraryService.loadSimilarItems(tmdbId, type)
             }
+            
+            // Check if item is in library
+            checkIfInLibrary()
         }
         function onSimilarItemsLoaded(items) {
             root.similarItems = items
@@ -34,6 +50,78 @@ Item {
             console.error("[DetailScreen] Error:", message)
             root.isLoading = false
         }
+    }
+    
+    Connections {
+        target: traktWatchlistService
+        function onWatchlistItemAdded(success) {
+            if (success) {
+                console.log("[DetailScreen] Successfully added to Trakt watchlist")
+                root.isInLibrary = true
+            } else {
+                console.error("[DetailScreen] Failed to add to Trakt watchlist")
+            }
+        }
+        function onIsInWatchlistResult(inWatchlist) {
+            root.isInLibrary = inWatchlist
+        }
+        function onError(message) {
+            console.error("[DetailScreen] Trakt watchlist error:", message)
+        }
+    }
+    
+    Connections {
+        target: localLibraryService
+        function onLibraryItemAdded(success) {
+            if (success) {
+                console.log("[DetailScreen] Successfully added to local library")
+                root.isInLibrary = true
+            } else {
+                console.error("[DetailScreen] Failed to add to local library")
+            }
+        }
+        function onIsInLibraryResult(inLibrary) {
+            root.isInLibrary = inLibrary
+        }
+        function onError(message) {
+            console.error("[DetailScreen] Local library error:", message)
+        }
+    }
+    
+    Connections {
+        target: traktAuthService
+        function onAuthenticationStatusChanged(authenticated) {
+            console.log("[DetailScreen] Authentication status changed:", authenticated)
+            // Re-check if item is in library when auth status changes
+            if (root.itemData && Object.keys(root.itemData).length > 0) {
+                checkIfInLibrary()
+            }
+        }
+    }
+    
+    function checkIfInLibrary() {
+        var contentId = root.itemData.imdbId || root.itemData.id || ""
+        if (!contentId) return
+        
+        if (traktAuthService.isAuthenticated) {
+            // Check Trakt watchlist
+            var type = root.itemData.type || "movie"
+            if (type === "tv" || type === "series") {
+                type = "show"
+            } else {
+                type = "movie"
+            }
+            traktWatchlistService.isInWatchlist(contentId, type)
+        } else {
+            // Check local library
+            localLibraryService.isInLibrary(contentId)
+        }
+    }
+    
+    Component.onCompleted: {
+        // Check authentication status when component loads
+        console.log("[DetailScreen] Component completed, checking authentication")
+        traktAuthService.checkAuthentication()
     }
     
     property bool isLoading: false
@@ -540,7 +628,7 @@ Item {
                                         Text {
                                             text: "Play"
                                             font.pixelSize: 18
-                                            font.bold: true
+                                    font.bold: true
                                             color: "#000000"
                                             anchors.verticalCenter: parent.verticalCenter
                                         }
@@ -562,25 +650,67 @@ Item {
                                 }
                                 contentItem: Item {
                                     Row {
-                                        spacing: 4
-                                        anchors.centerIn: parent
-                                        
-                                        Text {
-                                            text: "+"
-                                            font.pixelSize: 20
-                                            color: "#ffffff"
-                                            anchors.verticalCenter: parent.verticalCenter
-                                        }
-                                        Text {
-                                            text: "Library"
-                                            font.pixelSize: 18
-                                            color: "#ffffff"
-                                            anchors.verticalCenter: parent.verticalCenter
-                                        }
+                                    spacing: 4
+                                    anchors.centerIn: parent
+                                    
+                                    Text {
+                                        text: root.isInLibrary ? "✓" : "+"
+                                        font.pixelSize: 20
+                                        color: "#ffffff"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: "Library"
+                                        font.pixelSize: 18
+                                        color: "#ffffff"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
                                     }
                                 }
                                 onClicked: {
-                                    console.log("Library clicked for:", root.itemData.title || root.itemData.name)
+                                    var contentId = root.itemData.imdbId || root.itemData.id || ""
+                                    var type = root.itemData.type || "movie"
+                                    
+                                    if (!contentId) {
+                                        console.error("[DetailScreen] Cannot add to library: no contentId")
+                                        return
+                                    }
+                                    
+                                    // Normalize type
+                                    if (type === "tv" || type === "series") {
+                                        type = "show"
+                                    } else {
+                                        type = "movie"
+                                    }
+                                    
+                                    // Debug: Check authentication status
+                                    console.log("[DetailScreen] Trakt auth status:", traktAuthService.isAuthenticated)
+                                    console.log("[DetailScreen] Trakt configured:", traktAuthService.isConfigured)
+                                    
+                                    if (traktAuthService.isAuthenticated) {
+                                        // Add to Trakt watchlist
+                                        console.log("[DetailScreen] Adding to Trakt watchlist:", contentId, type)
+                                        traktWatchlistService.addToWatchlist(type, contentId)
+                                    } else {
+                                        // Add to local library
+                                        console.log("[DetailScreen] Adding to local library:", contentId, type)
+                                        
+                                        var libraryItem = {
+                                            contentId: contentId,
+                                            type: type === "show" ? "series" : "movie",
+                                            title: root.itemData.title || root.itemData.name || "",
+                                            year: root.itemData.year || 0,
+                                            posterUrl: root.itemData.posterUrl || "",
+                                            backdropUrl: root.itemData.backdropUrl || "",
+                                            logoUrl: root.itemData.logoUrl || "",
+                                            description: root.itemData.description || root.itemData.overview || "",
+                                            rating: root.itemData.rating || root.itemData.imdbRating || "",
+                                            tmdbId: root.itemData.tmdbId || "",
+                                            imdbId: root.itemData.imdbId || ""
+                                        }
+                                        
+                                        localLibraryService.addToLibrary(libraryItem)
+                                    }
                                 }
                             }
                         }

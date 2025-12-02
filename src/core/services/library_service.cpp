@@ -1016,7 +1016,7 @@ void LibraryService::loadItemDetails(const QString& contentId, const QString& ty
 void LibraryService::onMediaMetadataLoaded(const QVariantMap& details)
 {
     qDebug() << "[LibraryService] Complete metadata loaded from MediaMetadataService";
-    emit itemDetailsLoaded(details);
+        emit itemDetailsLoaded(details);
 }
 
 void LibraryService::onMediaMetadataError(const QString& message)

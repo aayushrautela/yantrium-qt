@@ -266,21 +266,22 @@ Item {
                             color: "#ffffff"
                         }
                         
-                        TraktAuthService {
-                            id: traktAuth
+                        // TraktAuthService is a singleton, accessed directly
+                        Connections {
+                            target: TraktAuthService
                             
-                            onDeviceCodeGenerated: function(userCode, verificationUrl, expiresIn) {
+                            function onDeviceCodeGenerated(userCode, verificationUrl, expiresIn) {
                                 deviceCodeText.text = "Go to: " + verificationUrl + "\nEnter code: " + userCode
                                 deviceCodeText.visible = true
                                 loginButton.enabled = false
                                 pollingTimer.start()
                             }
                             
-                            onAuthenticationStatusChanged: function(authenticated) {
+                            function onAuthenticationStatusChanged(authenticated) {
                                 if (authenticated) {
                                     deviceCodeText.visible = false
                                     pollingTimer.stop()
-                                    traktAuth.getCurrentUser()
+                                    TraktAuthService.getCurrentUser()
                                     loginButton.text = "Logout"
                                 } else {
                                     loginButton.text = "Login with Trakt"
@@ -288,22 +289,22 @@ Item {
                                 }
                             }
                             
-                            onUserInfoFetched: function(username, slug) {
+                            function onUserInfoFetched(username, slug) {
                                 currentUserText.text = "Logged in as: " + username
                                 currentUserText.color = "#4CAF50"
                             }
                             
-                            onError: function(message) {
+                            function onError(message) {
                                 traktStatusText.text = "✗ Error: " + message
                                 traktStatusText.color = "#F44336"
                                 deviceCodeText.visible = false
                                 pollingTimer.stop()
                                 loginButton.enabled = true
                             }
-                            
-                            Component.onCompleted: {
-                                checkAuthentication()
-                            }
+                        }
+                        
+                        Component.onCompleted: {
+                            TraktAuthService.checkAuthentication()
                         }
                         
                         // Current user status
@@ -320,8 +321,8 @@ Item {
                             id: loginButton
                             width: 200
                             height: 44
-                            text: traktAuth.isAuthenticated ? "Logout" : "Login with Trakt"
-                            enabled: traktAuth.isConfigured
+                            text: TraktAuthService.isAuthenticated ? "Logout" : "Login with Trakt"
+                            enabled: TraktAuthService.isConfigured
                             
                             background: Rectangle {
                                 color: parent.pressed ? "#ffffff" : "#ffffff"
@@ -337,11 +338,11 @@ Item {
                             }
                             
                             onClicked: {
-                                if (traktAuth.isAuthenticated) {
-                                    traktAuth.logout()
+                                if (TraktAuthService.isAuthenticated) {
+                                    TraktAuthService.logout()
                                     currentUserText.text = ""
                                 } else {
-                                    traktAuth.generateDeviceCode()
+                                    TraktAuthService.generateDeviceCode()
                                 }
                             }
                         }
@@ -373,11 +374,11 @@ Item {
                             running: false
                             
                             onTriggered: {
-                                if (traktAuth.isAuthenticated) {
+                                if (TraktAuthService.isAuthenticated) {
                                     stop()
                                 } else {
                                     // The service handles polling internally, but we can check status
-                                    traktAuth.checkAuthentication()
+                                    TraktAuthService.checkAuthentication()
                                 }
                             }
                         }

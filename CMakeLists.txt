@@ -31,6 +31,10 @@ set(PROJECT_SOURCES
     src/core/database/trakt_auth_dao.h
     src/core/database/catalog_preferences_dao.cpp
     src/core/database/catalog_preferences_dao.h
+    src/core/database/local_library_dao.cpp
+    src/core/database/local_library_dao.h
+    src/core/database/watch_history_dao.cpp
+    src/core/database/watch_history_dao.h
     # Addon models
     src/features/addons/models/addon_manifest.cpp
     src/features/addons/models/addon_manifest.h
@@ -81,6 +85,8 @@ set(PROJECT_SOURCES
     src/core/services/catalog_preferences_service.h
     src/core/services/file_export_service.cpp
     src/core/services/file_export_service.h
+    src/core/services/local_library_service.cpp
+    src/core/services/local_library_service.h
     resources/qml.qrc
 )
 

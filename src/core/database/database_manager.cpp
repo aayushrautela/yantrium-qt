@@ -79,6 +79,18 @@ bool DatabaseManager::initialize(const QString& databasePath)
         return false;
     }
     
+    if (!createLocalLibraryTable()) {
+        qWarning() << "Failed to create local_library table";
+        m_database.close();
+        return false;
+    }
+    
+    if (!createWatchHistoryTable()) {
+        qWarning() << "Failed to create watch_history table";
+        m_database.close();
+        return false;
+    }
+    
     m_initialized = true;
     return true;
 }
@@ -168,6 +180,68 @@ bool DatabaseManager::createCatalogPreferencesTable()
     }
     
     qDebug() << "Catalog preferences table created successfully";
+    return true;
+}
+
+bool DatabaseManager::createLocalLibraryTable()
+{
+    QSqlQuery query(m_database);
+    
+    QString createTableSql = R"(
+        CREATE TABLE IF NOT EXISTS local_library (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contentId TEXT NOT NULL UNIQUE,
+            type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            year INTEGER,
+            posterUrl TEXT,
+            backdropUrl TEXT,
+            logoUrl TEXT,
+            description TEXT,
+            rating TEXT,
+            addedAt TEXT NOT NULL,
+            tmdbId TEXT,
+            imdbId TEXT
+        )
+    )";
+    
+    if (!query.exec(createTableSql)) {
+        qWarning() << "Failed to create local_library table:" << query.lastError().text();
+        return false;
+    }
+    
+    qDebug() << "Local library table created successfully";
+    return true;
+}
+
+bool DatabaseManager::createWatchHistoryTable()
+{
+    QSqlQuery query(m_database);
+    
+    QString createTableSql = R"(
+        CREATE TABLE IF NOT EXISTS watch_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contentId TEXT NOT NULL,
+            type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            year INTEGER,
+            posterUrl TEXT,
+            season INTEGER,
+            episode INTEGER,
+            episodeTitle TEXT,
+            watchedAt TEXT NOT NULL,
+            progress REAL DEFAULT 0,
+            tmdbId TEXT,
+            imdbId TEXT
+        )
+    )";
+    
+    if (!query.exec(createTableSql)) {
+        qWarning() << "Failed to create watch_history table:" << query.lastError().text();
+        return false;
+    }
+    
+    qDebug() << "Watch history table created successfully";
     return true;
 }
 

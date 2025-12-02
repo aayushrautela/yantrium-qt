@@ -21,6 +21,8 @@ public:
     bool createAddonsTable();
     bool createTraktAuthTable();
     bool createCatalogPreferencesTable();
+    bool createLocalLibraryTable();
+    bool createWatchHistoryTable();
     
 private:
     DatabaseManager(QObject* parent = nullptr);

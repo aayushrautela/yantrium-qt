@@ -10,6 +10,7 @@
         <file>qml/screens/VideoPlayerScreen.qml</file>
         <file>qml/screens/AddonTestScreen.qml</file>
         <file>qml/screens/HomeScreen.qml</file>
+        <file>qml/screens/LibraryScreen.qml</file>
         <file>qml/screens/DetailScreen.qml</file>
         <file>qml/components/ContentCard.qml</file>
         <file>qml/components/ContinueWatchingCard.qml</file>

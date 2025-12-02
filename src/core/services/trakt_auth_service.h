@@ -35,7 +35,7 @@ class TraktAuthService : public QObject
     Q_PROPERTY(bool isAuthenticated READ isAuthenticated NOTIFY authenticationStatusChanged)
 
 public:
-    explicit TraktAuthService(QObject* parent = nullptr);
+    static TraktAuthService& instance();
     
     bool isConfigured() const;
     bool isAuthenticated() const;
@@ -59,6 +59,10 @@ private slots:
     void onUserInfoReplyFinished();
 
 private:
+    explicit TraktAuthService(QObject* parent = nullptr);
+    ~TraktAuthService() = default;
+    Q_DISABLE_COPY(TraktAuthService)
+    
     Configuration& m_config;
     TraktCoreService& m_coreService;
     QNetworkAccessManager* m_networkManager;

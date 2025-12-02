@@ -80,23 +80,38 @@ ApplicationWindow {
                         function onCurrentIndexChanged() {
                             if (stackLayout.currentIndex === 0 && homeLoader.item) {
                                 homeLoader.item.loadCatalogs()
+                            } else if (stackLayout.currentIndex === 1 && libraryLoader.item) {
+                                // Reload library when switching to library tab
+                                libraryLoader.item.loadLibrary()
                             }
                         }
                     }
                 }
                 
-                Item {
-                    // Library screen placeholder
-                    Rectangle {
-                        anchors.fill: parent
-                        color: "#09090b"
-                        
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Library Screen\n(Coming Soon)"
-                            font.pixelSize: 24
-                            color: "#aaaaaa"
-                            horizontalAlignment: Text.AlignHCenter
+                Loader {
+                    id: libraryLoader
+                    source: "qrc:/qml/screens/LibraryScreen.qml"
+                    
+                    onLoaded: {
+                        if (item) {
+                            // Connect itemClicked signal to show detail screen
+                            item.itemClicked.connect(function(contentId, type, addonId) {
+                                if (contentId && type) {
+                                    // Store pending data
+                                    detailLoader.pendingContentId = contentId
+                                    detailLoader.pendingType = type
+                                    detailLoader.pendingAddonId = addonId || ""
+                                    
+                                    // Activate and switch to detail screen
+                                    detailLoader.active = true
+                                    stackLayout.currentIndex = 3  // Switch to detail screen
+                                    
+                                    // Load details (will be called in onLoaded if item not ready yet)
+                                    if (detailLoader.item) {
+                                        detailLoader.item.loadDetails(contentId, type, addonId || "")
+                                    }
+                                }
+                            })
                         }
                     }
                 }
