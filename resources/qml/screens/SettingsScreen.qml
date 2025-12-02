@@ -116,7 +116,7 @@ Item {
                                     text: "Install"
                                     
                                     background: Rectangle {
-                                        color: parent.pressed ? "#985eff" : "#bb86fc"
+                                        color: parent.pressed ? "#ffffff" : "#ffffff"
                                         radius: 4
                                     }
                                     
@@ -324,7 +324,7 @@ Item {
                             enabled: traktAuth.isConfigured
                             
                             background: Rectangle {
-                                color: parent.pressed ? "#985eff" : "#bb86fc"
+                                color: parent.pressed ? "#ffffff" : "#ffffff"
                                 radius: 4
                             }
                             
@@ -428,7 +428,7 @@ Item {
                                 text: "Refresh Catalogs"
                                 
                                 background: Rectangle {
-                                    color: parent.pressed ? "#985eff" : "#bb86fc"
+                                    color: parent.pressed ? "#ffffff" : "#ffffff"
                                     radius: 4
                                 }
                                 
@@ -451,7 +451,7 @@ Item {
                                 text: "Export (Processed)"
                                 
                                 background: Rectangle {
-                                    color: parent.pressed ? "#985eff" : "#bb86fc"
+                                    color: parent.pressed ? "#ffffff" : "#ffffff"
                                     radius: 4
                                 }
                                 
@@ -489,7 +489,7 @@ Item {
                                 text: "Export (Raw)"
                                 
                                 background: Rectangle {
-                                    color: parent.pressed ? "#985eff" : "#bb86fc"
+                                    color: parent.pressed ? "#ffffff" : "#ffffff"
                                     radius: 4
                                 }
                                 
@@ -591,11 +591,11 @@ Item {
                                             
                                             background: Rectangle {
                                                 color: model.isHeroSource 
-                                                    ? (parent.pressed ? "#985eff" : "#bb86fc")
+                                                    ? (parent.pressed ? "#ffffff" : "#ffffff")
                                                     : (parent.pressed ? "#3d3d3d" : "#2d2d2d")
                                                 radius: 4
                                                 border.width: 1
-                                                border.color: model.isHeroSource ? "#bb86fc" : "#3d3d3d"
+                                                border.color: model.isHeroSource ? "#ffffff" : "#3d3d3d"
                                             }
                                             
                                             contentItem: Text {

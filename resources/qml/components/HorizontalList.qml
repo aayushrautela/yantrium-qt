@@ -10,6 +10,9 @@ Rectangle {
     property var model: null
     property int itemWidth: 150
     property int itemHeight: 225
+    property string addonId: ""  // Addon ID for this section
+    
+    signal itemClicked(string contentId, string type, string addonId)
     
     width: parent.width
     height: (root.title === "Continue Watching" ? 270 : itemHeight) + 60  // Content height + title height (270 for continue watching cards)
@@ -101,7 +104,7 @@ Rectangle {
                             item.badgeText = Qt.binding(function() { return model.badgeText || "" })
                             item.isHighlighted = Qt.binding(function() { return model.isHighlighted || false })
                             item.clicked.connect(function() {
-                                console.log("Clicked on:", model.title)
+                                root.itemClicked(model.id || "", model.type || "", model.addonId || root.addonId || "")
                             })
                         }
                     }

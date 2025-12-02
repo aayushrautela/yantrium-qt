@@ -1,5 +1,7 @@
 #include "library_service.h"
 #include "core/database/database_manager.h"
+#include "core/services/id_parser.h"
+#include "core/services/configuration.h"
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -34,6 +36,10 @@ LibraryService::LibraryService(QObject* parent)
             this, &LibraryService::onTmdbIdFound);
     connect(m_tmdbService, &TmdbService::error,
             this, &LibraryService::onTmdbError);
+    connect(m_tmdbService, &TmdbService::similarMoviesFetched,
+            this, &LibraryService::onSimilarMoviesFetched);
+    connect(m_tmdbService, &TmdbService::similarTvFetched,
+            this, &LibraryService::onSimilarTvFetched);
     
     qDebug() << "[LibraryService] Connected to Trakt and TMDB service signals";
 }
@@ -1240,6 +1246,12 @@ void LibraryService::onTmdbIdFound(const QString& imdbId, int tmdbId)
 {
     qDebug() << "[LibraryService] TMDB ID found for IMDB" << imdbId << "-> TMDB" << tmdbId;
     
+    // Check if this is a details request
+    if (!m_pendingDetailsContentId.isEmpty() && m_pendingDetailsContentId == imdbId) {
+        onTmdbIdFoundForDetails(imdbId, tmdbId);
+        return;
+    }
+    
     if (!m_pendingContinueWatchingItems.contains(imdbId)) {
         qWarning() << "[LibraryService] Received TMDB ID for unknown IMDB ID:" << imdbId;
         m_pendingTmdbRequests--;
@@ -1271,6 +1283,12 @@ void LibraryService::onTmdbIdFound(const QString& imdbId, int tmdbId)
 void LibraryService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& data)
 {
     qDebug() << "[LibraryService] TMDB movie metadata fetched for TMDB ID:" << tmdbId;
+    
+    // Check if this is a details request
+    if (!m_pendingDetailsContentId.isEmpty() && m_tmdbIdToImdbIdForDetails.contains(tmdbId)) {
+        onTmdbMovieDetailsFetched(tmdbId, data);
+        return;
+    }
     
     if (!m_tmdbIdToImdbId.contains(tmdbId)) {
         qWarning() << "[LibraryService] Received movie metadata for unknown TMDB ID:" << tmdbId;
@@ -1307,6 +1325,12 @@ void LibraryService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& d
 void LibraryService::onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data)
 {
     qDebug() << "[LibraryService] TMDB TV metadata fetched for TMDB ID:" << tmdbId;
+    
+    // Check if this is a details request
+    if (!m_pendingDetailsContentId.isEmpty() && m_tmdbIdToImdbIdForDetails.contains(tmdbId)) {
+        onTmdbTvDetailsFetched(tmdbId, data);
+        return;
+    }
     
     if (!m_tmdbIdToImdbId.contains(tmdbId)) {
         qWarning() << "[LibraryService] Received TV metadata for unknown TMDB ID:" << tmdbId;
@@ -1373,5 +1397,349 @@ void LibraryService::finishContinueWatchingLoading()
     emit continueWatchingLoaded(m_continueWatching);
     m_pendingContinueWatchingItems.clear();
     m_tmdbIdToImdbId.clear();
+}
+
+void LibraryService::loadItemDetails(const QString& contentId, const QString& type, const QString& addonId)
+{
+    qDebug() << "[LibraryService] loadItemDetails called - contentId:" << contentId << "type:" << type << "addonId:" << addonId;
+    
+    if (contentId.isEmpty() || type.isEmpty()) {
+        emit error("Missing contentId or type");
+        return;
+    }
+    
+    // Store request info
+    m_pendingDetailsContentId = contentId;
+    m_pendingDetailsType = type;
+    m_pendingDetailsAddonId = addonId;
+    m_tmdbIdToImdbIdForDetails.clear();
+    
+    // Try to extract TMDB ID
+    int tmdbId = IdParser::extractTmdbId(contentId);
+    
+    // If IMDB ID, search for TMDB ID first
+    if (tmdbId == 0 && contentId.startsWith("tt")) {
+        qDebug() << "[LibraryService] IMDB ID detected, fetching TMDB ID first";
+        m_tmdbService->getTmdbIdFromImdb(contentId);
+        return;
+    }
+    
+    if (tmdbId == 0) {
+        emit error("Could not extract TMDB ID from content ID");
+        return;
+    }
+    
+    // Store TMDB ID mapping for direct TMDB IDs
+    m_tmdbIdToImdbIdForDetails[tmdbId] = contentId;
+    
+    // Fetch metadata based on type
+    if (type == "movie") {
+        m_tmdbService->getMovieMetadata(tmdbId);
+    } else if (type == "series" || type == "tv") {
+        m_tmdbService->getTvMetadata(tmdbId);
+    } else {
+        emit error(QString("Unknown content type: %1").arg(type));
+    }
+}
+
+void LibraryService::onTmdbIdFoundForDetails(const QString& imdbId, int tmdbId)
+{
+    qDebug() << "[LibraryService] TMDB ID found for details - IMDB:" << imdbId << "TMDB:" << tmdbId;
+    
+    m_tmdbIdToImdbIdForDetails[tmdbId] = imdbId;
+    
+    // Fetch metadata based on type
+    if (m_pendingDetailsType == "movie") {
+        m_tmdbService->getMovieMetadata(tmdbId);
+    } else if (m_pendingDetailsType == "series" || m_pendingDetailsType == "tv") {
+        m_tmdbService->getTvMetadata(tmdbId);
+    }
+}
+
+void LibraryService::onTmdbMovieDetailsFetched(int tmdbId, const QJsonObject& data)
+{
+    qDebug() << "[LibraryService] TMDB movie details fetched for TMDB ID:" << tmdbId;
+    
+    QString imdbId = m_tmdbIdToImdbIdForDetails.value(tmdbId, m_pendingDetailsContentId);
+    QVariantMap details = tmdbDataToDetailVariantMap(data, imdbId, "movie");
+    
+    if (!details.isEmpty()) {
+        emit itemDetailsLoaded(details);
+    } else {
+        emit error("Failed to convert TMDB movie data to detail map");
+    }
+}
+
+void LibraryService::onTmdbTvDetailsFetched(int tmdbId, const QJsonObject& data)
+{
+    qDebug() << "[LibraryService] TMDB TV details fetched for TMDB ID:" << tmdbId;
+    
+    QString imdbId = m_tmdbIdToImdbIdForDetails.value(tmdbId, m_pendingDetailsContentId);
+    QVariantMap details = tmdbDataToDetailVariantMap(data, imdbId, "series");
+    
+    if (!details.isEmpty()) {
+        emit itemDetailsLoaded(details);
+    } else {
+        emit error("Failed to convert TMDB TV data to detail map");
+    }
+}
+
+QString LibraryService::formatDateDDMMYYYY(const QString& dateString)
+{
+    if (dateString.isEmpty()) {
+        return QString();
+    }
+    
+    // Expected format: YYYY-MM-DD
+    QStringList parts = dateString.split("-");
+    if (parts.size() >= 3) {
+        return QString("%1-%2-%3").arg(parts[2], parts[1], parts[0]);
+    }
+    
+    return dateString; // Return as-is if format is unexpected
+}
+
+QVariantMap LibraryService::tmdbDataToDetailVariantMap(const QJsonObject& tmdbData, const QString& contentId, const QString& type)
+{
+    QVariantMap map;
+    
+    try {
+        // Basic info
+        map["id"] = contentId;
+        map["type"] = (type == "movie") ? "movie" : "series";
+        
+        // Title/Name
+        if (type == "movie") {
+            map["title"] = tmdbData["title"].toString();
+            map["name"] = tmdbData["title"].toString();
+        } else {
+            map["title"] = tmdbData["name"].toString();
+            map["name"] = tmdbData["name"].toString();
+        }
+        
+        // Images
+        map["backdropUrl"] = TmdbDataExtractor::extractBackdropUrl(tmdbData);
+        map["logoUrl"] = TmdbDataExtractor::extractLogoUrl(tmdbData);
+        map["posterUrl"] = TmdbDataExtractor::extractPosterUrl(tmdbData);
+        
+        // Description
+        map["description"] = tmdbData["overview"].toString();
+        map["overview"] = tmdbData["overview"].toString();
+        
+        // Release dates
+        if (type == "movie") {
+            QString releaseDate = tmdbData["release_date"].toString();
+            map["releaseDate"] = formatDateDDMMYYYY(releaseDate);
+            map["firstAirDate"] = formatDateDDMMYYYY(releaseDate);
+            
+            // Extract year
+            if (!releaseDate.isEmpty() && releaseDate.length() >= 4) {
+                map["year"] = releaseDate.left(4).toInt();
+            }
+        } else {
+            QString firstAirDate = tmdbData["first_air_date"].toString();
+            map["firstAirDate"] = formatDateDDMMYYYY(firstAirDate);
+            map["releaseDate"] = formatDateDDMMYYYY(firstAirDate);
+            
+            // Extract year
+            if (!firstAirDate.isEmpty() && firstAirDate.length() >= 4) {
+                map["year"] = firstAirDate.left(4).toInt();
+            }
+            
+            // Number of seasons
+            map["numberOfSeasons"] = tmdbData["number_of_seasons"].toInt();
+        }
+        
+        // Content rating
+        QString maturityRating = TmdbDataExtractor::extractMaturityRating(tmdbData, type);
+        map["contentRating"] = maturityRating;
+        
+        // Genres
+        QVariantList genres;
+        QJsonArray genresArray = tmdbData["genres"].toArray();
+        for (const QJsonValue& value : genresArray) {
+            QJsonObject genre = value.toObject();
+            genres.append(genre["name"].toString());
+        }
+        map["genres"] = genres;
+        
+        // Ratings
+        double voteAverage = tmdbData["vote_average"].toDouble();
+        map["tmdbRating"] = QString::number(voteAverage, 'f', 1);
+        
+        // IMDB rating from external_ids
+        QString imdbRating;
+        QJsonObject externalIds = tmdbData["external_ids"].toObject();
+        if (!externalIds.isEmpty()) {
+            // Note: TMDB doesn't provide IMDB rating directly, we'd need another API
+            // For now, we can use TMDB rating as fallback or leave empty
+            imdbRating = ""; // Placeholder - would need separate IMDB API call
+        }
+        map["imdbRating"] = imdbRating;
+        map["rtRating"] = ""; // Placeholder
+        map["mcRating"] = ""; // Placeholder
+        
+        // IDs
+        map["imdbId"] = externalIds["imdb_id"].toString();
+        map["tmdbId"] = QString::number(tmdbData["id"].toInt());
+        
+        // Cast and crew
+        QJsonObject castAndCrew = TmdbDataExtractor::extractCastAndCrew(tmdbData);
+        QJsonArray cast = castAndCrew["cast"].toArray();
+        QJsonArray crew = castAndCrew["crew"].toArray();
+        
+        QVariantList castList;
+        QVariantList crewList;
+        
+        // Build full profile image URLs for cast
+        QString imageBaseUrl = Configuration::instance().tmdbImageBaseUrl();
+        for (const QJsonValue& value : cast) {
+            QJsonObject person = value.toObject();
+            QVariantMap personMap = person.toVariantMap();
+            
+            // Build full profile image URL
+            QString profilePath = person["profile_path"].toString();
+            if (!profilePath.isEmpty() && !profilePath.startsWith("http")) {
+                personMap["profileImageUrl"] = imageBaseUrl + "w185" + profilePath;
+            } else if (profilePath.startsWith("http")) {
+                personMap["profileImageUrl"] = profilePath;
+            } else {
+                personMap["profileImageUrl"] = "";
+            }
+            
+            castList.append(personMap);
+        }
+        for (const QJsonValue& value : crew) {
+            crewList.append(value.toObject().toVariantMap());
+        }
+        
+        map["castFull"] = castList;
+        map["crewFull"] = crewList;
+        
+        // Videos/Trailers
+        QVariantList videos;
+        QJsonObject videosObj = tmdbData["videos"].toObject();
+        QJsonArray videoResults = videosObj["results"].toArray();
+        for (const QJsonValue& value : videoResults) {
+            QJsonObject video = value.toObject();
+            if (video["type"].toString() == "Trailer" && video["site"].toString() == "YouTube") {
+                QVariantMap trailer;
+                trailer["name"] = video["name"].toString();
+                trailer["key"] = video["key"].toString();
+                trailer["site"] = video["site"].toString();
+                videos.append(trailer);
+            }
+        }
+        map["videos"] = videos;
+        
+    } catch (...) {
+        qDebug() << "Error converting TMDB data to detail variant map";
+        return QVariantMap();
+    }
+    
+    return map;
+}
+
+void LibraryService::loadSimilarItems(int tmdbId, const QString& type)
+{
+    qDebug() << "[LibraryService] Loading similar items for TMDB ID:" << tmdbId << "type:" << type;
+    
+    if (type == "movie") {
+        m_tmdbService->getSimilarMovies(tmdbId);
+    } else if (type == "series" || type == "tv") {
+        m_tmdbService->getSimilarTv(tmdbId);
+    } else {
+        emit error(QString("Unknown type for similar items: %1").arg(type));
+    }
+}
+
+void LibraryService::onSimilarMoviesFetched(int tmdbId, const QJsonArray& results)
+{
+    qDebug() << "[LibraryService] Similar movies fetched for TMDB ID:" << tmdbId << "count:" << results.size();
+    
+    QVariantList items;
+    Configuration& config = Configuration::instance();
+    
+    for (const QJsonValue& value : results) {
+        if (!value.isObject()) continue;
+        
+        QJsonObject movie = value.toObject();
+        QVariantMap item;
+        
+        // Extract basic info
+        int tmdbId = movie["id"].toInt();
+        item["id"] = QString("tmdb:%1").arg(tmdbId);
+        item["tmdbId"] = QString::number(tmdbId);  // Store raw TMDB ID for direct use
+        item["type"] = "movie";
+        item["title"] = movie["title"].toString();
+        item["name"] = movie["title"].toString();
+        
+        // Extract year from release_date
+        QString releaseDate = movie["release_date"].toString();
+        if (!releaseDate.isEmpty() && releaseDate.length() >= 4) {
+            item["year"] = releaseDate.left(4).toInt();
+        }
+        
+        // Poster URL
+        QString posterPath = movie["poster_path"].toString();
+        if (!posterPath.isEmpty()) {
+            item["posterUrl"] = config.tmdbImageBaseUrl() + "w500" + posterPath;
+        }
+        
+        // Rating
+        double voteAverage = movie["vote_average"].toDouble();
+        if (voteAverage > 0) {
+            item["rating"] = QString::number(voteAverage, 'f', 1);
+        }
+        
+        items.append(item);
+    }
+    
+    emit similarItemsLoaded(items);
+}
+
+void LibraryService::onSimilarTvFetched(int tmdbId, const QJsonArray& results)
+{
+    qDebug() << "[LibraryService] Similar TV shows fetched for TMDB ID:" << tmdbId << "count:" << results.size();
+    
+    QVariantList items;
+    Configuration& config = Configuration::instance();
+    
+    for (const QJsonValue& value : results) {
+        if (!value.isObject()) continue;
+        
+        QJsonObject tv = value.toObject();
+        QVariantMap item;
+        
+        // Extract basic info
+        int tmdbId = tv["id"].toInt();
+        item["id"] = QString("tmdb:%1").arg(tmdbId);
+        item["tmdbId"] = QString::number(tmdbId);  // Store raw TMDB ID for direct use
+        item["type"] = "series";
+        item["title"] = tv["name"].toString();
+        item["name"] = tv["name"].toString();
+        
+        // Extract year from first_air_date
+        QString firstAirDate = tv["first_air_date"].toString();
+        if (!firstAirDate.isEmpty() && firstAirDate.length() >= 4) {
+            item["year"] = firstAirDate.left(4).toInt();
+        }
+        
+        // Poster URL
+        QString posterPath = tv["poster_path"].toString();
+        if (!posterPath.isEmpty()) {
+            item["posterUrl"] = config.tmdbImageBaseUrl() + "w500" + posterPath;
+        }
+        
+        // Rating
+        double voteAverage = tv["vote_average"].toDouble();
+        if (voteAverage > 0) {
+            item["rating"] = QString::number(voteAverage, 'f', 1);
+        }
+        
+        items.append(item);
+    }
+    
+    emit similarItemsLoaded(items);
 }
 

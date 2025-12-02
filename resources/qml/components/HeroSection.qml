@@ -151,10 +151,12 @@ Item {
                 anchors.left: parent.left
                 width: Math.min(parent.width, 550)
                 height: 160
-            fillMode: Image.PreserveAspectFit
+                fillMode: Image.PreserveAspectFit
+                horizontalAlignment: Image.AlignLeft
+                verticalAlignment: Image.AlignVCenter
                 source: root.logoUrl
                 visible: root.logoUrl !== ""
-            asynchronous: true
+                asynchronous: true
                 
                 // Fallback to title if logo is not available
                 Text {

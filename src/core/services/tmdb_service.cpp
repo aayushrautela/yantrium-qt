@@ -184,6 +184,36 @@ void TmdbService::getCatalogItemFromContentId(const QString& contentId, const QS
     }
 }
 
+void TmdbService::getSimilarMovies(int tmdbId)
+{
+    QUrl url = buildUrl(QString("/movie/%1/similar").arg(tmdbId));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Accept", "application/json");
+    
+    QNetworkReply* reply = m_networkManager->get(request);
+    reply->setProperty("tmdbId", tmdbId);
+    connect(reply, &QNetworkReply::finished, this, &TmdbService::onSimilarMoviesReplyFinished);
+    connect(reply, &QNetworkReply::errorOccurred, this, [this, reply]() {
+        handleError(reply, "Get similar movies");
+    });
+}
+
+void TmdbService::getSimilarTv(int tmdbId)
+{
+    QUrl url = buildUrl(QString("/tv/%1/similar").arg(tmdbId));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Accept", "application/json");
+    
+    QNetworkReply* reply = m_networkManager->get(request);
+    reply->setProperty("tmdbId", tmdbId);
+    connect(reply, &QNetworkReply::finished, this, &TmdbService::onSimilarTvReplyFinished);
+    connect(reply, &QNetworkReply::errorOccurred, this, [this, reply]() {
+        handleError(reply, "Get similar TV shows");
+    });
+}
+
 void TmdbService::onFindReplyFinished()
 {
     QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
@@ -307,6 +337,56 @@ void TmdbService::onCastAndCrewReplyFinished()
     
     QJsonObject data = doc.object();
     emit castAndCrewFetched(tmdbId, type, data);
+    reply->deleteLater();
+}
+
+void TmdbService::onSimilarMoviesReplyFinished()
+{
+    QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) return;
+    
+    int tmdbId = reply->property("tmdbId").toInt();
+    
+    if (reply->error() != QNetworkReply::NoError) {
+        handleError(reply, "Get similar movies");
+        return;
+    }
+    
+    QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (doc.isNull() || !doc.isObject()) {
+        emit error("Failed to parse similar movies");
+        reply->deleteLater();
+        return;
+    }
+    
+    QJsonObject data = doc.object();
+    QJsonArray results = data["results"].toArray();
+    emit similarMoviesFetched(tmdbId, results);
+    reply->deleteLater();
+}
+
+void TmdbService::onSimilarTvReplyFinished()
+{
+    QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) return;
+    
+    int tmdbId = reply->property("tmdbId").toInt();
+    
+    if (reply->error() != QNetworkReply::NoError) {
+        handleError(reply, "Get similar TV shows");
+        return;
+    }
+    
+    QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (doc.isNull() || !doc.isObject()) {
+        emit error("Failed to parse similar TV shows");
+        reply->deleteLater();
+        return;
+    }
+    
+    QJsonObject data = doc.object();
+    QJsonArray results = data["results"].toArray();
+    emit similarTvFetched(tmdbId, results);
     reply->deleteLater();
 }
 

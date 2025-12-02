@@ -214,7 +214,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 width: parent.width * (root.progress / 100)
-                color: "#bb86fc"
+                color: "#ffffff"
             }
         }
         
@@ -226,7 +226,7 @@ Item {
             z: 10
             
             border.width: 3
-            border.color: isHovered ? "#bb86fc" : "transparent"
+            border.color: isHovered ? "#ffffff" : "transparent"
             
             Behavior on border.color { ColorAnimation { duration: 200 } }
         }

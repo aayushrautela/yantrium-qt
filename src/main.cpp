@@ -35,7 +35,10 @@ int main(int argc, char *argv[])
     
     // Force console output
     qSetMessagePattern("[%{time yyyy-MM-dd hh:mm:ss.zzz}] [%{category}] %{message}");
-    
+
+    // Enable QML console.log messages (Qt6 filters them by default)
+    qputenv("QT_LOGGING_RULES", "qml.debug=true;js.debug=true");
+
     std::cout << "=== Yantrium Player Starting ===" << std::endl;
     std::cerr << "=== Yantrium Player Starting (stderr) ===" << std::endl;
     std::cout.flush();

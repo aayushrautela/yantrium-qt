@@ -19,9 +19,9 @@ Rectangle {
     width: 150
     height: 225
     radius: 8
-    color: isHighlighted ? "#bb86fc" : "#1a1a1a"
+    color: isHighlighted ? "#ffffff" : "#1a1a1a"
     border.width: isHighlighted ? 2 : 0
-    border.color: "#bb86fc"
+    border.color: "#ffffff"
     
     Column {
         anchors.fill: parent
@@ -94,7 +94,7 @@ Rectangle {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     width: parent.width * (root.progress / 100)
-                    color: "#bb86fc"
+                    color: "#ffffff"
                 }
             }
             

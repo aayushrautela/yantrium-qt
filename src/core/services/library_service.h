@@ -33,6 +33,8 @@ public:
     Q_INVOKABLE QVariantList getContinueWatching();
     Q_INVOKABLE void loadCatalogsRaw(); // Load catalogs without processing (for raw export)
     Q_INVOKABLE void loadHeroItems(); // Load items from hero catalogs
+    Q_INVOKABLE void loadItemDetails(const QString& contentId, const QString& type, const QString& addonId = QString());
+    Q_INVOKABLE void loadSimilarItems(int tmdbId, const QString& type);
     
 private:
     void loadCatalogsRaw(bool rawMode); // Internal method with raw mode flag
@@ -43,6 +45,8 @@ signals:
     void searchResultsLoaded(const QVariantList& results);
     void rawCatalogsLoaded(const QVariantList& rawData); // Raw unprocessed catalog data
     void heroItemsLoaded(const QVariantList& items); // Hero items loaded
+    void itemDetailsLoaded(const QVariantMap& details);
+    void similarItemsLoaded(const QVariantList& items);
     void error(const QString& message);
 
 private slots:
@@ -55,6 +59,11 @@ private slots:
     void onTmdbError(const QString& message);
     void onHeroCatalogFetched(const QString& type, const QJsonArray& metas);
     void onHeroClientError(const QString& errorMessage);
+    void onTmdbMovieDetailsFetched(int tmdbId, const QJsonObject& data);
+    void onTmdbTvDetailsFetched(int tmdbId, const QJsonObject& data);
+    void onTmdbIdFoundForDetails(const QString& imdbId, int tmdbId);
+    void onSimilarMoviesFetched(int tmdbId, const QJsonArray& results);
+    void onSimilarTvFetched(int tmdbId, const QJsonArray& results);
 
 private:
     struct CatalogSection {
@@ -92,6 +101,14 @@ private:
     QMap<int, QString> m_tmdbIdToImdbId; // TMDB ID -> IMDB ID
     int m_pendingTmdbRequests;
     void finishContinueWatchingLoading();
+    
+    // Item details loading
+    QString m_pendingDetailsContentId;
+    QString m_pendingDetailsType;
+    QString m_pendingDetailsAddonId;
+    QMap<int, QString> m_tmdbIdToImdbIdForDetails; // TMDB ID -> IMDB ID for details
+    QVariantMap tmdbDataToDetailVariantMap(const QJsonObject& tmdbData, const QString& contentId, const QString& type);
+    QString formatDateDDMMYYYY(const QString& dateString);
 };
 
 #endif // LIBRARY_SERVICE_H

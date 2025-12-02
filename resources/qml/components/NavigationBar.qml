@@ -43,7 +43,7 @@ Rectangle {
                     width: tabText.width + 20
                     height: 36
                     radius: 4
-                    color: root.currentIndex === index ? "#bb86fc" : "transparent"
+                    color: root.currentIndex === index ? "#ffffff" : "transparent"
                     
                     Text {
                         id: tabText

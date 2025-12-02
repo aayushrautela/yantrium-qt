@@ -53,6 +53,24 @@ ApplicationWindow {
                     onLoaded: {
                         if (item) {
                             item.loadCatalogs()
+                            // Connect itemClicked signal to show detail screen
+                            item.itemClicked.connect(function(contentId, type, addonId) {
+                                if (contentId && type) {
+                                    // Store pending data
+                                    detailLoader.pendingContentId = contentId
+                                    detailLoader.pendingType = type
+                                    detailLoader.pendingAddonId = addonId || ""
+                                    
+                                    // Activate and switch to detail screen
+                                    detailLoader.active = true
+                                    stackLayout.currentIndex = 3  // Switch to detail screen
+                                    
+                                    // Load details (will be called in onLoaded if item not ready yet)
+                                    if (detailLoader.item) {
+                                        detailLoader.item.loadDetails(contentId, type, addonId || "")
+                                    }
+                                }
+                            })
                         }
                     }
 
@@ -85,6 +103,35 @@ ApplicationWindow {
                 
                 Loader {
                     source: "qrc:/qml/screens/SettingsScreen.qml"
+                }
+                
+                // Detail Screen
+                Loader {
+                    id: detailLoader
+                    active: false
+                    source: "qrc:/qml/screens/DetailScreen.qml"
+                    
+                    property string pendingContentId: ""
+                    property string pendingType: ""
+                    property string pendingAddonId: ""
+                    
+                    onLoaded: {
+                        if (item) {
+                            // Connect closeRequested to go back to home
+                            item.closeRequested.connect(function() {
+                                stackLayout.currentIndex = 0
+                                detailLoader.active = false
+                            })
+                            
+                            // Load details if we have pending data
+                            if (pendingContentId && pendingType) {
+                                item.loadDetails(pendingContentId, pendingType, pendingAddonId)
+                                pendingContentId = ""
+                                pendingType = ""
+                                pendingAddonId = ""
+                            }
+                        }
+                    }
                 }
             }
         }

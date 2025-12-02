@@ -8,8 +8,8 @@ QtObject {
     readonly property color background: "#1e1e1e"
     readonly property color surface: "#2d2d2d"
     readonly property color surfaceVariant: "#3d3d3d"
-    readonly property color primary: "#bb86fc"
-    readonly property color primaryVariant: "#985eff"
+    readonly property color primary: "#ffffff"
+    readonly property color primaryVariant: "#ffffff"
     readonly property color secondary: "#03dac6"
     readonly property color error: "#cf6679"
     

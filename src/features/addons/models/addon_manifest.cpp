@@ -127,3 +127,4 @@ bool AddonManifest::validate(const AddonManifest& manifest)
 
 
 
+

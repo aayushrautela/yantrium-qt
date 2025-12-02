@@ -33,6 +33,8 @@ public:
     Q_INVOKABLE void getTvMetadata(int tmdbId);
     Q_INVOKABLE void getCastAndCrew(int tmdbId, const QString& type);
     Q_INVOKABLE void getCatalogItemFromContentId(const QString& contentId, const QString& type);
+    Q_INVOKABLE void getSimilarMovies(int tmdbId);
+    Q_INVOKABLE void getSimilarTv(int tmdbId);
     
     // Synchronous conversion methods (use cached/fetched data)
     static QJsonObject convertMovieToCatalogItem(const QJsonObject& tmdbData, const QString& contentId);
@@ -49,6 +51,8 @@ signals:
     void tmdbIdFound(const QString& imdbId, int tmdbId);
     void castAndCrewFetched(int tmdbId, const QString& type, const QJsonObject& data);
     void catalogItemFetched(const QJsonObject& item);
+    void similarMoviesFetched(int tmdbId, const QJsonArray& results);
+    void similarTvFetched(int tmdbId, const QJsonArray& results);
     void error(const QString& message);
 
 private slots:
@@ -56,6 +60,8 @@ private slots:
     void onMovieMetadataReplyFinished();
     void onTvMetadataReplyFinished();
     void onCastAndCrewReplyFinished();
+    void onSimilarMoviesReplyFinished();
+    void onSimilarTvReplyFinished();
 
 private:
     QNetworkAccessManager* m_networkManager;

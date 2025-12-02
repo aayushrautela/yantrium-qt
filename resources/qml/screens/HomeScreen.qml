@@ -33,6 +33,9 @@ Item {
     property bool isLoading: false
     property var heroItems: []
     property int currentHeroIndex: 0
+    
+    // --- Signals ---
+    signal itemClicked(string contentId, string type, string addonId)
 
     // --- Hero Logic ---
     function cycleHero(direction) {
@@ -102,7 +105,9 @@ Item {
                         progress: item.progress || 0,
                         badgeText: item.badgeText || "",
                         isHighlighted: item.isHighlighted || false,
-                        id: item.id || ""
+                        id: item.id || "",
+                        type: item.type || section.type || "",
+                        addonId: section.addonId || ""
                     })
                 }
             }
@@ -209,6 +214,11 @@ Item {
                         item.itemWidth = 480 
                         item.itemHeight = 270 
                         item.model = continueWatchingModel
+                        // Connect itemClicked signal (for continue watching, we might handle differently)
+                        item.itemClicked.connect(function(contentId, type, addonId) {
+                            // For continue watching, we can also open detail screen
+                            root.itemClicked(contentId, type, addonId)
+                        })
                     }
                 }
 
@@ -267,13 +277,17 @@ Item {
                                     height: 400
                                     
                                     property bool isHovered: false
+                                    readonly property string sectionAddonId: catalogRepeater.itemAt(index) ? (catalogRepeater.itemAt(index).sectionAddonId || "") : ""
 
                                     MouseArea {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         onEntered: isHovered = true
                                         onExited: isHovered = false
-                                        onClicked: console.log("Clicked:", model.title)
+                                        onClicked: {
+                                            var addonId = model.addonId || sectionColumn.sectionAddonId || ""
+                                            root.itemClicked(model.id || "", model.type || "", addonId)
+                                        }
                                     }
 
                                     Column {
@@ -310,7 +324,7 @@ Item {
                                                 width: 40; height: 20
                                                 Row {
                                                     anchors.centerIn: parent; spacing: 2
-                                                    Text { text: "\u2605"; color: "#bb86fc"; font.pixelSize: 10 }
+                                                    Text { text: "\u2605"; color: "#ffffff"; font.pixelSize: 10 }
                                                     Text { text: model.rating; color: "white"; font.pixelSize: 10; font.bold: true }
                                                 }
                                             }
@@ -318,7 +332,7 @@ Item {
                                             // Border
                                             Rectangle {
                                                 anchors.fill: parent; color: "transparent"; radius: 8; z: 10
-                                                border.width: 3; border.color: isHovered ? "#bb86fc" : "transparent"
+                                                border.width: 3; border.color: isHovered ? "#ffffff" : "transparent"
                                                 Behavior on border.color { ColorAnimation { duration: 200 } }
                                             }
                                         }
