@@ -1,11 +1,29 @@
-#ifndef TMDB_DATA_EXTRACTOR_H
-#define TMDB_DATA_EXTRACTOR_H
+#ifndef TMDB_DATA_MAPPER_H
+#define TMDB_DATA_MAPPER_H
 
 #include <QString>
 #include <QJsonObject>
 
+/// Utility class for building TMDB image URLs
+class TmdbImageUrlBuilder
+{
+public:
+    enum class ImageSize {
+        Small = 185,    // w185
+        Medium = 500,   // w500
+        Large = 780,    // w780
+        Original = 0   // original
+    };
+    
+    /// Build a full image URL from a path and size
+    static QString buildUrl(const QString& path, ImageSize size = ImageSize::Medium);
+    
+    /// Build a full image URL from a path and size string (for backward compatibility)
+    static QString buildUrl(const QString& path, const QString& size);
+};
+
 /// Utility class for extracting structured data from TMDB API responses
-class TmdbDataExtractor
+class TmdbDataMapper
 {
 public:
     /// Extract maturity rating from TMDB data
@@ -40,9 +58,6 @@ public:
     static QString extractLogoUrl(const QJsonObject& tmdbData, const QString& imageBaseUrl = QString());
 };
 
-#endif // TMDB_DATA_EXTRACTOR_H
-
-
-
+#endif // TMDB_DATA_MAPPER_H
 
 

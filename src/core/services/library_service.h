@@ -14,8 +14,10 @@
 #include "features/addons/models/addon_config.h"
 #include "features/addons/models/addon_manifest.h"
 #include "core/services/trakt_core_service.h"
-#include "core/services/tmdb_service.h"
-#include "core/services/tmdb_data_extractor.h"
+#include "core/services/tmdb_data_service.h"
+#include "core/services/media_metadata_service.h"
+#include "core/services/tmdb_data_mapper.h"
+#include "core/services/frontend_data_mapper.h"
 #include "core/services/omdb_service.h"
 #include "core/database/catalog_preferences_dao.h"
 
@@ -60,13 +62,10 @@ private slots:
     void onTmdbError(const QString& message);
     void onHeroCatalogFetched(const QString& type, const QJsonArray& metas);
     void onHeroClientError(const QString& errorMessage);
-    void onTmdbMovieDetailsFetched(int tmdbId, const QJsonObject& data);
-    void onTmdbTvDetailsFetched(int tmdbId, const QJsonObject& data);
-    void onTmdbIdFoundForDetails(const QString& imdbId, int tmdbId);
+    void onMediaMetadataLoaded(const QVariantMap& details);
+    void onMediaMetadataError(const QString& message);
     void onSimilarMoviesFetched(int tmdbId, const QJsonArray& results);
     void onSimilarTvFetched(int tmdbId, const QJsonArray& results);
-    void onOmdbRatingsFetched(const QString& imdbId, const QJsonObject& data);
-    void onOmdbError(const QString& message, const QString& imdbId);
 
 private:
     struct CatalogSection {
@@ -77,14 +76,13 @@ private:
     };
     
     void processCatalogData(const QString& addonId, const QString& catalogName, const QString& type, const QJsonArray& metas);
-    QVariantMap catalogItemToVariantMap(const QJsonObject& item, const QString& baseUrl = QString());
     QVariantMap traktPlaybackItemToVariantMap(const QVariantMap& traktItem);
-    QVariantMap continueWatchingItemToVariantMap(const QVariantMap& traktItem, const QJsonObject& tmdbData = QJsonObject()); // Dedicated function for continue watching cards
     void finishLoadingCatalogs();
     
     AddonRepository* m_addonRepository;
     TraktCoreService* m_traktService;
-    TmdbService* m_tmdbService;
+    TmdbDataService* m_tmdbService;
+    MediaMetadataService* m_mediaMetadataService;
     OmdbService* m_omdbService;
     CatalogPreferencesDao* m_catalogPreferencesDao;
     QList<AddonClient*> m_activeClients;
@@ -111,9 +109,6 @@ private:
     QString m_pendingDetailsType;
     QString m_pendingDetailsAddonId;
     QMap<int, QString> m_tmdbIdToImdbIdForDetails; // TMDB ID -> IMDB ID for details
-    QMap<QString, QVariantMap> m_pendingDetailsByImdbId; // IMDB ID -> details map (for OMDB ratings matching)
-    QVariantMap tmdbDataToDetailVariantMap(const QJsonObject& tmdbData, const QString& contentId, const QString& type);
-    QString formatDateDDMMYYYY(const QString& dateString);
 };
 
 #endif // LIBRARY_SERVICE_H

@@ -86,3 +86,4 @@ TraktAuthRecord TraktAuthDao::recordFromQuery(const QSqlQuery& query)
 
 
 
+

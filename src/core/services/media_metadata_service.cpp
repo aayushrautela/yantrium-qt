@@ -1,0 +1,297 @@
+#include "media_metadata_service.h"
+#include "tmdb_data_service.h"
+#include "omdb_service.h"
+#include "trakt_core_service.h"
+#include "frontend_data_mapper.h"
+#include "id_parser.h"
+#include "configuration.h"
+#include <QDebug>
+#include <QJsonObject>
+
+MediaMetadataService::MediaMetadataService(QObject* parent)
+    : QObject(parent)
+    , m_tmdbService(new TmdbDataService(this))
+    , m_omdbService(new OmdbService(this))
+    , m_traktService(&TraktCoreService::instance())
+{
+    // Connect to TMDB service
+    connect(m_tmdbService, &TmdbDataService::tmdbIdFound,
+            this, &MediaMetadataService::onTmdbIdFound);
+    connect(m_tmdbService, &TmdbDataService::movieMetadataFetched,
+            this, &MediaMetadataService::onTmdbMovieMetadataFetched);
+    connect(m_tmdbService, &TmdbDataService::tvMetadataFetched,
+            this, &MediaMetadataService::onTmdbTvMetadataFetched);
+    connect(m_tmdbService, &TmdbDataService::error,
+            this, &MediaMetadataService::onTmdbError);
+    
+    // Connect to OMDB service
+    connect(m_omdbService, &OmdbService::ratingsFetched,
+            this, &MediaMetadataService::onOmdbRatingsFetched);
+    connect(m_omdbService, &OmdbService::error,
+            this, &MediaMetadataService::onOmdbError);
+}
+
+void MediaMetadataService::getCompleteMetadata(const QString& contentId, const QString& type)
+{
+    qDebug() << "[MediaMetadataService] getCompleteMetadata called - contentId:" << contentId << "type:" << type;
+    
+    if (contentId.isEmpty() || type.isEmpty()) {
+        emit error("Missing contentId or type");
+        return;
+    }
+    
+    // Try to extract TMDB ID
+    int tmdbId = IdParser::extractTmdbId(contentId);
+    
+    // If IMDB ID, search for TMDB ID first
+    if (tmdbId == 0 && contentId.startsWith("tt")) {
+        qDebug() << "[MediaMetadataService] IMDB ID detected, fetching TMDB ID first";
+        m_tmdbService->getTmdbIdFromImdb(contentId);
+        
+        // Store pending request
+        PendingRequest request;
+        request.contentId = contentId;
+        request.type = type;
+        request.tmdbId = 0;
+        m_pendingDetailsByImdbId[contentId] = request;
+        return;
+    }
+    
+    if (tmdbId == 0) {
+        emit error("Could not extract TMDB ID from content ID");
+        return;
+    }
+    
+    // Store TMDB ID mapping for direct TMDB IDs
+    // Store both the original contentId and type in a pending request
+    // We'll use the IMDB ID as the key once we extract it from TMDB response
+    PendingRequest request;
+    request.contentId = contentId;
+    request.type = type;
+    request.tmdbId = tmdbId;
+    // Store temporarily with TMDB ID as string key until we get IMDB ID
+    m_pendingDetailsByImdbId[QString("tmdb:%1").arg(tmdbId)] = request;
+    m_tmdbIdToImdbId[tmdbId] = contentId; // Keep this for backward compatibility
+    
+    // Fetch metadata based on type
+    getCompleteMetadataFromTmdbId(tmdbId, type);
+}
+
+void MediaMetadataService::getCompleteMetadataFromTmdbId(int tmdbId, const QString& type)
+{
+    qDebug() << "[MediaMetadataService] getCompleteMetadataFromTmdbId called - tmdbId:" << tmdbId << "type:" << type;
+    
+    // Fetch metadata based on type
+    if (type == "movie") {
+        m_tmdbService->getMovieMetadata(tmdbId);
+    } else if (type == "series" || type == "tv") {
+        m_tmdbService->getTvMetadata(tmdbId);
+    } else {
+        emit error(QString("Unknown content type: %1").arg(type));
+    }
+}
+
+void MediaMetadataService::onTmdbIdFound(const QString& imdbId, int tmdbId)
+{
+    qDebug() << "[MediaMetadataService] TMDB ID found - IMDB:" << imdbId << "TMDB:" << tmdbId;
+    
+    if (!m_pendingDetailsByImdbId.contains(imdbId)) {
+        qWarning() << "[MediaMetadataService] Received TMDB ID for unknown IMDB ID:" << imdbId;
+        return;
+    }
+    
+    PendingRequest& request = m_pendingDetailsByImdbId[imdbId];
+    request.tmdbId = tmdbId;
+    m_tmdbIdToImdbId[tmdbId] = imdbId;
+    
+    // Fetch metadata based on type
+    if (request.type == "movie") {
+        m_tmdbService->getMovieMetadata(tmdbId);
+    } else if (request.type == "series" || request.type == "tv") {
+        m_tmdbService->getTvMetadata(tmdbId);
+    }
+}
+
+void MediaMetadataService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& data)
+{
+    qDebug() << "[MediaMetadataService] TMDB movie metadata fetched for TMDB ID:" << tmdbId;
+    
+    // Get the original contentId from the mapping (could be "tmdb:123" or IMDB ID)
+    QString originalContentId = m_tmdbIdToImdbId.value(tmdbId);
+    
+    // Extract IMDB ID from TMDB response
+    QString imdbId;
+    QJsonObject externalIds = data["external_ids"].toObject();
+    imdbId = externalIds["imdb_id"].toString();
+    
+    // Get contentId and type from pending request
+    QString contentId = originalContentId;
+    QString type = "movie";
+    
+    // Check if we have a pending request stored with TMDB ID key
+    QString tmdbKey = QString("tmdb:%1").arg(tmdbId);
+    if (m_pendingDetailsByImdbId.contains(tmdbKey)) {
+        PendingRequest& pending = m_pendingDetailsByImdbId[tmdbKey];
+        contentId = pending.contentId;
+        type = pending.type;
+        // Remove the temporary TMDB key entry
+        m_pendingDetailsByImdbId.remove(tmdbKey);
+    } else if (m_pendingDetailsByImdbId.contains(imdbId)) {
+        // If we already have it keyed by IMDB ID (from initial IMDB ID request)
+        PendingRequest& pending = m_pendingDetailsByImdbId[imdbId];
+        contentId = pending.contentId;
+        type = pending.type;
+    } else if (!imdbId.isEmpty() && imdbId.startsWith("tt")) {
+        // If we extracted IMDB ID but no pending request, use IMDB ID as contentId
+        contentId = imdbId;
+    } else if (!originalContentId.isEmpty()) {
+        // Fallback to original contentId
+        contentId = originalContentId;
+    }
+    
+    // Update mapping to use IMDB ID if we have it
+    if (!imdbId.isEmpty() && imdbId.startsWith("tt")) {
+        m_tmdbIdToImdbId[tmdbId] = imdbId;
+    }
+    
+    QVariantMap details = FrontendDataMapper::mapTmdbToDetailVariantMap(data, contentId, type);
+    
+    if (details.isEmpty()) {
+        emit error("Failed to convert TMDB movie data to detail map");
+        return;
+    }
+    
+    // Fetch OMDB ratings if we have an IMDB ID and API key is configured
+    Configuration& config = Configuration::instance();
+    if (!imdbId.isEmpty() && imdbId.startsWith("tt") && !config.omdbApiKey().isEmpty()) {
+        // Store details keyed by IMDB ID for matching when OMDB response arrives
+        m_pendingDetailsByImdbId[imdbId] = {contentId, type, tmdbId, details};
+        qDebug() << "[MediaMetadataService] Stored pending details for IMDB ID:" << imdbId << "contentId:" << contentId;
+        qDebug() << "[MediaMetadataService] Fetching OMDB ratings for IMDB ID:" << imdbId;
+        m_omdbService->getRatings(imdbId);
+    } else {
+        // No IMDB ID or no API key, emit details without OMDB ratings
+        if (imdbId.isEmpty() || !imdbId.startsWith("tt")) {
+            qDebug() << "[MediaMetadataService] No IMDB ID available, skipping OMDB ratings";
+        } else {
+            qDebug() << "[MediaMetadataService] OMDB API key not configured, skipping ratings fetch";
+        }
+        emit metadataLoaded(details);
+    }
+}
+
+void MediaMetadataService::onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data)
+{
+    qDebug() << "[MediaMetadataService] TMDB TV metadata fetched for TMDB ID:" << tmdbId;
+    
+    // Get the original contentId from the mapping (could be "tmdb:123" or IMDB ID)
+    QString originalContentId = m_tmdbIdToImdbId.value(tmdbId);
+    
+    // Extract IMDB ID from TMDB response
+    QString imdbId;
+    QJsonObject externalIds = data["external_ids"].toObject();
+    imdbId = externalIds["imdb_id"].toString();
+    
+    // Get contentId and type from pending request
+    QString contentId = originalContentId;
+    QString type = "series";
+    
+    // Check if we have a pending request stored with TMDB ID key
+    QString tmdbKey = QString("tmdb:%1").arg(tmdbId);
+    if (m_pendingDetailsByImdbId.contains(tmdbKey)) {
+        PendingRequest& pending = m_pendingDetailsByImdbId[tmdbKey];
+        contentId = pending.contentId;
+        type = pending.type;
+        // Remove the temporary TMDB key entry
+        m_pendingDetailsByImdbId.remove(tmdbKey);
+    } else if (m_pendingDetailsByImdbId.contains(imdbId)) {
+        // If we already have it keyed by IMDB ID (from initial IMDB ID request)
+        PendingRequest& pending = m_pendingDetailsByImdbId[imdbId];
+        contentId = pending.contentId;
+        type = pending.type;
+    } else if (!imdbId.isEmpty() && imdbId.startsWith("tt")) {
+        // If we extracted IMDB ID but no pending request, use IMDB ID as contentId
+        contentId = imdbId;
+    } else if (!originalContentId.isEmpty()) {
+        // Fallback to original contentId
+        contentId = originalContentId;
+    }
+    
+    // Update mapping to use IMDB ID if we have it
+    if (!imdbId.isEmpty() && imdbId.startsWith("tt")) {
+        m_tmdbIdToImdbId[tmdbId] = imdbId;
+    }
+    
+    QVariantMap details = FrontendDataMapper::mapTmdbToDetailVariantMap(data, contentId, type);
+    
+    if (details.isEmpty()) {
+        emit error("Failed to convert TMDB TV data to detail map");
+        return;
+    }
+    
+    // Fetch OMDB ratings if we have an IMDB ID and API key is configured
+    Configuration& config = Configuration::instance();
+    if (!imdbId.isEmpty() && imdbId.startsWith("tt") && !config.omdbApiKey().isEmpty()) {
+        // Store details keyed by IMDB ID for matching when OMDB response arrives
+        m_pendingDetailsByImdbId[imdbId] = {contentId, type, tmdbId, details};
+        qDebug() << "[MediaMetadataService] Stored pending details for IMDB ID:" << imdbId << "contentId:" << contentId;
+        qDebug() << "[MediaMetadataService] Fetching OMDB ratings for IMDB ID:" << imdbId;
+        m_omdbService->getRatings(imdbId);
+    } else {
+        // No IMDB ID or no API key, emit details without OMDB ratings
+        if (imdbId.isEmpty() || !imdbId.startsWith("tt")) {
+            qDebug() << "[MediaMetadataService] No IMDB ID available, skipping OMDB ratings";
+        } else {
+            qDebug() << "[MediaMetadataService] OMDB API key not configured, skipping ratings fetch";
+        }
+        emit metadataLoaded(details);
+    }
+}
+
+void MediaMetadataService::onOmdbRatingsFetched(const QString& imdbId, const QJsonObject& data)
+{
+    qDebug() << "[MediaMetadataService] OMDB ratings fetched for IMDB ID:" << imdbId;
+    qDebug() << "[MediaMetadataService] Pending details map keys:" << m_pendingDetailsByImdbId.keys();
+    
+    if (!m_pendingDetailsByImdbId.contains(imdbId)) {
+        qWarning() << "[MediaMetadataService] OMDB ratings received but pending details map is empty for IMDB ID:" << imdbId;
+        qWarning() << "[MediaMetadataService] Available keys in map:" << m_pendingDetailsByImdbId.keys();
+        // This shouldn't happen, but if it does, we can't merge ratings
+        // The details were likely already emitted without OMDB ratings
+        return;
+    }
+    
+    PendingRequest& request = m_pendingDetailsByImdbId[imdbId];
+    QVariantMap details = request.details;
+    
+    qDebug() << "[MediaMetadataService] Merging OMDB ratings into details for contentId:" << request.contentId;
+    
+    // Merge OMDB ratings into details
+    FrontendDataMapper::mergeOmdbRatings(details, data);
+    
+    // Emit complete metadata
+    emit metadataLoaded(details);
+    
+    // Clean up
+    m_pendingDetailsByImdbId.remove(imdbId);
+}
+
+void MediaMetadataService::onOmdbError(const QString& message, const QString& imdbId)
+{
+    qDebug() << "[MediaMetadataService] OMDB error for IMDB ID:" << imdbId << ":" << message;
+    
+    // Even if OMDB fails, emit the details we have from TMDB
+    if (m_pendingDetailsByImdbId.contains(imdbId)) {
+        PendingRequest& request = m_pendingDetailsByImdbId[imdbId];
+        emit metadataLoaded(request.details);
+        m_pendingDetailsByImdbId.remove(imdbId);
+    }
+}
+
+void MediaMetadataService::onTmdbError(const QString& message)
+{
+    qWarning() << "[MediaMetadataService] TMDB error:" << message;
+    emit error(message);
+}
+
+

@@ -55,12 +55,16 @@ set(PROJECT_SOURCES
     src/core/services/configuration.h
     src/core/services/id_parser.cpp
     src/core/services/id_parser.h
-    src/core/services/tmdb_data_extractor.cpp
-    src/core/services/tmdb_data_extractor.h
-    src/core/services/tmdb_service.cpp
-    src/core/services/tmdb_service.h
-    src/core/services/tmdb_search_service.cpp
-    src/core/services/tmdb_search_service.h
+    src/core/services/tmdb_api_client.cpp
+    src/core/services/tmdb_api_client.h
+    src/core/services/tmdb_data_service.cpp
+    src/core/services/tmdb_data_service.h
+    src/core/services/tmdb_data_mapper.cpp
+    src/core/services/tmdb_data_mapper.h
+    src/core/services/frontend_data_mapper.cpp
+    src/core/services/frontend_data_mapper.h
+    src/core/services/media_metadata_service.cpp
+    src/core/services/media_metadata_service.h
     src/core/services/omdb_service.cpp
     src/core/services/omdb_service.h
     src/core/services/trakt_core_service.cpp

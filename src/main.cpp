@@ -12,8 +12,8 @@
 #include "player/player_bridge.h"
 #include "core/database/database_manager.h"
 #include "features/addons/logic/addon_repository.h"
-#include "core/services/tmdb_service.h"
-#include "core/services/tmdb_search_service.h"
+#include "core/services/tmdb_data_service.h"
+#include "core/services/media_metadata_service.h"
 #include "core/services/trakt_auth_service.h"
 #include "core/services/trakt_scrobble_service.h"
 #include "core/services/trakt_watchlist_service.h"
@@ -85,8 +85,8 @@ int main(int argc, char *argv[])
     qDebug() << "Registered AddonRepository";
 
     // Register TMDB services
-    qmlRegisterType<TmdbService>("Yantrium.Services", 1, 0, "TmdbService");
-    qmlRegisterType<TmdbSearchService>("Yantrium.Services", 1, 0, "TmdbSearchService");
+    qmlRegisterType<TmdbDataService>("Yantrium.Services", 1, 0, "TmdbDataService");
+    qmlRegisterType<MediaMetadataService>("Yantrium.Services", 1, 0, "MediaMetadataService");
     std::cout << "[MAIN] Registered TMDB services" << std::endl;
     std::cout.flush();
     qDebug() << "Registered TMDB services";

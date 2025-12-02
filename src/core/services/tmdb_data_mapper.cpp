@@ -1,9 +1,57 @@
-#include "tmdb_data_extractor.h"
+#include "tmdb_data_mapper.h"
 #include "configuration.h"
 #include <QJsonArray>
 #include <QDebug>
 
-QString TmdbDataExtractor::extractMaturityRating(const QJsonObject& tmdbData, const QString& type)
+// TmdbImageUrlBuilder implementation
+QString TmdbImageUrlBuilder::buildUrl(const QString& path, ImageSize size)
+{
+    if (path.isEmpty()) {
+        return QString();
+    }
+    if (path.startsWith("http")) {
+        return path; // Already full URL
+    }
+    
+    Configuration& config = Configuration::instance();
+    QString baseUrl = config.tmdbImageBaseUrl();
+    
+    QString sizeStr;
+    switch (size) {
+        case ImageSize::Small:
+            sizeStr = "w185";
+            break;
+        case ImageSize::Medium:
+            sizeStr = "w500";
+            break;
+        case ImageSize::Large:
+            sizeStr = "w780";
+            break;
+        case ImageSize::Original:
+            sizeStr = "original";
+            break;
+    }
+    
+    return baseUrl + sizeStr + path;
+}
+
+QString TmdbImageUrlBuilder::buildUrl(const QString& path, const QString& size)
+{
+    if (path.isEmpty()) {
+        return QString();
+    }
+    if (path.startsWith("http")) {
+        return path; // Already full URL
+    }
+    
+    Configuration& config = Configuration::instance();
+    QString baseUrl = config.tmdbImageBaseUrl();
+    
+    return baseUrl + size + path;
+}
+
+// TmdbDataMapper implementation (renamed from TmdbDataExtractor)
+QString TmdbDataMapper::extractMaturityRating(const QJsonObject& tmdbData, const QString& type)
 {
     try {
         if (type == "movie") {
@@ -45,7 +93,7 @@ QString TmdbDataExtractor::extractMaturityRating(const QJsonObject& tmdbData, co
     return QString();
 }
 
-QString TmdbDataExtractor::getMaturityRatingName(const QString& rating, const QString& type)
+QString TmdbDataMapper::getMaturityRatingName(const QString& rating, const QString& type)
 {
     if (rating.isEmpty()) {
         return QString();
@@ -71,7 +119,7 @@ QString TmdbDataExtractor::getMaturityRatingName(const QString& rating, const QS
     return QString();
 }
 
-QJsonObject TmdbDataExtractor::extractCastAndCrew(const QJsonObject& tmdbData)
+QJsonObject TmdbDataMapper::extractCastAndCrew(const QJsonObject& tmdbData)
 {
     QJsonObject result;
     QJsonArray castArray;
@@ -98,7 +146,7 @@ QJsonObject TmdbDataExtractor::extractCastAndCrew(const QJsonObject& tmdbData)
     return result;
 }
 
-QJsonObject TmdbDataExtractor::extractProductionInfo(const QJsonObject& tmdbData, const QString& type)
+QJsonObject TmdbDataMapper::extractProductionInfo(const QJsonObject& tmdbData, const QString& type)
 {
     QJsonObject result;
     QJsonArray companiesArray;
@@ -153,7 +201,7 @@ QJsonObject TmdbDataExtractor::extractProductionInfo(const QJsonObject& tmdbData
     return result;
 }
 
-QJsonObject TmdbDataExtractor::extractReleaseInfo(const QJsonObject& tmdbData, const QString& type)
+QJsonObject TmdbDataMapper::extractReleaseInfo(const QJsonObject& tmdbData, const QString& type)
 {
     QJsonObject result;
     
@@ -201,7 +249,7 @@ QJsonObject TmdbDataExtractor::extractReleaseInfo(const QJsonObject& tmdbData, c
     return result;
 }
 
-QJsonObject TmdbDataExtractor::extractAdditionalMetadata(const QJsonObject& tmdbData, const QString& type)
+QJsonObject TmdbDataMapper::extractAdditionalMetadata(const QJsonObject& tmdbData, const QString& type)
 {
     QJsonObject result;
     
@@ -230,7 +278,7 @@ QJsonObject TmdbDataExtractor::extractAdditionalMetadata(const QJsonObject& tmdb
     return result;
 }
 
-QString TmdbDataExtractor::extractPosterUrl(const QJsonObject& tmdbData, const QString& imageBaseUrl)
+QString TmdbDataMapper::extractPosterUrl(const QJsonObject& tmdbData, const QString& imageBaseUrl)
 {
     QString baseUrl = imageBaseUrl.isEmpty() ? Configuration::instance().tmdbImageBaseUrl() : imageBaseUrl;
     QString posterPath = tmdbData["poster_path"].toString();
@@ -240,10 +288,10 @@ QString TmdbDataExtractor::extractPosterUrl(const QJsonObject& tmdbData, const Q
     if (posterPath.startsWith("http")) {
         return posterPath;
     }
-    return baseUrl + "w500" + posterPath;
+    return TmdbImageUrlBuilder::buildUrl(posterPath, TmdbImageUrlBuilder::ImageSize::Medium);
 }
 
-QString TmdbDataExtractor::extractBackdropUrl(const QJsonObject& tmdbData, const QString& imageBaseUrl)
+QString TmdbDataMapper::extractBackdropUrl(const QJsonObject& tmdbData, const QString& imageBaseUrl)
 {
     QString baseUrl = imageBaseUrl.isEmpty() ? Configuration::instance().tmdbImageBaseUrl() : imageBaseUrl;
     QString backdropPath = tmdbData["backdrop_path"].toString();
@@ -253,10 +301,10 @@ QString TmdbDataExtractor::extractBackdropUrl(const QJsonObject& tmdbData, const
     if (backdropPath.startsWith("http")) {
         return backdropPath;
     }
-    return baseUrl + "w1280" + backdropPath;
+    return TmdbImageUrlBuilder::buildUrl(backdropPath, "w1280");
 }
 
-QString TmdbDataExtractor::extractLogoUrl(const QJsonObject& tmdbData, const QString& imageBaseUrl)
+QString TmdbDataMapper::extractLogoUrl(const QJsonObject& tmdbData, const QString& imageBaseUrl)
 {
     QString baseUrl = imageBaseUrl.isEmpty() ? Configuration::instance().tmdbImageBaseUrl() : imageBaseUrl;
     
@@ -303,14 +351,10 @@ QString TmdbDataExtractor::extractLogoUrl(const QJsonObject& tmdbData, const QSt
         if (logoPath.startsWith("http")) {
             return logoPath;
         }
-        return baseUrl + "w500" + logoPath;
+        return TmdbImageUrlBuilder::buildUrl(logoPath, TmdbImageUrlBuilder::ImageSize::Medium);
     } catch (...) {
         qDebug() << "Error extracting logo URL";
         return QString();
     }
 }
-
-
-
-
 

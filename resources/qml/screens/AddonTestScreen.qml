@@ -257,7 +257,7 @@ Item {
                             color: "#FFFFFF"
                         }
 
-                        TmdbSearchService {
+                        TmdbDataService {
                             id: tmdbSearch
                             
                             onMoviesFound: function(results) {
