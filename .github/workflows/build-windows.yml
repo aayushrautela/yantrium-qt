@@ -105,6 +105,12 @@ jobs:
         ) else (
           echo "WARNING: QtQuick.Controls directory not found, but may be in QtQuick folder"
         )
+        echo "Verifying Qt5Compat deployment..."
+        if exist "build\${{ inputs.build_type }}\Qt5Compat" (
+          echo "SUCCESS: Qt5Compat directory found!"
+        ) else (
+          echo "WARNING: Qt5Compat directory not found, but may be in QtQuick folder"
+        )
         
     - name: Copy SQL plugins
       shell: powershell

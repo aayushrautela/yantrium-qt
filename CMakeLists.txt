@@ -11,7 +11,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # 2. Find Qt6 Packages
-find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql)
+find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql Qt5Compat)
 
 # 3. Add Source Files
 set(PROJECT_SOURCES
@@ -154,6 +154,7 @@ target_link_libraries(Yantrium PRIVATE
     Qt6::Network
     Qt6::Gui
     Qt6::Sql
+    Qt6::Qt5Compat
 )
 
 # =========================================================
