@@ -27,7 +27,8 @@ jobs:
         arch: 'win64_msvc2019_64'
         cache: 'true'
         set-env: 'true'
-        modules: 'qt5compat qtshadertools' # Essential for UI and Graphics
+        # Fixes UI crashes (Qt5Compat) and rendering issues (ShaderTools)
+        modules: 'qt5compat qtshadertools'
         
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.1
@@ -71,6 +72,7 @@ jobs:
 
     # --- NUCLEAR TLS FIX ---
     # This step runs windeployqt AND manually copies the TLS plugins folder
+    # because windeployqt sometimes fails to deploy the SSL backend plugin.
     - name: Deploy Qt dependencies and TLS
       shell: powershell
       run: |
@@ -120,7 +122,7 @@ jobs:
         }
 
     # --- ROBUST OPENSSL FIX ---
-    # Installs OpenSSL 3 and finds the DLLs even if paths change
+    # Installs OpenSSL 3 and finds the DLLs even if paths change (FireDaemon vs Standard)
     - name: Setup and Copy OpenSSL
       shell: powershell
       run: |
