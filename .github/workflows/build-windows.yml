@@ -29,17 +29,12 @@ jobs:
       run: |
         pip install aqtinstall
         
-    - name: List available Qt modules
+    - name: Setup Qt6 (base installation)
       shell: cmd
       run: |
-        python -m aqt list-qt windows desktop --modules 6.6.3 win64_msvc2019_64
+        python -m aqt install-qt windows desktop 6.6.3 win64_msvc2019_64 --outputdir "%TEMP%\Qt"
         
-    - name: Setup Qt6
-      shell: cmd
-      run: |
-        python -m aqt install-qt windows desktop 6.6.3 win64_msvc2019_64 --outputdir "%TEMP%\Qt" --modules qtquick qtwidgets qtnetwork qtgui qtsql
-        
-    - name: Set Qt6 environment
+    - name: Set Qt6 environment for CMake
       shell: cmd
       run: |
         set QT6_DIR=%TEMP%\Qt\6.6.3\msvc2019_64
@@ -62,10 +57,12 @@ jobs:
         TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
         OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
       run: |
+        set QT6_DIR=%TEMP%\Qt\6.6.3\msvc2019_64
         cmake -B build -S . ^
           -G "Visual Studio 17 2022" ^
           -A x64 ^
           -DCMAKE_BUILD_TYPE=${{ inputs.build_type }} ^
+          -DQt6_DIR="%QT6_DIR%\lib\cmake\Qt6" ^
           -DTMDB_API_KEY="%TMDB_API_KEY%" ^
           -DTRAKT_CLIENT_ID="%TRAKT_CLIENT_ID%" ^
           -DTRAKT_CLIENT_SECRET="%TRAKT_CLIENT_SECRET%" ^
