@@ -168,6 +168,76 @@ jobs:
           }
         }
         
+    - name: Copy OpenSSL libraries
+      shell: powershell
+      run: |
+        Write-Host "Copying OpenSSL libraries for TLS support..."
+        $windeployqt = Get-Command windeployqt -ErrorAction SilentlyContinue
+        if (-not $windeployqt) {
+          Write-Host "ERROR: windeployqt not found in PATH"
+          exit 1
+        }
+        $windeployqtPath = $windeployqt.Path
+        $qtBinDir = Split-Path -Parent $windeployqtPath
+        
+        Write-Host "Looking for OpenSSL libraries in Qt bin directory: $qtBinDir"
+        
+        # Look for OpenSSL libraries (Qt 6 uses libcrypto and libssl)
+        $opensslLibs = @("libcrypto-*.dll", "libssl-*.dll")
+        $foundAny = $false
+        
+        foreach ($pattern in $opensslLibs) {
+          $libs = Get-ChildItem -Path $qtBinDir -Filter $pattern -ErrorAction SilentlyContinue
+          if ($libs) {
+            foreach ($lib in $libs) {
+              $targetPath = "build\${{ inputs.build_type }}\$($lib.Name)"
+              Copy-Item -Path $lib.FullName -Destination $targetPath -Force
+              Write-Host "SUCCESS: Copied $($lib.Name) to build directory"
+              $foundAny = $true
+            }
+          }
+        }
+        
+        # Also check for older naming convention (libeay32.dll, ssleay32.dll)
+        $oldLibs = @("libeay32.dll", "ssleay32.dll")
+        foreach ($libName in $oldLibs) {
+          $libPath = Join-Path $qtBinDir $libName
+          if (Test-Path $libPath) {
+            $targetPath = "build\${{ inputs.build_type }}\$libName"
+            Copy-Item -Path $libPath -Destination $targetPath -Force
+            Write-Host "SUCCESS: Copied $libName to build directory"
+            $foundAny = $true
+          }
+        }
+        
+        if (-not $foundAny) {
+          Write-Host "WARNING: No OpenSSL libraries found in $qtBinDir"
+          Write-Host "TLS functionality may not work. Checking alternative locations..."
+          
+          # Try checking if Qt was built with Schannel (Windows native TLS)
+          # In that case, we might need to ensure the network plugin is properly deployed
+          Write-Host "Note: If Qt was built with Schannel backend, OpenSSL DLLs may not be needed"
+        } else {
+          Write-Host "SUCCESS: OpenSSL libraries copied successfully"
+        }
+        
+    - name: Verify TLS backend availability
+      shell: powershell
+      run: |
+        Write-Host "Checking for TLS backend support..."
+        $buildDir = "build\${{ inputs.build_type }}"
+        $opensslLibs = Get-ChildItem -Path $buildDir -Filter "libcrypto-*.dll" -ErrorAction SilentlyContinue
+        $opensslLibs += Get-ChildItem -Path $buildDir -Filter "libssl-*.dll" -ErrorAction SilentlyContinue
+        $opensslLibs += Get-ChildItem -Path $buildDir -Filter "libeay32.dll" -ErrorAction SilentlyContinue
+        $opensslLibs += Get-ChildItem -Path $buildDir -Filter "ssleay32.dll" -ErrorAction SilentlyContinue
+        
+        if ($opensslLibs) {
+          Write-Host "SUCCESS: OpenSSL libraries found in build directory"
+          $opensslLibs | ForEach-Object { Write-Host "  - $($_.Name)" }
+        } else {
+          Write-Host "WARNING: No OpenSSL libraries found. TLS may not work unless Qt uses Schannel backend."
+        }
+        
     - name: Copy MDK DLLs
       shell: cmd
       run: |
