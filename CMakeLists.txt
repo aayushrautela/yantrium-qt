@@ -11,7 +11,9 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # 2. Find Qt6 Packages
-find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql Core5Compat)
+# ADDED: 'Svg' (Fixes "Unsupported image format" for icons)
+# CHANGED: 'Qt5Compat' -> 'Core5Compat' (Correct CMake name)
+find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql Core5Compat Svg)
 
 # 3. Add Source Files
 set(PROJECT_SOURCES
@@ -99,6 +101,7 @@ set(PROJECT_SOURCES
 )
 
 # 4. Define the Executable
+# Note: MANUAL_FINALIZATION is used, so we must call qt_finalize_executable at the end
 qt_add_executable(Yantrium
     MANUAL_FINALIZATION
     ${PROJECT_SOURCES}
@@ -139,7 +142,7 @@ else()
 endif()
 
 # 5. Link Qt Libraries
-# CHANGED: Added Qt6::Core5Compat
+# ADDED: Qt6::Svg and Qt6::Core5Compat
 target_link_libraries(Yantrium PRIVATE
     Qt6::Core
     Qt6::Quick
@@ -148,6 +151,7 @@ target_link_libraries(Yantrium PRIVATE
     Qt6::Gui
     Qt6::Sql
     Qt6::Core5Compat
+    Qt6::Svg
 )
 
 # =========================================================
@@ -159,6 +163,7 @@ if(WIN32)
     target_include_directories(Yantrium PRIVATE ${MDK_DIR}/include)
     target_link_libraries(Yantrium PRIVATE ${MDK_DIR}/lib/x64/mdk.lib)
     
+    # Copy MDK binaries to build directory on Windows
     add_custom_command(TARGET Yantrium POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${MDK_DIR}/bin/x64/ $<TARGET_FILE_DIR:Yantrium>)
@@ -167,6 +172,7 @@ elseif(UNIX AND NOT APPLE)
     target_include_directories(Yantrium PRIVATE ${MDK_DIR}/include)
     target_link_libraries(Yantrium PRIVATE ${MDK_DIR}/lib/amd64/libmdk.so)
     
+    # Copy libmdk.so to build directory on Linux
     add_custom_command(TARGET Yantrium POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
         ${MDK_DIR}/lib/amd64/libmdk.so $<TARGET_FILE_DIR:Yantrium>)
@@ -186,6 +192,6 @@ install(TARGETS Yantrium
     ARCHIVE DESTINATION lib
 )
 
-# --- CRITICAL FIX ---
-# This is required because you used MANUAL_FINALIZATION above
+# --- CRITICAL ---
+# Finalize the target (Required because MANUAL_FINALIZATION was used)
 qt_finalize_executable(Yantrium)
