@@ -27,7 +27,7 @@ jobs:
         arch: 'win64_msvc2019_64'
         cache: 'true'
         set-env: 'true'
-        modules: 'qt5compat'  # <--- CRITICAL FIX: This installs the missing module
+        modules: 'qt5compat qtshadertools'
         
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.1
