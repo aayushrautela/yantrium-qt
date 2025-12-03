@@ -43,6 +43,15 @@ int main(int argc, char *argv[])
     // Enable QML console.log messages (Qt6 filters them by default)
     qputenv("QT_LOGGING_RULES", "qml.debug=true;js.debug=true");
 
+#ifdef Q_OS_WIN
+    // Add Qt plugin paths for Windows deployment
+    // This ensures plugins can be found even if not in standard locations
+    QString appDir = QCoreApplication::applicationDirPath();
+    QCoreApplication::addLibraryPath(appDir + "/plugins");
+    QCoreApplication::addLibraryPath(appDir);
+    qDebug() << "[MAIN] Windows: Added plugin paths - appDir:" << appDir;
+#endif
+
     std::cout << "=== Yantrium Player Starting ===" << std::endl;
     std::cerr << "=== Yantrium Player Starting (stderr) ===" << std::endl;
     std::cout.flush();

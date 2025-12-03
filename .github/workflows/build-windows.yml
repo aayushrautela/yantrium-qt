@@ -73,9 +73,30 @@ jobs:
       shell: cmd
       run: |
         if exist "build\${{ inputs.build_type }}\Yantrium.exe" (
-          windeployqt.exe build\${{ inputs.build_type }}\Yantrium.exe
+          echo "Running windeployqt with QML directory and compiler runtime..."
+          windeployqt.exe --qmldir resources/qml --compiler-runtime build\${{ inputs.build_type }}\Yantrium.exe
+          echo "Qt deployment completed"
         ) else (
           echo "Executable not found, skipping windeployqt"
+          exit /b 1
+        )
+        
+    - name: Verify Qt deployment
+      shell: cmd
+      run: |
+        echo "Verifying Qt deployment..."
+        if exist "build\${{ inputs.build_type }}\platforms" (
+          echo "Platforms directory found:"
+          dir /B build\${{ inputs.build_type }}\platforms
+        ) else (
+          echo "ERROR: platforms directory not found!"
+          exit /b 1
+        )
+        if exist "build\${{ inputs.build_type }}\platforms\qwindows.dll" (
+          echo "SUCCESS: qwindows.dll found!"
+        ) else (
+          echo "ERROR: qwindows.dll not found in platforms directory!"
+          exit /b 1
         )
         
     - name: Copy MDK DLLs
@@ -101,6 +122,10 @@ jobs:
         path: |
           build/${{ inputs.build_type }}/Yantrium.exe
           build/${{ inputs.build_type }}/*.dll
+          build/${{ inputs.build_type }}/platforms/
+          build/${{ inputs.build_type }}/qml/
+          build/${{ inputs.build_type }}/QtQuick/
+          build/${{ inputs.build_type }}/QtQml/
         retention-days: 30
         if-no-files-found: warn
 
