@@ -188,3 +188,10 @@ elseif(UNIX AND NOT APPLE)
 endif()
 
 qt_import_qml_plugins(Yantrium)
+
+# Install rules
+install(TARGETS Yantrium
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)

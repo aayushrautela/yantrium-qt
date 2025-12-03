@@ -1,0 +1,76 @@
+app-id: org.yantrium.Yantrium
+runtime: org.kde.Platform
+runtime-version: '6.6'
+sdk: org.kde.Sdk
+sdk-version: '6.6'
+command: yantrium
+finish-args:
+  - --share=network
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=all
+  - --filesystem=home
+  - --filesystem=xdg-download
+  - --filesystem=xdg-videos
+  - --filesystem=xdg-music
+  - --filesystem=xdg-pictures
+  - --filesystem=xdg-data/yantrium:create
+
+modules:
+  - name: mdk-sdk
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib
+      - mkdir -p /app/include
+      - cp -r include/* /app/include/
+      - cp -r lib/amd64/*.so* /app/lib/ 2>/dev/null || true
+      - |
+        # Set up library symlinks if needed
+        if [ -f /app/lib/libmdk.so.0 ]; then
+          ln -sf libmdk.so.0 /app/lib/libmdk.so || true
+        fi
+    sources:
+      - type: dir
+        path: vendor/mdk-sdk
+
+  - name: yantrium
+    buildsystem: cmake-ninja
+    build-options:
+      cflags: -O2 -g
+      cxxflags: -O2 -g
+      ldflags: -Wl,-rpath=/app/lib
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/app
+      - -DCMAKE_PREFIX_PATH=/usr/lib64/cmake
+      - -DCMAKE_INSTALL_LIBDIR=/app/lib
+      - -DCMAKE_INSTALL_BINDIR=/app/bin
+      - -DTMDB_API_KEY=${TMDB_API_KEY}
+      - -DTRAKT_CLIENT_ID=${TRAKT_CLIENT_ID}
+      - -DTRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET}
+      - -DOMDB_API_KEY=${OMDB_API_KEY}
+    post-install:
+      - |
+        # Copy MDK libraries to /app/lib
+        if [ -f vendor/mdk-sdk/lib/amd64/libmdk.so ]; then
+          install -Dm644 vendor/mdk-sdk/lib/amd64/libmdk.so /app/lib/libmdk.so
+        fi
+        if [ -f vendor/mdk-sdk/lib/amd64/libmdk.so.0 ]; then
+          install -Dm644 vendor/mdk-sdk/lib/amd64/libmdk.so.0 /app/lib/libmdk.so.0
+        fi
+        # Copy additional MDK libraries
+        for lib in vendor/mdk-sdk/lib/amd64/libmdk-*.so* vendor/mdk-sdk/lib/amd64/lib*.so*; do
+          if [ -f "$lib" ]; then
+            install -Dm644 "$lib" /app/lib/$(basename "$lib") || true
+          fi
+        done
+      - |
+        # Rename executable to lowercase
+        if [ -f /app/bin/Yantrium ]; then
+          mv /app/bin/Yantrium /app/bin/yantrium
+        fi
+    sources:
+      - type: dir
+        path: .
+

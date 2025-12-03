@@ -508,6 +508,12 @@ Item {
                                         )
                                         sectionScrollAnimation.to = targetX
                                         sectionScrollAnimation.start()
+                                    }
+                                }
+                            }
+                            
+                            // Close ListView after arrows
+                        }
                     }
                 }
             }
