@@ -5,13 +5,13 @@ project(Yantrium VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 1. ENABLE QT AUTOMATION (Fixes vtable errors)
+# 1. ENABLE QT AUTOMATION
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # 2. Find Qt6 Packages
-find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql Qt5Compat)
+find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql Core5Compat)
 
 # 3. Add Source Files
 set(PROJECT_SOURCES
@@ -104,49 +104,42 @@ qt_add_executable(Yantrium
     ${PROJECT_SOURCES}
 )
 
-# Add src directory to include path for cleaner includes
+# Add src directory to include path
 target_include_directories(Yantrium PRIVATE src)
 
-# TMDB API Key configuration
+# --- API KEYS ---
 option(TMDB_API_KEY "TMDB API Key" "")
 if(TMDB_API_KEY)
     target_compile_definitions(Yantrium PRIVATE TMDB_API_KEY="${TMDB_API_KEY}")
     message(STATUS "TMDB API Key configured")
 else()
-    message(WARNING "TMDB_API_KEY not set. Set it via: -DTMDB_API_KEY=your_key")
+    message(WARNING "TMDB_API_KEY not set.")
     target_compile_definitions(Yantrium PRIVATE TMDB_API_KEY="")
 endif()
 
-# Trakt API Key configuration
 option(TRAKT_CLIENT_ID "Trakt Client ID" "")
 if(TRAKT_CLIENT_ID)
     target_compile_definitions(Yantrium PRIVATE TRAKT_CLIENT_ID="${TRAKT_CLIENT_ID}")
-    message(STATUS "Trakt Client ID configured")
 else()
-    message(WARNING "TRAKT_CLIENT_ID not set. Set it via: -DTRAKT_CLIENT_ID=your_id")
     target_compile_definitions(Yantrium PRIVATE TRAKT_CLIENT_ID="")
 endif()
 
 option(TRAKT_CLIENT_SECRET "Trakt Client Secret" "")
 if(TRAKT_CLIENT_SECRET)
     target_compile_definitions(Yantrium PRIVATE TRAKT_CLIENT_SECRET="${TRAKT_CLIENT_SECRET}")
-    message(STATUS "Trakt Client Secret configured")
 else()
-    message(WARNING "TRAKT_CLIENT_SECRET not set. Set it via: -DTRAKT_CLIENT_SECRET=your_secret")
     target_compile_definitions(Yantrium PRIVATE TRAKT_CLIENT_SECRET="")
 endif()
 
-# OMDB API Key configuration (optional)
-option(OMDB_API_KEY "OMDB API Key (optional, for additional ratings)" "")
+option(OMDB_API_KEY "OMDB API Key" "")
 if(OMDB_API_KEY)
     target_compile_definitions(Yantrium PRIVATE OMDB_API_KEY="${OMDB_API_KEY}")
-    message(STATUS "OMDB API Key configured")
 else()
-    message(STATUS "OMDB_API_KEY not set (optional). Additional ratings will not be available.")
     target_compile_definitions(Yantrium PRIVATE OMDB_API_KEY="")
 endif()
 
 # 5. Link Qt Libraries
+# CHANGED: Added Qt6::Core5Compat
 target_link_libraries(Yantrium PRIVATE
     Qt6::Core
     Qt6::Quick
@@ -154,14 +147,12 @@ target_link_libraries(Yantrium PRIVATE
     Qt6::Network
     Qt6::Gui
     Qt6::Sql
-    Qt6::Qt5Compat
+    Qt6::Core5Compat
 )
 
 # =========================================================
 # 6. MDK-SDK INTEGRATION
 # =========================================================
-
-# Define where MDK is located
 set(MDK_DIR "${CMAKE_SOURCE_DIR}/vendor/mdk-sdk")
 
 if(WIN32)
@@ -174,8 +165,6 @@ if(WIN32)
         
 elseif(UNIX AND NOT APPLE)
     target_include_directories(Yantrium PRIVATE ${MDK_DIR}/include)
-    
-    # Fixed path based on your earlier 'find' command
     target_link_libraries(Yantrium PRIVATE ${MDK_DIR}/lib/amd64/libmdk.so)
     
     add_custom_command(TARGET Yantrium POST_BUILD
@@ -196,3 +185,7 @@ install(TARGETS Yantrium
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
 )
+
+# --- CRITICAL FIX ---
+# This is required because you used MANUAL_FINALIZATION above
+qt_finalize_executable(Yantrium)
