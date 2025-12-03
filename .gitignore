@@ -33,8 +33,11 @@ Thumbs.db
 *.dSYM/
 
 # Vendor SDK (if extracted)
-vendor/mdk-sdk/lib/
-vendor/mdk-sdk/bin/
+# Allow Windows x64 binaries for CI builds
+vendor/mdk-sdk/lib/amd64/
+vendor/mdk-sdk/bin/amd64/
+!vendor/mdk-sdk/lib/x64/
+!vendor/mdk-sdk/bin/x64/
 
 # References
 dart_old/
