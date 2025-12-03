@@ -27,6 +27,7 @@ jobs:
         arch: 'win64_msvc2019_64'
         cache: 'true'
         set-env: 'true'
+        modules: 'qt5compat'  # <--- CRITICAL FIX: This installs the missing module
         
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.1
@@ -101,7 +102,6 @@ jobs:
         echo "Verifying Qt Quick Controls deployment..."
         if exist "build\${{ inputs.build_type }}\QtQuick\Controls" (
           echo "SUCCESS: QtQuick.Controls directory found!"
-          echo "Basic style will be available (included with QtQuick.Controls)"
         ) else (
           echo "WARNING: QtQuick.Controls directory not found, but may be in QtQuick folder"
         )
@@ -196,6 +196,6 @@ jobs:
           build/${{ inputs.build_type }}/qml/
           build/${{ inputs.build_type }}/QtQuick/
           build/${{ inputs.build_type }}/QtQml/
+          build/${{ inputs.build_type }}/Qt5Compat/  # <--- Added this to ensure effects are included
         retention-days: 30
         if-no-files-found: warn
-
