@@ -100,28 +100,60 @@ jobs:
         )
         
     - name: Copy SQL plugins
-      shell: cmd
+      shell: powershell
       run: |
-        echo "Copying SQL plugins..."
-        for /f "tokens=*" %%i in ('where windeployqt') do set WINDEPLOYQT=%%i
-        for %%i in ("%WINDEPLOYQT%") do set QT_PLUGINS_DIR=%%~dpi..\..\plugins\sqldrivers
-        echo "Looking for SQL plugins at: %QT_PLUGINS_DIR%"
-        if exist "%QT_PLUGINS_DIR%\qsqlite.dll" (
-          if not exist "build\${{ inputs.build_type }}\sqldrivers" mkdir "build\${{ inputs.build_type }}\sqldrivers"
-          copy /Y "%QT_PLUGINS_DIR%\qsqlite.dll" "build\${{ inputs.build_type }}\sqldrivers\"
-          echo "SUCCESS: SQLite plugin copied to build\${{ inputs.build_type }}\sqldrivers\"
-        ) else (
-          echo "ERROR: qsqlite.dll not found at %QT_PLUGINS_DIR%"
-          echo "Trying alternative: %QTDIR%\plugins\sqldrivers"
-          if exist "%QTDIR%\plugins\sqldrivers\qsqlite.dll" (
-            if not exist "build\${{ inputs.build_type }}\sqldrivers" mkdir "build\${{ inputs.build_type }}\sqldrivers"
-            copy /Y "%QTDIR%\plugins\sqldrivers\qsqlite.dll" "build\${{ inputs.build_type }}\sqldrivers\"
-            echo "SUCCESS: SQLite plugin copied from QTDIR"
-          ) else (
-            echo "ERROR: Could not find qsqlite.dll in any expected location"
-            exit /b 1
-          )
-        )
+        Write-Host "Copying SQL plugins..."
+        $windeployqt = Get-Command windeployqt -ErrorAction SilentlyContinue
+        if (-not $windeployqt) {
+          Write-Host "ERROR: windeployqt not found in PATH"
+          exit 1
+        }
+        $windeployqtPath = $windeployqt.Path
+        Write-Host "windeployqt found at: $windeployqtPath"
+        
+        # Resolve the path: windeployqt is in bin/, plugins are in plugins/
+        $qtBinDir = Split-Path -Parent $windeployqtPath
+        $qtRootDir = Split-Path -Parent $qtBinDir
+        $sqlPluginsDir = Join-Path $qtRootDir "plugins\sqldrivers"
+        
+        Write-Host "Looking for SQL plugins at: $sqlPluginsDir"
+        
+        $sqliteDll = Join-Path $sqlPluginsDir "qsqlite.dll"
+        if (Test-Path $sqliteDll) {
+          $targetDir = "build\${{ inputs.build_type }}\sqldrivers"
+          if (-not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Path $targetDir | Out-Null
+          }
+          Copy-Item -Path $sqliteDll -Destination $targetDir -Force
+          Write-Host "SUCCESS: SQLite plugin copied to $targetDir"
+        } else {
+          Write-Host "ERROR: qsqlite.dll not found at $sqlPluginsDir"
+          Write-Host "Trying Qt6_DIR environment variable..."
+          if ($env:Qt6_DIR) {
+            $qt6Dir = $env:Qt6_DIR
+            $qt6Root = Split-Path -Parent $qt6Dir
+            $sqlPluginsDir2 = Join-Path $qt6Root "plugins\sqldrivers"
+            $sqliteDll2 = Join-Path $sqlPluginsDir2 "qsqlite.dll"
+            Write-Host "Qt6_DIR: $qt6Dir"
+            Write-Host "Looking at: $sqlPluginsDir2"
+            if (Test-Path $sqliteDll2) {
+              $targetDir = "build\${{ inputs.build_type }}\sqldrivers"
+              if (-not (Test-Path $targetDir)) {
+                New-Item -ItemType Directory -Path $targetDir | Out-Null
+              }
+              Copy-Item -Path $sqliteDll2 -Destination $targetDir -Force
+              Write-Host "SUCCESS: SQLite plugin copied from Qt6_DIR"
+            } else {
+              Write-Host "ERROR: Could not find qsqlite.dll at $sqlPluginsDir2"
+              exit 1
+            }
+          } else {
+            Write-Host "ERROR: Could not find qsqlite.dll and Qt6_DIR is not set"
+            Write-Host "Qt root dir: $qtRootDir"
+            Write-Host "SQL plugins dir: $sqlPluginsDir"
+            exit 1
+          }
+        }
         
     - name: Copy MDK DLLs
       shell: cmd
