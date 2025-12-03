@@ -27,7 +27,7 @@ jobs:
         arch: 'win64_msvc2019_64'
         cache: 'true'
         set-env: 'true'
-        modules: 'qt5compat qtshadertools' # Essential modules for your UI
+        modules: 'qt5compat qtshadertools'
         
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.1
@@ -128,12 +128,10 @@ jobs:
           Copy-Item -Path $sqliteDll -Destination $targetDir -Force
           Write-Host "SUCCESS: SQLite plugin copied to $targetDir"
         } else {
-          # Fallback logic removed for brevity as standard path usually works with install-qt-action
           Write-Host "ERROR: qsqlite.dll not found at $sqlPluginsDir"
           exit 1
         }
         
-    # --- UPDATED OPENSSL STEP ---
     - name: Setup and Copy OpenSSL
       shell: powershell
       run: |
@@ -156,11 +154,11 @@ jobs:
             Write-Host "SUCCESS: Copied $dll"
           } else {
             Write-Host "ERROR: Could not find $dll at $source"
-            # Fallback: Try finding without -x64 suffix (some builds differ)
-            $fallback = Join-Path $opensslPath ($dll -replace "-x64","")
+            # Fallback: Try finding without -x64 suffix (using single quotes to fix syntax)
+            $fallback = Join-Path $opensslPath ($dll -replace '-x64','')
             if (Test-Path $fallback) {
                Copy-Item -Path $fallback -Destination $targetDir -Force
-               Write-Host "SUCCESS: Copied fallback $($dll -replace "-x64","")"
+               Write-Host "SUCCESS: Copied fallback $($dll -replace '-x64','')"
             } else {
                Write-Host "FATAL: Could not find OpenSSL DLL: $dll"
                exit 1
