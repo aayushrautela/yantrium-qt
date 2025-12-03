@@ -20,12 +20,31 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup Qt6
-      uses: jurplel/install-qt-action@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
       with:
-        version: '6.7.0'
-        modules: 'qt.qt6.6070.win64_msvc2019_64.qtquick qt.qt6.6070.win64_msvc2019_64.qtwidgets qt.qt6.6070.win64_msvc2019_64.qtnetwork qt.qt6.6070.win64_msvc2019_64.qtgui qt.qt6.6070.win64_msvc2019_64.qtsql'
-        cache: true
+        python-version: '3.11'
+        
+    - name: Install aqtinstall
+      run: |
+        pip install aqtinstall
+        
+    - name: List available Qt modules
+      shell: cmd
+      run: |
+        python -m aqt list-qt windows desktop --modules 6.6.3 win64_msvc2019_64
+        
+    - name: Setup Qt6
+      shell: cmd
+      run: |
+        python -m aqt install-qt windows desktop 6.6.3 win64_msvc2019_64 --outputdir "%TEMP%\Qt" --modules qtquick qtwidgets qtnetwork qtgui qtsql
+        
+    - name: Set Qt6 environment
+      shell: cmd
+      run: |
+        set QT6_DIR=%TEMP%\Qt\6.6.3\msvc2019_64
+        echo Qt6_DIR=%QT6_DIR% >> %GITHUB_ENV%
+        echo %QT6_DIR%\bin >> %GITHUB_PATH%
         
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.1
