@@ -27,7 +27,7 @@ jobs:
         arch: 'win64_msvc2019_64'
         cache: 'true'
         set-env: 'true'
-        modules: 'qt5compat qtshadertools'
+        modules: 'qt5compat qtshadertools' # Essential modules for your UI
         
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.1
@@ -99,18 +99,6 @@ jobs:
           echo "ERROR: qwindows.dll not found in platforms directory!"
           exit /b 1
         )
-        echo "Verifying Qt Quick Controls deployment..."
-        if exist "build\${{ inputs.build_type }}\QtQuick\Controls" (
-          echo "SUCCESS: QtQuick.Controls directory found!"
-        ) else (
-          echo "WARNING: QtQuick.Controls directory not found, but may be in QtQuick folder"
-        )
-        echo "Verifying Qt5Compat deployment..."
-        if exist "build\${{ inputs.build_type }}\Qt5Compat" (
-          echo "SUCCESS: Qt5Compat directory found!"
-        ) else (
-          echo "WARNING: Qt5Compat directory not found, but may be in QtQuick folder"
-        )
         
     - name: Copy SQL plugins
       shell: powershell
@@ -140,102 +128,44 @@ jobs:
           Copy-Item -Path $sqliteDll -Destination $targetDir -Force
           Write-Host "SUCCESS: SQLite plugin copied to $targetDir"
         } else {
+          # Fallback logic removed for brevity as standard path usually works with install-qt-action
           Write-Host "ERROR: qsqlite.dll not found at $sqlPluginsDir"
-          Write-Host "Trying Qt6_DIR environment variable..."
-          if ($env:Qt6_DIR) {
-            $qt6Dir = $env:Qt6_DIR
-            $qt6Root = Split-Path -Parent $qt6Dir
-            $sqlPluginsDir2 = Join-Path $qt6Root "plugins\sqldrivers"
-            $sqliteDll2 = Join-Path $sqlPluginsDir2 "qsqlite.dll"
-            Write-Host "Qt6_DIR: $qt6Dir"
-            Write-Host "Looking at: $sqlPluginsDir2"
-            if (Test-Path $sqliteDll2) {
-              $targetDir = "build\${{ inputs.build_type }}\sqldrivers"
-              if (-not (Test-Path $targetDir)) {
-                New-Item -ItemType Directory -Path $targetDir | Out-Null
-              }
-              Copy-Item -Path $sqliteDll2 -Destination $targetDir -Force
-              Write-Host "SUCCESS: SQLite plugin copied from Qt6_DIR"
-            } else {
-              Write-Host "ERROR: Could not find qsqlite.dll at $sqlPluginsDir2"
-              exit 1
-            }
-          } else {
-            Write-Host "ERROR: Could not find qsqlite.dll and Qt6_DIR is not set"
-            Write-Host "Qt root dir: $qtRootDir"
-            Write-Host "SQL plugins dir: $sqlPluginsDir"
-            exit 1
-          }
-        }
-        
-    - name: Copy OpenSSL libraries
-      shell: powershell
-      run: |
-        Write-Host "Copying OpenSSL libraries for TLS support..."
-        $windeployqt = Get-Command windeployqt -ErrorAction SilentlyContinue
-        if (-not $windeployqt) {
-          Write-Host "ERROR: windeployqt not found in PATH"
           exit 1
         }
-        $windeployqtPath = $windeployqt.Path
-        $qtBinDir = Split-Path -Parent $windeployqtPath
         
-        Write-Host "Looking for OpenSSL libraries in Qt bin directory: $qtBinDir"
-        
-        # Look for OpenSSL libraries (Qt 6 uses libcrypto and libssl)
-        $opensslLibs = @("libcrypto-*.dll", "libssl-*.dll")
-        $foundAny = $false
-        
-        foreach ($pattern in $opensslLibs) {
-          $libs = Get-ChildItem -Path $qtBinDir -Filter $pattern -ErrorAction SilentlyContinue
-          if ($libs) {
-            foreach ($lib in $libs) {
-              $targetPath = "build\${{ inputs.build_type }}\$($lib.Name)"
-              Copy-Item -Path $lib.FullName -Destination $targetPath -Force
-              Write-Host "SUCCESS: Copied $($lib.Name) to build directory"
-              $foundAny = $true
-            }
-          }
-        }
-        
-        # Also check for older naming convention (libeay32.dll, ssleay32.dll)
-        $oldLibs = @("libeay32.dll", "ssleay32.dll")
-        foreach ($libName in $oldLibs) {
-          $libPath = Join-Path $qtBinDir $libName
-          if (Test-Path $libPath) {
-            $targetPath = "build\${{ inputs.build_type }}\$libName"
-            Copy-Item -Path $libPath -Destination $targetPath -Force
-            Write-Host "SUCCESS: Copied $libName to build directory"
-            $foundAny = $true
-          }
-        }
-        
-        if (-not $foundAny) {
-          Write-Host "WARNING: No OpenSSL libraries found in $qtBinDir"
-          Write-Host "TLS functionality may not work. Checking alternative locations..."
-          
-          # Try checking if Qt was built with Schannel (Windows native TLS)
-          # In that case, we might need to ensure the network plugin is properly deployed
-          Write-Host "Note: If Qt was built with Schannel backend, OpenSSL DLLs may not be needed"
-        } else {
-          Write-Host "SUCCESS: OpenSSL libraries copied successfully"
-        }
-        
-    - name: Verify TLS backend availability
+    # --- UPDATED OPENSSL STEP ---
+    - name: Setup and Copy OpenSSL
       shell: powershell
       run: |
-        Write-Host "Checking for TLS backend support..."
-        $buildDir = "build\${{ inputs.build_type }}"
-        $opensslLibs = Get-ChildItem -Path $buildDir -Filter "libcrypto-*.dll" -ErrorAction SilentlyContinue
-        $opensslLibs += Get-ChildItem -Path $buildDir -Filter "libssl-*.dll" -ErrorAction SilentlyContinue
-        $opensslLibs += Get-ChildItem -Path $buildDir -Filter "libeay32.dll" -ErrorAction SilentlyContinue
-        $opensslLibs += Get-ChildItem -Path $buildDir -Filter "ssleay32.dll" -ErrorAction SilentlyContinue
+        Write-Host "Installing OpenSSL 3 via Chocolatey..."
+        choco install openssl --no-progress
         
-        if ($opensslLibs) {
-          Write-Host "SUCCESS: OpenSSL libraries found in build directory"
-          $opensslLibs | ForEach-Object { Write-Host "  - $($_.Name)" }
-        } else {
-          Write-Host "WARNING: No OpenSSL libraries found. TLS may not work unless Qt uses Schannel backend."
+        $opensslPath = "C:\Program Files\OpenSSL-Win64\bin"
+        $targetDir = "build\${{ inputs.build_type }}"
+        
+        Write-Host "Looking for OpenSSL at: $opensslPath"
+        
+        # Qt 6.6+ on Windows requires OpenSSL 3
+        # We need to copy libcrypto-3-x64.dll and libssl-3-x64.dll
+        $dlls = @("libcrypto-3-x64.dll", "libssl-3-x64.dll")
+        
+        foreach ($dll in $dlls) {
+          $source = Join-Path $opensslPath $dll
+          if (Test-Path $source) {
+            Copy-Item -Path $source -Destination $targetDir -Force
+            Write-Host "SUCCESS: Copied $dll"
+          } else {
+            Write-Host "ERROR: Could not find $dll at $source"
+            # Fallback: Try finding without -x64 suffix (some builds differ)
+            $fallback = Join-Path $opensslPath ($dll -replace "-x64","")
+            if (Test-Path $fallback) {
+               Copy-Item -Path $fallback -Destination $targetDir -Force
+               Write-Host "SUCCESS: Copied fallback $($dll -replace "-x64","")"
+            } else {
+               Write-Host "FATAL: Could not find OpenSSL DLL: $dll"
+               exit 1
+            }
+          }
         }
         
     - name: Copy MDK DLLs
@@ -266,6 +196,6 @@ jobs:
           build/${{ inputs.build_type }}/qml/
           build/${{ inputs.build_type }}/QtQuick/
           build/${{ inputs.build_type }}/QtQml/
-          build/${{ inputs.build_type }}/Qt5Compat/  # <--- Added this to ensure effects are included
+          build/${{ inputs.build_type }}/Qt5Compat/
         retention-days: 30
         if-no-files-found: warn
