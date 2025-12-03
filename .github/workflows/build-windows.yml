@@ -27,7 +27,6 @@ jobs:
         arch: 'win64_msvc2019_64'
         cache: 'true'
         set-env: 'true'
-        # Essential modules for UI (GraphicalEffects) and RHI (ShaderTools)
         modules: 'qt5compat qtshadertools'
         
     - name: Setup MSVC
@@ -78,11 +77,11 @@ jobs:
           exit 1
         }
 
-        # 1. Run windeployqt (Standard deployment)
+        # 1. Run windeployqt
         Write-Host "Running windeployqt..."
         windeployqt.exe --qmldir resources/qml --network --compiler-runtime $exePath
 
-        # 2. Manually copy TLS plugins to ensure HTTPS works
+        # 2. Manually copy TLS plugins
         $windeployqt = Get-Command windeployqt
         $binDir = Split-Path -Parent $windeployqt.Path
         $qtRootDir = Split-Path -Parent $binDir
@@ -113,7 +112,6 @@ jobs:
         Write-Host "Installing OpenSSL 3 via Chocolatey..."
         choco install openssl --no-progress
         
-        # Check potential install paths (FireDaemon vs Standard)
         $possiblePaths = @(
           "C:\Program Files\OpenSSL\bin",
           "C:\Program Files\OpenSSL-Win64\bin"
@@ -135,7 +133,6 @@ jobs:
         Write-Host "Found OpenSSL at: $opensslPath"
         $targetDir = "build\${{ inputs.build_type }}"
         
-        # Copy DLLs using wildcards to handle version naming differences
         $libs = Get-ChildItem -Path $opensslPath -Include "libcrypto*.dll", "libssl*.dll" -Recurse
         
         if ($libs) {
@@ -191,6 +188,7 @@ jobs:
           build/${{ inputs.build_type }}/*.dll
           build/${{ inputs.build_type }}/platforms/
           build/${{ inputs.build_type }}/sqldrivers/
+          build/${{ inputs.build_type }}/imageformats/  # <--- ADDED: Critical for loading images (jpg, webp, etc)
           build/${{ inputs.build_type }}/qml/
           build/${{ inputs.build_type }}/QtQuick/
           build/${{ inputs.build_type }}/QtQml/
