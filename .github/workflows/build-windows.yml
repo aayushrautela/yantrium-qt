@@ -99,6 +99,30 @@ jobs:
           exit /b 1
         )
         
+    - name: Copy SQL plugins
+      shell: cmd
+      run: |
+        echo "Copying SQL plugins..."
+        for /f "tokens=*" %%i in ('where windeployqt') do set WINDEPLOYQT=%%i
+        for %%i in ("%WINDEPLOYQT%") do set QT_PLUGINS_DIR=%%~dpi..\..\plugins\sqldrivers
+        echo "Looking for SQL plugins at: %QT_PLUGINS_DIR%"
+        if exist "%QT_PLUGINS_DIR%\qsqlite.dll" (
+          if not exist "build\${{ inputs.build_type }}\sqldrivers" mkdir "build\${{ inputs.build_type }}\sqldrivers"
+          copy /Y "%QT_PLUGINS_DIR%\qsqlite.dll" "build\${{ inputs.build_type }}\sqldrivers\"
+          echo "SUCCESS: SQLite plugin copied to build\${{ inputs.build_type }}\sqldrivers\"
+        ) else (
+          echo "ERROR: qsqlite.dll not found at %QT_PLUGINS_DIR%"
+          echo "Trying alternative: %QTDIR%\plugins\sqldrivers"
+          if exist "%QTDIR%\plugins\sqldrivers\qsqlite.dll" (
+            if not exist "build\${{ inputs.build_type }}\sqldrivers" mkdir "build\${{ inputs.build_type }}\sqldrivers"
+            copy /Y "%QTDIR%\plugins\sqldrivers\qsqlite.dll" "build\${{ inputs.build_type }}\sqldrivers\"
+            echo "SUCCESS: SQLite plugin copied from QTDIR"
+          ) else (
+            echo "ERROR: Could not find qsqlite.dll in any expected location"
+            exit /b 1
+          )
+        )
+        
     - name: Copy MDK DLLs
       shell: cmd
       run: |
@@ -123,6 +147,7 @@ jobs:
           build/${{ inputs.build_type }}/Yantrium.exe
           build/${{ inputs.build_type }}/*.dll
           build/${{ inputs.build_type }}/platforms/
+          build/${{ inputs.build_type }}/sqldrivers/
           build/${{ inputs.build_type }}/qml/
           build/${{ inputs.build_type }}/QtQuick/
           build/${{ inputs.build_type }}/QtQml/
