@@ -254,7 +254,7 @@ Item {
     
     signal closeRequested()
     signal libraryChanged()
-    signal playRequested(string streamUrl)
+    signal playRequested(string streamUrl, var contentData)
     
     function loadDetails(contentId, type, addonId) {
         if (!contentId || !type) return
@@ -1315,9 +1315,33 @@ Item {
             console.log("[DetailScreen] Stream selected:", JSON.stringify(stream))
             console.log("[DetailScreen] Stream URL:", stream.url)
             
-            // Emit signal to request playback
+            // Emit signal to request playback with content data
             if (stream.url) {
-                root.playRequested(stream.url)
+                // Get episode info from smartPlayState if available
+                var seasonNum = root.smartPlayState.season || root.itemData.seasonNumber || 0
+                var episodeNum = root.smartPlayState.episode || root.itemData.episodeNumber || 0
+                
+                // For TV shows, try to get episode title from current season episodes
+                var episodeTitle = ""
+                if (root.itemData.type === "tv" && seasonNum > 0 && episodeNum > 0 && root.currentSeasonEpisodes) {
+                    for (var i = 0; i < root.currentSeasonEpisodes.length; i++) {
+                        var ep = root.currentSeasonEpisodes[i]
+                        if (ep.episodeNumber === episodeNum) {
+                            episodeTitle = ep.name || ep.title || ""
+                            break
+                        }
+                    }
+                }
+                
+                var contentData = {
+                    type: root.itemData.type || "movie",
+                    title: root.itemData.type === "tv" && episodeTitle ? episodeTitle : (root.itemData.title || root.itemData.name || ""),
+                    description: root.itemData.type === "tv" && episodeTitle ? (root.currentSeasonEpisodes ? (root.currentSeasonEpisodes.find(function(ep) { return ep.episodeNumber === episodeNum }) || {}).overview || "" : "") : (root.itemData.description || root.itemData.overview || ""),
+                    logoUrl: root.itemData.logoUrl || root.itemData.logo || "",
+                    seasonNumber: seasonNum,
+                    episodeNumber: episodeNum
+                }
+                root.playRequested(stream.url, contentData)
             }
         }
     }

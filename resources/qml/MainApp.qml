@@ -44,12 +44,13 @@ ApplicationWindow {
             anchors.fill: parent
             spacing: 0
             
-            // Navigation bar
+            // Navigation bar - hidden when video player is active (index 5)
             Loader {
                 id: navBarLoader
                 width: parent.width
                 height: 60
                 source: "qrc:/qml/components/NavigationBar.qml"
+                visible: stackLayout.currentIndex !== 5
                 
                 Connections {
                     target: navBarLoader.item
@@ -104,12 +105,25 @@ ApplicationWindow {
             StackLayout {
                 id: stackLayout
                 width: parent.width
-                height: parent.height - navBarLoader.height
+                height: parent.height - (navBarLoader.visible ? navBarLoader.height : 0)
                 currentIndex: 0
 
                 onCurrentIndexChanged: {
                     console.warn("[MainApp] ===== STACK LAYOUT INDEX CHANGED =====")
                     console.warn("[MainApp] New index:", currentIndex)
+                    console.warn("[MainApp] Previous index:", videoPlayerLoader.previousIndex)
+                    
+                    // Stop video playback if leaving the video player (index 5)
+                    // Only stop if we were previously on the video player and are now leaving it
+                    if (videoPlayerLoader.previousIndex === 5 && currentIndex !== 5) {
+                        if (videoPlayerLoader.item && videoPlayerLoader.item.videoPlayer) {
+                            console.log("[MainApp] Leaving video player, stopping playback")
+                            videoPlayerLoader.item.videoPlayer.stop()
+                        }
+                    }
+                    
+                    // Update previous index
+                    videoPlayerLoader.previousIndex = currentIndex
 
                     // Activate search loader when switching to search screen
                     if (currentIndex === 3 && !searchLoader.active) {
@@ -346,10 +360,12 @@ ApplicationWindow {
                 
                 Connections {
                     target: detailLoader.item
-                    function onPlayRequested(streamUrl) {
+                    function onPlayRequested(streamUrl, contentData) {
                         console.log("[MainApp] Play requested with URL:", streamUrl)
+                        console.log("[MainApp] Content data:", JSON.stringify(contentData))
                         // Activate video player loader
                         videoPlayerLoader.pendingStreamUrl = streamUrl
+                        videoPlayerLoader.pendingContentData = contentData || {}
                         videoPlayerLoader.active = true
                         // Switch to video player (index 5)
                         stackLayout.currentIndex = 5
@@ -363,28 +379,72 @@ ApplicationWindow {
                     source: "qrc:/qml/screens/VideoPlayerScreen.qml"
                     
                     property string pendingStreamUrl: ""
+                    property var pendingContentData: ({})
+                    property int previousIndex: -1
                     
                     onLoaded: {
                         if (item && pendingStreamUrl) {
                             console.log("[MainApp] Video player loaded, setting source:", pendingStreamUrl)
+                            // Set content data
+                            if (pendingContentData) {
+                                item.contentType = pendingContentData.type || ""
+                                item.contentTitle = pendingContentData.title || ""
+                                item.contentDescription = pendingContentData.description || ""
+                                item.logoUrl = pendingContentData.logoUrl || ""
+                                item.seasonNumber = pendingContentData.seasonNumber || 0
+                                item.episodeNumber = pendingContentData.episodeNumber || 0
+                            }
                             item.videoPlayer.source = pendingStreamUrl
                             // Auto-play
                             Qt.callLater(function() {
                                 item.videoPlayer.play()
                             })
                             pendingStreamUrl = ""
+                            pendingContentData = {}
                         }
                     }
                     
                     onStatusChanged: {
                         if (status === Loader.Ready && item && pendingStreamUrl) {
                             console.log("[MainApp] Video player ready, setting source:", pendingStreamUrl)
+                            // Set content data
+                            if (pendingContentData) {
+                                item.contentType = pendingContentData.type || ""
+                                item.contentTitle = pendingContentData.title || ""
+                                item.contentDescription = pendingContentData.description || ""
+                                item.logoUrl = pendingContentData.logoUrl || ""
+                                item.seasonNumber = pendingContentData.seasonNumber || 0
+                                item.episodeNumber = pendingContentData.episodeNumber || 0
+                            }
                             item.videoPlayer.source = pendingStreamUrl
                             // Auto-play
                             Qt.callLater(function() {
                                 item.videoPlayer.play()
                             })
                             pendingStreamUrl = ""
+                            pendingContentData = {}
+                        }
+                    }
+                    
+                    Connections {
+                        target: videoPlayerLoader.item
+                        function onGoBackRequested() {
+                            console.log("[MainApp] Go back requested from video player")
+                            // Stop video playback before leaving
+                            if (videoPlayerLoader.item && videoPlayerLoader.item.videoPlayer) {
+                                console.log("[MainApp] Stopping video playback")
+                                videoPlayerLoader.item.videoPlayer.stop()
+                            }
+                            stackLayout.currentIndex = 4  // Go back to detail screen
+                        }
+                        
+                        function onToggleFullscreenRequested() {
+                            console.log("[MainApp] Toggle fullscreen requested")
+                            if (root.visibility === ApplicationWindow.FullScreen) {
+                                root.showNormal()
+                            } else {
+                                root.showFullScreen()
+                            }
                         }
                     }
                 }
