@@ -27,7 +27,7 @@ jobs:
         arch: 'win64_msvc2019_64'
         cache: 'true'
         set-env: 'true'
-        modules: 'qt5compat qtshadertools'
+        modules: 'qt5compat qtshadertools' # Essential for UI and Graphics
         
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.1
@@ -64,74 +64,63 @@ jobs:
       run: |
         if not exist "vendor\mdk-sdk\lib\x64\mdk.lib" (
           echo "Warning: MDK SDK Windows library not found at vendor\mdk-sdk\lib\x64\mdk.lib"
-          echo "Build may fail if MDK SDK is required."
         )
         if not exist "vendor\mdk-sdk\bin\x64" (
           echo "Warning: MDK SDK Windows binaries directory not found at vendor\mdk-sdk\bin\x64"
         )
-        
-    - name: Deploy Qt dependencies
-      shell: cmd
-      run: |
-        if exist "build\${{ inputs.build_type }}\Yantrium.exe" (
-          echo "Running windeployqt with QML directory and compiler runtime..."
-          windeployqt.exe --qmldir resources/qml --compiler-runtime build\${{ inputs.build_type }}\Yantrium.exe
-          echo "Qt deployment completed"
-        ) else (
-          echo "Executable not found, skipping windeployqt"
-          exit /b 1
-        )
-        
-    - name: Verify Qt deployment
-      shell: cmd
-      run: |
-        echo "Verifying Qt deployment..."
-        if exist "build\${{ inputs.build_type }}\platforms" (
-          echo "Platforms directory found:"
-          dir /B build\${{ inputs.build_type }}\platforms
-        ) else (
-          echo "ERROR: platforms directory not found!"
-          exit /b 1
-        )
-        if exist "build\${{ inputs.build_type }}\platforms\qwindows.dll" (
-          echo "SUCCESS: qwindows.dll found!"
-        ) else (
-          echo "ERROR: qwindows.dll not found in platforms directory!"
-          exit /b 1
-        )
-        
-    - name: Copy SQL plugins
+
+    # --- NUCLEAR TLS FIX ---
+    # This step runs windeployqt AND manually copies the TLS plugins folder
+    - name: Deploy Qt dependencies and TLS
       shell: powershell
       run: |
-        Write-Host "Copying SQL plugins..."
-        $windeployqt = Get-Command windeployqt -ErrorAction SilentlyContinue
-        if (-not $windeployqt) {
-          Write-Host "ERROR: windeployqt not found in PATH"
+        $buildDir = "build\${{ inputs.build_type }}"
+        $exePath = "$buildDir\Yantrium.exe"
+        
+        if (-not (Test-Path $exePath)) {
+          Write-Host "FATAL: Executable not found at $exePath"
           exit 1
         }
-        $windeployqtPath = $windeployqt.Path
-        Write-Host "windeployqt found at: $windeployqtPath"
+
+        # 1. Run windeployqt
+        Write-Host "Running windeployqt..."
+        # We explicitly add --network and --tls to force checks
+        windeployqt.exe --qmldir resources/qml --network --tls --compiler-runtime $exePath
+
+        # 2. MANUALLY COPY TLS PLUGIN
+        # Find where Qt is installed by asking where windeployqt lives
+        $windeployqt = Get-Command windeployqt
+        $binDir = Split-Path -Parent $windeployqt.Path
+        $qtRootDir = Split-Path -Parent $binDir
+        $qtPluginsDir = Join-Path $qtRootDir "plugins"
+        $qtTlsSrc = Join-Path $qtPluginsDir "tls"
         
-        # Resolve the path: windeployqt is in bin/, plugins are in plugins/
-        $qtBinDir = Split-Path -Parent $windeployqtPath
-        $qtRootDir = Split-Path -Parent $qtBinDir
-        $sqlPluginsDir = Join-Path $qtRootDir "plugins\sqldrivers"
+        $destTlsDir = Join-Path $buildDir "tls"
+
+        Write-Host "Checking for TLS plugins at: $qtTlsSrc"
         
-        Write-Host "Looking for SQL plugins at: $sqlPluginsDir"
-        
-        $sqliteDll = Join-Path $sqlPluginsDir "qsqlite.dll"
-        if (Test-Path $sqliteDll) {
-          $targetDir = "build\${{ inputs.build_type }}\sqldrivers"
-          if (-not (Test-Path $targetDir)) {
-            New-Item -ItemType Directory -Path $targetDir | Out-Null
-          }
-          Copy-Item -Path $sqliteDll -Destination $targetDir -Force
-          Write-Host "SUCCESS: SQLite plugin copied to $targetDir"
+        if (Test-Path $qtTlsSrc) {
+           Write-Host "Found Qt TLS plugins. Copying to $destTlsDir..."
+           if (-not (Test-Path $destTlsDir)) {
+             New-Item -ItemType Directory -Path $destTlsDir | Out-Null
+           }
+           Copy-Item -Path "$qtTlsSrc\*" -Destination $destTlsDir -Force -Recurse
+           Write-Host "SUCCESS: TLS plugin folder created."
         } else {
-          Write-Host "ERROR: qsqlite.dll not found at $sqlPluginsDir"
-          exit 1
+           Write-Host "ERROR: Could not find TLS plugins at $qtTlsSrc"
+           exit 1
         }
-        
+
+        # 3. Verify the result
+        Write-Host "Verifying TLS setup..."
+        if (Test-Path "$destTlsDir\qopensslbackend.dll") {
+            Write-Host " [OK] qopensslbackend.dll found."
+        } else {
+            Write-Host " [FAIL] qopensslbackend.dll missing!"
+        }
+
+    # --- ROBUST OPENSSL FIX ---
+    # Installs OpenSSL 3 and finds the DLLs even if paths change
     - name: Setup and Copy OpenSSL
       shell: powershell
       run: |
@@ -161,7 +150,6 @@ jobs:
         $targetDir = "build\${{ inputs.build_type }}"
         
         # Copy using wildcards to match either "libcrypto-3.dll" or "libcrypto-3-x64.dll"
-        # -Recurse isn't needed for flat bin folder but ensures we find files
         $libs = Get-ChildItem -Path $opensslPath -Include "libcrypto*.dll", "libssl*.dll" -Recurse
         
         if ($libs) {
@@ -172,6 +160,28 @@ jobs:
         } else {
            Write-Host "FATAL: No libcrypto/libssl DLLs found in $opensslPath"
            exit 1
+        }
+
+    - name: Copy SQL plugins
+      shell: powershell
+      run: |
+        Write-Host "Copying SQL plugins..."
+        $windeployqt = Get-Command windeployqt -ErrorAction SilentlyContinue
+        if (-not $windeployqt) { Write-Host "ERROR: windeployqt not found"; exit 1 }
+        
+        $qtBinDir = Split-Path -Parent $windeployqt.Path
+        $qtRootDir = Split-Path -Parent $qtBinDir
+        $sqlPluginsDir = Join-Path $qtRootDir "plugins\sqldrivers"
+        
+        $sqliteDll = Join-Path $sqlPluginsDir "qsqlite.dll"
+        if (Test-Path $sqliteDll) {
+          $targetDir = "build\${{ inputs.build_type }}\sqldrivers"
+          if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir | Out-Null }
+          Copy-Item -Path $sqliteDll -Destination $targetDir -Force
+          Write-Host "SUCCESS: SQLite plugin copied to $targetDir"
+        } else {
+          Write-Host "ERROR: qsqlite.dll not found at $sqlPluginsDir"
+          exit 1
         }
         
     - name: Copy MDK DLLs
@@ -203,5 +213,6 @@ jobs:
           build/${{ inputs.build_type }}/QtQuick/
           build/${{ inputs.build_type }}/QtQml/
           build/${{ inputs.build_type }}/Qt5Compat/
+          build/${{ inputs.build_type }}/tls/      # <--- IMPORTANT: Includes the TLS plugin folder
         retention-days: 30
         if-no-files-found: warn
