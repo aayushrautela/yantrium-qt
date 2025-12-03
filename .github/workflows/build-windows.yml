@@ -138,32 +138,40 @@ jobs:
         Write-Host "Installing OpenSSL 3 via Chocolatey..."
         choco install openssl --no-progress
         
-        $opensslPath = "C:\Program Files\OpenSSL-Win64\bin"
+        # Check both the old (Win64) and new (FireDaemon) paths
+        $possiblePaths = @(
+          "C:\Program Files\OpenSSL\bin",
+          "C:\Program Files\OpenSSL-Win64\bin"
+        )
+        
+        $opensslPath = $null
+        foreach ($path in $possiblePaths) {
+          if (Test-Path $path) {
+            $opensslPath = $path
+            break
+          }
+        }
+        
+        if (-not $opensslPath) {
+          Write-Host "FATAL: Could not find OpenSSL bin directory."
+          exit 1
+        }
+        
+        Write-Host "Found OpenSSL at: $opensslPath"
         $targetDir = "build\${{ inputs.build_type }}"
         
-        Write-Host "Looking for OpenSSL at: $opensslPath"
+        # Copy using wildcards to match either "libcrypto-3.dll" or "libcrypto-3-x64.dll"
+        # -Recurse isn't needed for flat bin folder but ensures we find files
+        $libs = Get-ChildItem -Path $opensslPath -Include "libcrypto*.dll", "libssl*.dll" -Recurse
         
-        # Qt 6.6+ on Windows requires OpenSSL 3
-        # We need to copy libcrypto-3-x64.dll and libssl-3-x64.dll
-        $dlls = @("libcrypto-3-x64.dll", "libssl-3-x64.dll")
-        
-        foreach ($dll in $dlls) {
-          $source = Join-Path $opensslPath $dll
-          if (Test-Path $source) {
-            Copy-Item -Path $source -Destination $targetDir -Force
-            Write-Host "SUCCESS: Copied $dll"
-          } else {
-            Write-Host "ERROR: Could not find $dll at $source"
-            # Fallback: Try finding without -x64 suffix (using single quotes to fix syntax)
-            $fallback = Join-Path $opensslPath ($dll -replace '-x64','')
-            if (Test-Path $fallback) {
-               Copy-Item -Path $fallback -Destination $targetDir -Force
-               Write-Host "SUCCESS: Copied fallback $($dll -replace '-x64','')"
-            } else {
-               Write-Host "FATAL: Could not find OpenSSL DLL: $dll"
-               exit 1
-            }
+        if ($libs) {
+          foreach ($lib in $libs) {
+            Copy-Item -Path $lib.FullName -Destination $targetDir -Force
+            Write-Host "SUCCESS: Copied $($lib.Name)"
           }
+        } else {
+           Write-Host "FATAL: No libcrypto/libssl DLLs found in $opensslPath"
+           exit 1
         }
         
     - name: Copy MDK DLLs
