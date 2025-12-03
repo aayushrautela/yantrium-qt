@@ -71,22 +71,34 @@ Item {
 
     // --- Initialization ---
     Component.onCompleted: {
-        if (libraryService) loadCatalogs()
+        console.log("[HomeScreen] Component.onCompleted")
+        console.log("[HomeScreen] libraryService:", libraryService)
+        if (libraryService) {
+            console.log("[HomeScreen] Calling loadCatalogs from Component.onCompleted")
+            loadCatalogs()
+        } else {
+            console.error("[HomeScreen] ERROR: libraryService is null!")
+        }
     }
 
     function loadCatalogs() {
         console.log("[HomeScreen] Requesting catalogs...")
+        console.log("[HomeScreen] libraryService exists:", !!libraryService)
+        console.log("[HomeScreen] libraryService.isValid:", libraryService ? libraryService.isValid : "N/A")
         isLoading = true
         catalogSectionsModel.clear()
         libraryService.loadCatalogs()
     }
 
     function onCatalogsLoaded(sections) {
+        console.log("[HomeScreen] onCatalogsLoaded called with sections:", sections ? sections.length : "null")
         isLoading = false
         if (!sections || sections.length === 0) {
+            console.log("[HomeScreen] No sections received, clearing models")
             catalogSectionsModel.clear()
             return
         }
+        console.log("[HomeScreen] Processing", sections.length, "sections")
         catalogSectionsModel.clear()
 
         // Hero Logic
@@ -125,6 +137,9 @@ Item {
                         addonId: section.addonId || ""
                     })
                 }
+                console.log("[HomeScreen] Added section:", section.name, "with", cardModel.count, "items")
+            } else {
+                console.log("[HomeScreen] Section", section.name, "has no items")
             }
 
             catalogSectionsModel.append({
@@ -133,6 +148,7 @@ Item {
                 itemsModel: cardModel 
             })
         }
+        console.log("[HomeScreen] Total sections in model:", catalogSectionsModel.count)
     }
 
     function updateHeroSection(data, animate, direction) {
@@ -173,6 +189,7 @@ Item {
     function onError(message) {
         console.error("[HomeScreen] Error:", message)
         isLoading = false
+        console.log("[HomeScreen] Error state - isLoading:", isLoading, "catalogSectionsModel.count:", catalogSectionsModel.count)
     }
     
     function onHeroPlayClicked() {
@@ -249,17 +266,29 @@ Item {
         Keys.onRightPressed: cycleHero(1)
         Keys.onLeftPressed: cycleHero(-1)
 
+        Component.onCompleted: {
+            console.log("[HomeScreen] UI Rectangle completed, size:", width, "x", height)
+        }
+
         ScrollView {
             anchors.fill: parent
             contentWidth: width
             contentHeight: contentColumn.height
             clip: true
 
+            Component.onCompleted: {
+                console.log("[HomeScreen] ScrollView completed, contentHeight:", contentColumn.height)
+            }
+
             Column {
                 id: contentColumn
                 width: parent.width
                 spacing: 40
                 bottomPadding: 80
+                
+                Component.onCompleted: {
+                    console.log("[HomeScreen] ContentColumn completed, width:", width)
+                }
 
                 // 1. Hero Section (Full width, no margin)
                 Loader {
@@ -319,6 +348,10 @@ Item {
                     id: catalogRepeater
                     model: catalogSectionsModel
 
+                    onItemAdded: {
+                        console.log("[HomeScreen] Repeater item added, index:", index, "total:", catalogRepeater.count)
+                    }
+
                     Column {
                         id: sectionColumn
                         width: parent.width
@@ -326,6 +359,10 @@ Item {
 
                         readonly property string sectionTitle: model.sectionTitle
                         readonly property var sectionItemsModel: model.itemsModel
+                        
+                        Component.onCompleted: {
+                            console.log("[HomeScreen] Section column created:", sectionTitle, "itemsModel:", sectionItemsModel, "items count:", sectionItemsModel ? sectionItemsModel.count : 0)
+                        }
 
                         // Section Title
                         Text {
@@ -355,6 +392,14 @@ Item {
                                 rightMargin: 0
                                 clip: true 
                                 model: sectionColumn.sectionItemsModel
+                                
+                                Component.onCompleted: {
+                                    console.log("[HomeScreen] ListView created, model:", sectionColumn.sectionItemsModel, "count:", sectionColumn.sectionItemsModel ? sectionColumn.sectionItemsModel.count : 0)
+                                }
+                                
+                                onCountChanged: {
+                                    console.log("[HomeScreen] ListView count changed:", count, "for section:", sectionColumn.sectionTitle)
+                                }
                                 
                                 PropertyAnimation {
                                     id: sectionScrollAnimation
@@ -516,29 +561,6 @@ Item {
                         }
                     }
                 }
-            }
-        }
-    }
-    
-    // Stream Selection Dialog
-    StreamSelectionDialog {
-        id: streamDialog
-        parent: root.parent
-        
-        onStreamSelected: function(stream) {
-            console.log("[HomeScreen] Stream selected:", JSON.stringify(stream))
-            console.log("[HomeScreen] Stream URL:", stream.url)
-            
-            // Emit signal to request playback (will be handled by MainApp)
-            if (stream.url) {
-                root.playRequested(stream.url)
-            }
-        }
-    }
-    
-    // Signal for playback request
-    signal playRequested(string streamUrl)
-}
 
                 // 4. Loading & Empty States
                 Rectangle {
@@ -554,7 +576,7 @@ Item {
                     color: "transparent"
                     Text {
                         anchors.centerIn: parent
-                        text: "No Content Found\nInstall addons to populate library"
+                        text: "No Content Found\nInstall addons to populate library\n\nDebug: isLoading=" + isLoading + ", sections=" + catalogSectionsModel.count + ", continue=" + continueWatchingModel.count
                         horizontalAlignment: Text.AlignHCenter; color: "#666"; font.pixelSize: 16
                     }
                 }

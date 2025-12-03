@@ -1,48 +1,203 @@
-# Build directories
+# ============================================
+# Build Outputs & Artifacts
+# ============================================
+
+# CMake build files
 build/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 *.cmake
 !CMakeLists.txt
+!**/CMakeLists.txt
+.cmake/
 
-# Executables
+# Compiled binaries
 yantrium-qt
+Yantrium
 *.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.o
+*.obj
+*.out
 
-# Qt specific
+# Build artifacts
+*.ninja
+*.ninja_deps
+*.ninja_log
+compile_commands.json
+
+# ============================================
+# Qt/QML Build Artifacts
+# ============================================
+
+# Qt Creator
 *.pro.user
 *.pro.user.*
+*.qmake.stash
+*.qmake.cache
+
+# MOC (Meta-Object Compiler) files
 moc_*.cpp
 moc_*.h
 qrc_*.cpp
 ui_*.h
 
-# IDE
+# Qt autogen files
+*_autogen/
+*.autogen
+
+# QML cache
+.qmlcache/
+*.qmlc
+*.jsc
+
+# ============================================
+# Cache & Temporary Files
+# ============================================
+
+# Flatpak build cache
+.flatpak-builder/
+
+# General cache directories
+.cache/
+*.cache
+.cmake/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================
+# IDE & Editor Files
+# ============================================
+
+# Visual Studio Code
 .vscode/
+!.vscode/settings.json.example
+!.vscode/tasks.json.example
+!.vscode/launch.json.example
+
+# JetBrains IDEs
 .idea/
+*.iml
+*.iws
+*.ipr
+
+# Qt Creator
+*.creator
+*.creator.user
+*.creator.user.*
+*.includes
+*.files
+*.config
+
+# Vim
 *.swp
 *.swo
 *~
 
-# OS
-.DS_Store
-Thumbs.db
+# Emacs
+*~
+\#*\#
+.\#*
 
-# Debug
+# ============================================
+# Debug & Testing
+# ============================================
+
+# Debug symbols
 *.dSYM/
+*.pdb
+*.su
+*.idb
+*.ilk
 
-# Vendor SDK (if extracted)
-# Allow Windows x64 binaries for CI builds
-vendor/mdk-sdk/lib/amd64/
-vendor/mdk-sdk/bin/amd64/
-!vendor/mdk-sdk/lib/x64/
-!vendor/mdk-sdk/bin/x64/
+# Test outputs
+test_*.cpp
+test_*.dart
+test_*.py
+*.test
+*.test.exe
 
-# References
+# Coverage reports
+*.gcov
+*.gcda
+*.gcno
+coverage/
+*.lcov
+
+# ============================================
+# OS-Specific Files
+# ============================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================
+# Dependencies & Vendor
+# ============================================
+
+
+# ============================================
+# Project-Specific
+# ============================================
+
+# Old Dart implementation (reference only)
 dart_old/
-CMakeLists.txt
 
-# Build script with API keys (keep private)
+# Build scripts with sensitive data
 build.sh
-test_tmdb_raw.cpp
+!build.sh.example
+
+# API keys and secrets
+*.key
+*.secret
+*.env
+.env.local
+.env.*.local
+
+# Database files (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# ============================================
+# Documentation Build
+# ============================================
+
+docs/_build/
+docs/.doctrees/
+*.pdf
