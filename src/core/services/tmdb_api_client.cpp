@@ -2,6 +2,7 @@
 #include "configuration.h"
 #include <QDebug>
 #include <QJsonParseError>
+#include <QEventLoop>
 
 TmdbApiClient::TmdbApiClient(QObject* parent)
     : QObject(parent)
