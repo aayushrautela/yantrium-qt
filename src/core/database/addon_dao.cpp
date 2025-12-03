@@ -174,3 +174,4 @@ AddonRecord AddonDao::recordFromQuery(const QSqlQuery& query)
 
 
 
+

@@ -18,7 +18,9 @@
 struct CachedMetadata {
     QJsonObject data;
     QDateTime timestamp;
-    static constexpr int ttlSeconds = 300; // 5 minutes default
+    int ttlSeconds;
+    
+    CachedMetadata() : ttlSeconds(300) {} // Default 5 minutes
     
     bool isExpired() const {
         return QDateTime::currentDateTime().secsTo(timestamp) < -ttlSeconds;
@@ -75,6 +77,7 @@ public:
 
 signals:
     void error(const TmdbErrorInfo& errorInfo);
+    void cachedResponseReady(const QString& path, const QUrlQuery& query, const QJsonObject& data);
 
 private slots:
     void onReplyFinished();
@@ -112,7 +115,7 @@ private:
     // Caching
     QString getCacheKey(const QString& path, const QUrlQuery& query) const;
     QJsonObject getCachedResponse(const QString& cacheKey) const;
-    void cacheResponse(const QString& cacheKey, const QJsonObject& data);
+    void cacheResponse(const QString& cacheKey, const QJsonObject& data, int ttlSeconds);
     int getTtlForEndpoint(const QString& path) const;
     
     // Error handling

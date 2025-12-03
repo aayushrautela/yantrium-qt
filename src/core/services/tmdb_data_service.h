@@ -28,6 +28,7 @@ public:
     // Cache management (delegates to api client)
     void clearCache();
     void clearCacheForId(int tmdbId, const QString& type);
+    int getCacheSize() const;
 
 signals:
     void movieMetadataFetched(int tmdbId, const QJsonObject& data);
@@ -42,6 +43,7 @@ signals:
 
 private slots:
     void onApiClientError(const TmdbErrorInfo& errorInfo);
+    void onCachedResponseReady(const QString& path, const QUrlQuery& query, const QJsonObject& data);
     void onFindReplyFinished();
     void onMovieMetadataReplyFinished();
     void onTvMetadataReplyFinished();

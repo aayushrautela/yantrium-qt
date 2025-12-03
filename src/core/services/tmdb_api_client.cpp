@@ -109,14 +109,14 @@ QJsonObject TmdbApiClient::getCachedResponse(const QString& cacheKey) const
     return QJsonObject();
 }
 
-void TmdbApiClient::cacheResponse(const QString& cacheKey, const QJsonObject& data)
+void TmdbApiClient::cacheResponse(const QString& cacheKey, const QJsonObject& data, int ttlSeconds)
 {
-    // Note: We use a fixed TTL for now. The getTtlForEndpoint method is available
-    // for future enhancement if we want endpoint-specific TTLs
     CachedMetadata cached;
     cached.data = data;
     cached.timestamp = QDateTime::currentDateTime();
+    cached.ttlSeconds = ttlSeconds;
     m_cache[cacheKey] = cached;
+    qDebug() << "[TmdbApiClient] Cached response for:" << cacheKey << "TTL:" << ttlSeconds << "seconds";
 }
 
 int TmdbApiClient::getTtlForEndpoint(const QString& path) const
@@ -160,6 +160,10 @@ QNetworkReply* TmdbApiClient::executeRequest(const QString& path, const QUrlQuer
     if (reply) {
         reply->setProperty("path", path);
         reply->setProperty("method", method);
+        // Store query as string for reconstruction
+        if (!query.isEmpty()) {
+            reply->setProperty("query", query.toString());
+        }
         connect(reply, &QNetworkReply::finished, this, &TmdbApiClient::onReplyFinished);
         connect(reply, &QNetworkReply::errorOccurred, this, &TmdbApiClient::onReplyError);
     }
@@ -173,10 +177,12 @@ QNetworkReply* TmdbApiClient::get(const QString& path, const QUrlQuery& query)
     QJsonObject cached = getCachedResponse(cacheKey);
     
     if (!cached.isEmpty()) {
-        // Return cached response via a custom signal or callback
-        // For now, we'll still make the request but the cache check is done
-        // The actual caching happens in onReplyFinished
+        // Cache hit - emit cached response asynchronously and skip network request
         qDebug() << "[TmdbApiClient] Cache hit for:" << cacheKey;
+        QTimer::singleShot(0, this, [this, path, query, cached]() {
+            emit cachedResponseReady(path, query, cached);
+        });
+        return nullptr; // No network request needed
     }
     
     if (!canMakeRequest()) {
@@ -279,9 +285,36 @@ void TmdbApiClient::onReplyFinished()
     QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
     if (!reply) return;
     
-    // Don't read the data here - let the service-specific handlers read it
-    // Reading here would consume the data before handlers can access it
-    // Caching can be handled by services after successful parsing if needed
+    // Cache successful responses
+    if (reply->error() == QNetworkReply::NoError) {
+        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (statusCode == 200) {
+            QString path = reply->property("path").toString();
+            QUrlQuery query;
+            // Reconstruct query from stored property or URL
+            QString queryString = reply->property("query").toString();
+            if (!queryString.isEmpty()) {
+                query = QUrlQuery(queryString);
+            } else {
+                // Fallback to URL query
+                QUrl url = reply->url();
+                if (url.hasQuery()) {
+                    query = QUrlQuery(url.query());
+                }
+            }
+            
+            // Read and parse response for caching (peek doesn't consume data)
+            QByteArray responseData = reply->peek(reply->bytesAvailable());
+            QJsonParseError parseError;
+            QJsonDocument doc = QJsonDocument::fromJson(responseData, &parseError);
+            
+            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                QString cacheKey = getCacheKey(path, query);
+                int ttlSeconds = getTtlForEndpoint(path);
+                cacheResponse(cacheKey, doc.object(), ttlSeconds);
+            }
+        }
+    }
     
     // The reply will be deleted by the service handlers after they process it
 }

@@ -126,3 +126,4 @@ LocalLibraryRecord LocalLibraryDao::recordFromQuery(const QSqlQuery& query)
     return record;
 }
 
+

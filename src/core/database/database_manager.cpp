@@ -91,6 +91,12 @@ bool DatabaseManager::initialize(const QString& databasePath)
         return false;
     }
     
+    if (!createSyncTrackingTable()) {
+        qWarning() << "Failed to create sync_tracking table";
+        m_database.close();
+        return false;
+    }
+    
     m_initialized = true;
     return true;
 }
@@ -242,6 +248,30 @@ bool DatabaseManager::createWatchHistoryTable()
     }
     
     qDebug() << "Watch history table created successfully";
+    return true;
+}
+
+bool DatabaseManager::createSyncTrackingTable()
+{
+    QSqlQuery query(m_database);
+    
+    QString createTableSql = R"(
+        CREATE TABLE IF NOT EXISTS sync_tracking (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sync_type TEXT NOT NULL UNIQUE,
+            last_sync_at TEXT NOT NULL,
+            full_sync_completed INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    )";
+    
+    if (!query.exec(createTableSql)) {
+        qWarning() << "Failed to create sync_tracking table:" << query.lastError().text();
+        return false;
+    }
+    
+    qDebug() << "Sync tracking table created successfully";
     return true;
 }
 

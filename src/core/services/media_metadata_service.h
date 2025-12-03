@@ -5,6 +5,7 @@
 #include <QString>
 #include <QVariantMap>
 #include <QMap>
+#include <QDateTime>
 
 class TmdbDataService;
 class OmdbService;
@@ -19,6 +20,10 @@ public:
     
     Q_INVOKABLE void getCompleteMetadata(const QString& contentId, const QString& type);
     Q_INVOKABLE void getCompleteMetadataFromTmdbId(int tmdbId, const QString& type);
+    
+    // Cache management
+    void clearMetadataCache();
+    int getMetadataCacheSize() const;
 
 signals:
     void metadataLoaded(const QVariantMap& completeMetadata);
@@ -47,6 +52,18 @@ private:
     
     QMap<QString, PendingRequest> m_pendingDetailsByImdbId; // IMDB ID -> pending request
     QMap<int, QString> m_tmdbIdToImdbId; // TMDB ID -> IMDB ID
+    
+    // Metadata cache
+    struct CachedMetadata {
+        QVariantMap data;
+        QDateTime timestamp;
+        static constexpr int ttlSeconds = 3600; // 1 hour
+        
+        bool isExpired() const {
+            return QDateTime::currentDateTime().secsTo(timestamp) < -ttlSeconds;
+        }
+    };
+    QMap<QString, CachedMetadata> m_metadataCache;
     
     void processPendingRequest(const QString& imdbId);
 };

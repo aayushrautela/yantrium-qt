@@ -1,5 +1,7 @@
 #include "trakt_core_service.h"
 #include "configuration.h"
+#include "../database/sync_tracking_dao.h"
+#include "../database/watch_history_dao.h"
 #include <QUrlQuery>
 #include <QNetworkRequest>
 #include <QJsonDocument>
@@ -9,6 +11,8 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <cmath>
+#include <QVariantMap>
+#include <QUrl>
 
 TraktCoreService& TraktCoreService::instance()
 {
@@ -27,6 +31,8 @@ TraktCoreService::TraktCoreService(QObject* parent)
     , m_isProcessingQueue(false)
     , m_completionThreshold(81)  // More than 80% (>80%) is considered watched
     , m_cleanupTimer(new QTimer(this))
+    , m_syncDao(nullptr)
+    , m_watchHistoryDao(nullptr)
 {
     m_queueTimer->setSingleShot(true);
     m_queueTimer->setInterval(MIN_API_INTERVAL_MS);
@@ -39,6 +45,8 @@ TraktCoreService::TraktCoreService(QObject* parent)
 
 TraktCoreService::~TraktCoreService()
 {
+    delete m_syncDao;
+    delete m_watchHistoryDao;
 }
 
 void TraktCoreService::setDatabase(QSqlDatabase database)
@@ -49,6 +57,8 @@ void TraktCoreService::setDatabase(QSqlDatabase database)
     }
     m_database = database;
     m_authDao = new TraktAuthDao(database);
+    m_syncDao = new SyncTrackingDao(database);
+    m_watchHistoryDao = new WatchHistoryDao(database);
     qDebug() << "[TraktCoreService] Database initialized";
 }
 
@@ -208,9 +218,131 @@ QUrl TraktCoreService::buildUrl(const QString& endpoint)
     return QUrl(config.traktBaseUrl() + endpoint);
 }
 
+QString TraktCoreService::getCacheKey(const QString& endpoint, const QUrlQuery& query) const
+{
+    QString key = endpoint;
+    if (!query.isEmpty()) {
+        QStringList items;
+        for (const auto& item : query.queryItems()) {
+            items << QString("%1=%2").arg(item.first, item.second);
+        }
+        items.sort();
+        key += "?" + items.join("&");
+    }
+    return key;
+}
+
+QJsonObject TraktCoreService::getCachedResponse(const QString& cacheKey) const
+{
+    if (m_cache.contains(cacheKey)) {
+        const CachedTraktData& cached = m_cache[cacheKey];
+        if (!cached.isExpired()) {
+            return cached.data;
+        }
+    }
+    return QJsonObject();
+}
+
+void TraktCoreService::cacheResponse(const QString& cacheKey, const QJsonObject& data, int ttlSeconds)
+{
+    CachedTraktData cached;
+    cached.data = data;
+    cached.timestamp = QDateTime::currentDateTime();
+    cached.ttlSeconds = ttlSeconds;
+    m_cache[cacheKey] = cached;
+    qDebug() << "[TraktCoreService] Cached response for:" << cacheKey << "TTL:" << ttlSeconds << "seconds";
+}
+
+int TraktCoreService::getTtlForEndpoint(const QString& endpoint) const
+{
+    // Different TTLs for different endpoint types
+    if (endpoint.contains("/users/me")) {
+        return 3600; // 1 hour for user profile
+    } else if (endpoint.contains("/sync/watched") || endpoint.contains("/sync/collection") || endpoint.contains("/sync/watchlist")) {
+        return 1800; // 30 minutes for watched/collection/watchlist
+    } else if (endpoint.contains("/sync/playback")) {
+        return 300; // 5 minutes for playback progress
+    } else if (endpoint.contains("/sync/ratings")) {
+        return 3600; // 1 hour for ratings
+    }
+    return 300; // 5 minutes default
+}
+
 void TraktCoreService::apiRequest(const QString& endpoint, const QString& method,
                                   const QJsonObject& data, QObject* receiver, const char* slot)
 {
+    // Check cache for GET requests
+    if (method == "GET") {
+        QString cacheKey = getCacheKey(endpoint);
+        QJsonObject cached = getCachedResponse(cacheKey);
+        
+        if (!cached.isEmpty()) {
+            // Cache hit - emit cached response asynchronously
+            qDebug() << "[TraktCoreService] Cache hit for:" << cacheKey;
+            QTimer::singleShot(0, this, [this, endpoint, cached]() {
+                // Parse cached response based on endpoint (same logic as onApiReplyFinished)
+                QJsonArray arr;
+                if (cached.contains("_array")) {
+                    // Array was cached as object with _array key
+                    arr = cached["_array"].toArray();
+                }
+                
+                if (endpoint.contains("/users/me")) {
+                    emit userProfileFetched(cached);
+                } else if (endpoint.contains("/sync/watched/movies")) {
+                    QVariantList movies;
+                    for (const QJsonValue& val : arr) {
+                        movies.append(val.toObject().toVariantMap());
+                    }
+                    emit watchedMoviesFetched(movies);
+                } else if (endpoint.contains("/sync/watched/shows")) {
+                    QVariantList shows;
+                    for (const QJsonValue& val : arr) {
+                        shows.append(val.toObject().toVariantMap());
+                    }
+                    emit watchedShowsFetched(shows);
+                } else if (endpoint.contains("/sync/watchlist/movies")) {
+                    QVariantList movies;
+                    for (const QJsonValue& val : arr) {
+                        movies.append(val.toObject().toVariantMap());
+                    }
+                    emit watchlistMoviesFetched(movies);
+                } else if (endpoint.contains("/sync/watchlist/shows")) {
+                    QVariantList shows;
+                    for (const QJsonValue& val : arr) {
+                        shows.append(val.toObject().toVariantMap());
+                    }
+                    emit watchlistShowsFetched(shows);
+                } else if (endpoint.contains("/sync/collection/movies")) {
+                    QVariantList movies;
+                    for (const QJsonValue& val : arr) {
+                        movies.append(val.toObject().toVariantMap());
+                    }
+                    emit collectionMoviesFetched(movies);
+                } else if (endpoint.contains("/sync/collection/shows")) {
+                    QVariantList shows;
+                    for (const QJsonValue& val : arr) {
+                        shows.append(val.toObject().toVariantMap());
+                    }
+                    emit collectionShowsFetched(shows);
+                } else if (endpoint.contains("/sync/ratings")) {
+                    QVariantList ratings;
+                    for (const QJsonValue& val : arr) {
+                        ratings.append(val.toObject().toVariantMap());
+                    }
+                    emit ratingsFetched(ratings);
+                } else if (endpoint.contains("/sync/playback")) {
+                    QVariantList progress;
+                    for (const QJsonValue& val : arr) {
+                        progress.append(val.toObject().toVariantMap());
+                    }
+                    emit playbackProgressFetched(progress);
+                }
+            });
+            return; // Skip network request
+        }
+    }
+    
     // Rate limiting: ensure minimum interval between API calls
     qint64 now = QDateTime::currentMSecsSinceEpoch();
     qint64 timeSinceLastCall = now - m_lastApiCall;
@@ -418,6 +550,364 @@ void TraktCoreService::getWatchedShows()
     apiRequest("/sync/watched/shows", "GET");
 }
 
+void TraktCoreService::getWatchedMoviesSince(const QDateTime& since)
+{
+    // Use /sync/history/movies endpoint with start_at parameter
+    QString endpoint = "/sync/history/movies";
+    if (since.isValid()) {
+        QString sinceStr = since.toString(Qt::ISODate);
+        endpoint += "?start_at=" + QUrl::toPercentEncoding(sinceStr);
+    }
+    qDebug() << "[TraktCoreService] Fetching watched movies since:" << since.toString();
+    apiRequest(endpoint, "GET");
+}
+
+void TraktCoreService::getWatchedShowsSince(const QDateTime& since)
+{
+    // Use /sync/history/episodes endpoint with start_at parameter
+    QString endpoint = "/sync/history/episodes";
+    if (since.isValid()) {
+        QString sinceStr = since.toString(Qt::ISODate);
+        endpoint += "?start_at=" + QUrl::toPercentEncoding(sinceStr);
+    }
+    qDebug() << "[TraktCoreService] Fetching watched shows since:" << since.toString();
+    apiRequest(endpoint, "GET");
+}
+
+void TraktCoreService::syncWatchedMovies(bool forceFullSync)
+{
+    if (!m_database.isValid()) {
+        emit syncError("watched_movies", "Database not initialized");
+        return;
+    }
+    
+    if (!m_syncDao) {
+        m_syncDao = new SyncTrackingDao(m_database);
+    }
+    
+    QString syncType = "watched_movies";
+    SyncTrackingRecord tracking = m_syncDao->getSyncTracking(syncType);
+    
+    if (forceFullSync || !tracking.fullSyncCompleted) {
+        qDebug() << "[TraktCoreService] Performing full sync for watched movies";
+        // For full sync, use watched endpoint (no date filter)
+        getWatchedMovies();
+    } else {
+        // Get last sync time and subtract buffer (1 hour) to ensure overlap
+        QDateTime lastSync = tracking.lastSyncAt;
+        QDateTime syncStart = lastSync.addSecs(-3600); // 1 hour buffer
+        
+        qDebug() << "[TraktCoreService] Performing incremental sync for watched movies since:" << syncStart.toString();
+        getWatchedMoviesSince(syncStart);
+    }
+}
+
+void TraktCoreService::syncWatchedShows(bool forceFullSync)
+{
+    if (!m_database.isValid()) {
+        emit syncError("watched_shows", "Database not initialized");
+        return;
+    }
+    
+    if (!m_syncDao) {
+        m_syncDao = new SyncTrackingDao(m_database);
+    }
+    
+    QString syncType = "watched_shows";
+    SyncTrackingRecord tracking = m_syncDao->getSyncTracking(syncType);
+    
+    if (forceFullSync || !tracking.fullSyncCompleted) {
+        qDebug() << "[TraktCoreService] Performing full sync for watched shows";
+        // For full sync, use watched endpoint (no date filter)
+        getWatchedShows();
+    } else {
+        // Get last sync time and subtract buffer (1 hour) to ensure overlap
+        QDateTime lastSync = tracking.lastSyncAt;
+        QDateTime syncStart = lastSync.addSecs(-3600); // 1 hour buffer
+        
+        qDebug() << "[TraktCoreService] Performing incremental sync for watched shows since:" << syncStart.toString();
+        getWatchedShowsSince(syncStart);
+    }
+}
+
+bool TraktCoreService::isInitialSyncCompleted(const QString& syncType) const
+{
+    if (!m_syncDao || !m_database.isValid()) {
+        return false;
+    }
+    
+    SyncTrackingRecord tracking = const_cast<SyncTrackingDao*>(m_syncDao)->getSyncTracking(syncType);
+    return tracking.fullSyncCompleted;
+}
+
+QDateTime TraktCoreService::getLastSyncTime(const QString& syncType) const
+{
+    if (!m_syncDao || !m_database.isValid()) {
+        return QDateTime();
+    }
+    
+    SyncTrackingRecord tracking = const_cast<SyncTrackingDao*>(m_syncDao)->getSyncTracking(syncType);
+    return tracking.lastSyncAt;
+}
+
+void TraktCoreService::updateSyncTracking(const QString& syncType, bool fullSyncCompleted)
+{
+    if (!m_syncDao) {
+        return;
+    }
+    
+    QDateTime now = QDateTime::currentDateTime();
+    m_syncDao->upsertSyncTracking(syncType, now, fullSyncCompleted);
+    qDebug() << "[TraktCoreService] Updated sync tracking for" << syncType << "at" << now.toString();
+}
+
+int TraktCoreService::processAndStoreWatchedMovies(const QVariantList& movies)
+{
+    if (!m_watchHistoryDao || !m_syncDao) {
+        qWarning() << "[TraktCoreService] Cannot process watched movies: DAOs not initialized";
+        return 0;
+    }
+    
+    int addedCount = 0;
+    QDateTime lastSync = getLastSyncTime("watched_movies");
+    QDateTime syncCutoff = lastSync.isValid() ? lastSync.addSecs(-3600) : QDateTime(); // 1 hour buffer
+    
+    for (const QVariant& movieVar : movies) {
+        QVariantMap movieData = movieVar.toMap();
+        
+        // Watched endpoint structure: { movie: {...}, last_watched_at: "..." }
+        QVariantMap movie = movieData["movie"].toMap();
+        if (movie.isEmpty()) {
+            continue; // Skip if no movie data
+        }
+        
+        QVariantMap ids = movie["ids"].toMap();
+        
+        // Extract last_watched_at timestamp (API uses last_watched_at)
+        QString watchedAtStr = movieData["last_watched_at"].toString();
+        
+        QDateTime watchedAt;
+        if (!watchedAtStr.isEmpty()) {
+            watchedAt = QDateTime::fromString(watchedAtStr, Qt::ISODate);
+            if (!watchedAt.isValid()) {
+                qWarning() << "[TraktCoreService] Invalid last_watched_at timestamp:" << watchedAtStr << ", using current time";
+                watchedAt = QDateTime::currentDateTime();
+            }
+        } else {
+            // If no timestamp, use a very old date to indicate it was watched but we don't know when
+            watchedAt = QDateTime::fromMSecsSinceEpoch(0); // Epoch time as fallback
+            qDebug() << "[TraktCoreService] Movie missing last_watched_at timestamp, using epoch time as fallback";
+        }
+        
+        // For incremental sync, filter by timestamp (with buffer already applied in query)
+        // Still check locally to be safe
+        // Only filter if we have a valid timestamp (not epoch fallback)
+        if (syncCutoff.isValid() && watchedAt > QDateTime::fromMSecsSinceEpoch(1000) && watchedAt < syncCutoff) {
+            continue; // Skip items older than our cutoff (but not epoch fallbacks)
+        }
+        
+        // Convert trakt data to watch history record
+        WatchHistoryRecord record;
+        record.contentId = QString::number(ids["trakt"].toInt());
+        record.type = "movie";
+        record.title = movie["title"].toString();
+        record.year = movie["year"].toInt();
+        record.imdbId = ids["imdb"].toString();
+        record.tmdbId = ids.contains("tmdb") ? QString::number(ids["tmdb"].toInt()) : QString();
+        record.watchedAt = watchedAt;
+        record.progress = 1.0; // trakt watched items are 100% watched
+        record.season = 0;
+        record.episode = 0;
+        
+        qDebug() << "[TraktCoreService] Storing movie:" << record.title 
+                 << "(" << record.year << ")" 
+                 << "contentId:" << record.contentId 
+                 << "imdbId:" << record.imdbId 
+                 << "watchedAt:" << record.watchedAt.toString();
+        
+        // Use upsert to avoid duplicates
+        if (m_watchHistoryDao->upsertWatchHistory(record)) {
+            addedCount++;
+            qDebug() << "[TraktCoreService] Successfully stored movie:" << record.title;
+        } else {
+            qWarning() << "[TraktCoreService] Failed to store movie:" << record.title;
+        }
+    }
+    
+    qDebug() << "[TraktCoreService] Processed" << addedCount << "watched movies";
+    return addedCount;
+}
+
+int TraktCoreService::processAndStoreWatchedShows(const QVariantList& shows)
+{
+    if (!m_watchHistoryDao || !m_syncDao) {
+        qWarning() << "[TraktCoreService] Cannot process watched shows: DAOs not initialized";
+        return 0;
+    }
+    
+    int addedCount = 0;
+    QDateTime lastSync = getLastSyncTime("watched_shows");
+    QDateTime syncCutoff = lastSync.isValid() ? lastSync.addSecs(-3600) : QDateTime(); // 1 hour buffer
+    
+    for (const QVariant& showVar : shows) {
+        QVariantMap showData = showVar.toMap();
+        
+        // History endpoint returns episodes directly: { episode: {...}, show: {...}, watched_at: "..." }
+        // Watched endpoint returns nested: { show: {...}, seasons: [{ episodes: [{ watched_at: "..." }] }] }
+        // Handle both formats
+        QVariantMap show;
+        QVariantMap episode;
+        QDateTime watchedAt;
+        
+        if (showData.contains("episode") && showData.contains("show")) {
+            // History endpoint format (episodes) - uses last_watched_at
+            episode = showData["episode"].toMap();
+            show = showData["show"].toMap();
+            QString watchedAtStr = showData["last_watched_at"].toString();
+            if (!watchedAtStr.isEmpty()) {
+                watchedAt = QDateTime::fromString(watchedAtStr, Qt::ISODate);
+                if (!watchedAt.isValid()) {
+                    qWarning() << "[TraktCoreService] Invalid last_watched_at timestamp:" << watchedAtStr << ", using epoch time";
+                    watchedAt = QDateTime::fromMSecsSinceEpoch(0);
+                }
+            } else {
+                // If no last_watched_at timestamp, use epoch time as fallback
+                watchedAt = QDateTime::fromMSecsSinceEpoch(0);
+                qDebug() << "[TraktCoreService] Episode missing last_watched_at timestamp, using epoch time as fallback";
+            }
+        } else if (showData.contains("seasons")) {
+            // Watched endpoint format (nested seasons/episodes)
+            QVariantMap showObj = showData["show"].toMap();
+            QVariantMap showIds = showObj["ids"].toMap();
+            
+            QString showTitle = showObj["title"].toString();
+            int showYear = showObj["year"].toInt();
+            QString showImdbId = showIds["imdb"].toString();
+            QString showTmdbId = showIds.contains("tmdb") ? QString::number(showIds["tmdb"].toInt()) : QString();
+            QString showContentId = QString::number(showIds["trakt"].toInt());
+            
+            // Process seasons and episodes
+            QVariantList seasons = showData["seasons"].toList();
+            for (const QVariant& seasonVar : seasons) {
+                QVariantMap seasonData = seasonVar.toMap();
+                int seasonNum = seasonData["number"].toInt();
+                
+                QVariantList episodes = seasonData["episodes"].toList();
+                for (const QVariant& episodeVar : episodes) {
+                    QVariantMap episodeData = episodeVar.toMap();
+                    
+                    // Extract last_watched_at timestamp (API uses last_watched_at)
+                    QString watchedAtStr = episodeData["last_watched_at"].toString();
+                    
+                    QDateTime epWatchedAt;
+                    if (!watchedAtStr.isEmpty()) {
+                        epWatchedAt = QDateTime::fromString(watchedAtStr, Qt::ISODate);
+                        if (!epWatchedAt.isValid()) {
+                            qWarning() << "[TraktCoreService] Invalid last_watched_at timestamp:" << watchedAtStr << ", using epoch time";
+                            epWatchedAt = QDateTime::fromMSecsSinceEpoch(0);
+                        }
+                    } else {
+                        // If no timestamp, use epoch time as fallback
+                        epWatchedAt = QDateTime::fromMSecsSinceEpoch(0);
+                        qDebug() << "[TraktCoreService] Episode missing last_watched_at timestamp, using epoch time as fallback";
+                    }
+                    
+                    // For incremental sync, filter by timestamp
+                    // Only filter if we have a valid timestamp (not epoch fallback)
+                    if (syncCutoff.isValid() && epWatchedAt > QDateTime::fromMSecsSinceEpoch(1000) && epWatchedAt < syncCutoff) {
+                        continue; // Skip items older than our cutoff (but not epoch fallbacks)
+                    }
+                    
+                    int episodeNum = episodeData["number"].toInt();
+                    QString episodeTitle = episodeData["title"].toString();
+                    
+                // Create watch history record for this episode
+                WatchHistoryRecord record;
+                record.contentId = showContentId;
+                record.type = "tv";
+                record.title = showTitle;
+                record.year = showYear;
+                record.imdbId = showImdbId;
+                record.tmdbId = showTmdbId;
+                record.watchedAt = epWatchedAt;
+                record.progress = 1.0; // trakt watched episodes are 100% watched
+                record.season = seasonNum;
+                record.episode = episodeNum;
+                record.episodeTitle = episodeTitle;
+                
+                qDebug() << "[TraktCoreService] Storing episode:" << showTitle 
+                         << "S" << seasonNum << "E" << episodeNum 
+                         << "(" << episodeTitle << ")"
+                         << "contentId:" << showContentId 
+                         << "watchedAt:" << epWatchedAt.toString();
+                
+                // Use upsert to avoid duplicates
+                if (m_watchHistoryDao->upsertWatchHistory(record)) {
+                    addedCount++;
+                    qDebug() << "[TraktCoreService] Successfully stored episode:" << showTitle << "S" << seasonNum << "E" << episodeNum;
+                } else {
+                    qWarning() << "[TraktCoreService] Failed to store episode:" << showTitle << "S" << seasonNum << "E" << episodeNum;
+                }
+                }
+            }
+            continue; // Already processed, skip to next show
+        } else {
+            continue; // Unknown format
+        }
+        
+        // Process history endpoint format (single episode)
+        if (episode.isEmpty() || show.isEmpty()) {
+            continue;
+        }
+        
+        // Ensure we have a valid watchedAt (should be set above, but double-check)
+        if (!watchedAt.isValid()) {
+            watchedAt = QDateTime::fromMSecsSinceEpoch(0);
+        }
+        
+        // For incremental sync, filter by timestamp
+        // Only filter if we have a valid timestamp (not epoch fallback)
+        if (syncCutoff.isValid() && watchedAt > QDateTime::fromMSecsSinceEpoch(1000) && watchedAt < syncCutoff) {
+            continue; // Skip items older than our cutoff (but not epoch fallbacks)
+        }
+        
+        QVariantMap showIds = show["ids"].toMap();
+        QVariantMap episodeIds = episode["ids"].toMap();
+        
+        QString showTitle = show["title"].toString();
+        int showYear = show["year"].toInt();
+        QString showImdbId = showIds["imdb"].toString();
+        QString showTmdbId = showIds.contains("tmdb") ? QString::number(showIds["tmdb"].toInt()) : QString();
+        QString showContentId = QString::number(showIds["trakt"].toInt());
+        
+        int seasonNum = episode["season"].toInt();
+        int episodeNum = episode["number"].toInt();
+        QString episodeTitle = episode["title"].toString();
+        
+        // Create watch history record for this episode
+        WatchHistoryRecord record;
+        record.contentId = showContentId;
+        record.type = "tv";
+        record.title = showTitle;
+        record.year = showYear;
+        record.imdbId = showImdbId;
+        record.tmdbId = showTmdbId;
+        record.watchedAt = watchedAt;
+        record.progress = 1.0; // trakt watched episodes are 100% watched
+        record.season = seasonNum;
+        record.episode = episodeNum;
+        record.episodeTitle = episodeTitle;
+        
+        // Use upsert to avoid duplicates
+        if (m_watchHistoryDao->upsertWatchHistory(record)) {
+            addedCount++;
+        }
+    }
+    
+    qDebug() << "[TraktCoreService] Processed" << addedCount << "watched show episodes";
+    return addedCount;
+}
+
 void TraktCoreService::getWatchlistMoviesWithImages()
 {
     apiRequest("/sync/watchlist/movies?extended=images", "GET");
@@ -475,7 +965,18 @@ void TraktCoreService::onApiReplyFinished()
     QString endpoint = reply->property("endpoint").toString();
     
     if (reply->error() != QNetworkReply::NoError) {
-        handleError(reply, endpoint);
+        // Emit sync error for sync endpoints
+        if (endpoint.contains("/sync/watched/movies") || endpoint.contains("/sync/history/movies")) {
+            QString errorMsg = reply->errorString();
+            qWarning() << "[TraktCoreService] Error fetching watched movies:" << errorMsg;
+            emit syncError("watched_movies", errorMsg);
+        } else if (endpoint.contains("/sync/watched/shows") || endpoint.contains("/sync/history/episodes")) {
+            QString errorMsg = reply->errorString();
+            qWarning() << "[TraktCoreService] Error fetching watched shows:" << errorMsg;
+            emit syncError("watched_shows", errorMsg);
+        } else {
+            handleError(reply, endpoint);
+        }
         reply->deleteLater();
         return;
     }
@@ -491,6 +992,18 @@ void TraktCoreService::onApiReplyFinished()
     QByteArray data = reply->readAll();
     if (data.isEmpty()) {
         qDebug() << "[TraktCoreService] Empty response for" << endpoint;
+        
+        // Handle empty responses for sync endpoints - still emit completion signals
+        if (endpoint.contains("/sync/watched/movies") || endpoint.contains("/sync/history/movies")) {
+            qDebug() << "[TraktCoreService] Empty watched movies response, emitting completion";
+            updateSyncTracking("watched_movies", true);
+            emit watchedMoviesSynced(0, 0);
+        } else if (endpoint.contains("/sync/watched/shows") || endpoint.contains("/sync/history/episodes")) {
+            qDebug() << "[TraktCoreService] Empty watched shows response, emitting completion";
+            updateSyncTracking("watched_shows", true);
+            emit watchedShowsSynced(0, 0);
+        }
+        
         reply->deleteLater();
         return;
     }
@@ -498,28 +1011,78 @@ void TraktCoreService::onApiReplyFinished()
     QJsonDocument doc = QJsonDocument::fromJson(data);
     if (doc.isNull()) {
         qWarning() << "[TraktCoreService] Invalid JSON response for" << endpoint;
-        emit error("Invalid JSON response");
+        
+        // Emit sync error for sync endpoints
+        if (endpoint.contains("/sync/watched/movies") || endpoint.contains("/sync/history/movies")) {
+            emit syncError("watched_movies", "Invalid JSON response");
+        } else if (endpoint.contains("/sync/watched/shows") || endpoint.contains("/sync/history/episodes")) {
+            emit syncError("watched_shows", "Invalid JSON response");
+        } else {
+            emit error("Invalid JSON response");
+        }
+        
         reply->deleteLater();
         return;
+    }
+    
+    // Cache successful GET responses
+    QString method = reply->property("method").toString();
+    if (method == "GET" && statusCode == 200) {
+        QString cacheKey = getCacheKey(endpoint);
+        int ttlSeconds = getTtlForEndpoint(endpoint);
+        if (doc.isObject()) {
+            cacheResponse(cacheKey, doc.object(), ttlSeconds);
+        } else if (doc.isArray()) {
+            // Convert array to object for caching
+            QJsonObject cacheObj;
+            cacheObj["_array"] = doc.array();
+            cacheResponse(cacheKey, cacheObj, ttlSeconds);
+        }
     }
     
     // Parse response based on endpoint
     if (endpoint.contains("/users/me")) {
         emit userProfileFetched(doc.object());
-    } else if (endpoint.contains("/sync/watched/movies")) {
+    } else if (endpoint.contains("/sync/watched/movies") || endpoint.contains("/sync/history/movies")) {
         QVariantList movies;
         QJsonArray arr = doc.array();
         for (const QJsonValue& val : arr) {
             movies.append(val.toObject().toVariantMap());
         }
+        
+        qDebug() << "[TraktCoreService] ===== MOVIES SYNC =====";
+        qDebug() << "[TraktCoreService] Received" << movies.size() << "watched movies from API";
+        
+        // Process and store watched movies
+        int addedCount = processAndStoreWatchedMovies(movies);
+        
+        // Update sync tracking
+        updateSyncTracking("watched_movies", true);
+        
+        qDebug() << "[TraktCoreService] Movies sync complete - received" << movies.size() << "from API, stored" << addedCount << "new items";
+        qDebug() << "[TraktCoreService] ===== END MOVIES SYNC =====";
         emit watchedMoviesFetched(movies);
-    } else if (endpoint.contains("/sync/watched/shows")) {
+        emit watchedMoviesSynced(addedCount, 0);
+    } else if (endpoint.contains("/sync/watched/shows") || endpoint.contains("/sync/history/episodes")) {
         QVariantList shows;
         QJsonArray arr = doc.array();
         for (const QJsonValue& val : arr) {
             shows.append(val.toObject().toVariantMap());
         }
+        
+        qDebug() << "[TraktCoreService] ===== SHOWS SYNC =====";
+        qDebug() << "[TraktCoreService] Received" << shows.size() << "watched shows/episodes from API";
+        
+        // Process and store watched shows
+        int addedCount = processAndStoreWatchedShows(shows);
+        
+        // Update sync tracking
+        updateSyncTracking("watched_shows", true);
+        
+        qDebug() << "[TraktCoreService] Shows sync complete - received" << shows.size() << "from API, stored" << addedCount << "new episodes";
+        qDebug() << "[TraktCoreService] ===== END SHOWS SYNC =====";
         emit watchedShowsFetched(shows);
+        emit watchedShowsSynced(addedCount, 0);
     } else if (endpoint.contains("/sync/watchlist/movies")) {
         QVariantList movies;
         QJsonArray arr = doc.array();
@@ -576,7 +1139,71 @@ void TraktCoreService::onApiReplyFinished()
             }
         }
     }
-    
+
     reply->deleteLater();
+}
+
+void TraktCoreService::clearCache()
+{
+    m_cache.clear();
+    qDebug() << "[TraktCoreService] Cache cleared";
+}
+
+void TraktCoreService::clearCacheForEndpoint(const QString& endpoint)
+{
+    QStringList keysToRemove;
+    for (auto it = m_cache.begin(); it != m_cache.end(); ++it) {
+        if (it.key().startsWith(endpoint)) {
+            keysToRemove << it.key();
+        }
+    }
+    for (const QString& key : keysToRemove) {
+        m_cache.remove(key);
+    }
+    qDebug() << "[TraktCoreService] Cleared cache for endpoint:" << endpoint << "(" << keysToRemove.size() << " entries)";
+}
+
+void TraktCoreService::clearSyncTracking(const QString& syncType)
+{
+    if (!m_syncDao) {
+        qWarning() << "[TraktCoreService] Cannot clear sync tracking: DAO not initialized";
+        return;
+    }
+    
+    m_syncDao->deleteSyncTracking(syncType);
+    qDebug() << "[TraktCoreService] Cleared sync tracking for:" << syncType;
+}
+
+void TraktCoreService::resyncWatchedHistory()
+{
+    if (!m_database.isValid()) {
+        emit syncError("resync", "Database not initialized");
+        return;
+    }
+    
+    if (!m_watchHistoryDao || !m_syncDao) {
+        qWarning() << "[TraktCoreService] Cannot resync: DAOs not initialized";
+        emit syncError("resync", "DAOs not initialized");
+        return;
+    }
+    
+    qDebug() << "[TraktCoreService] Starting full resync - clearing local watch history and sync tracking";
+    
+    // Clear watch history
+    if (!m_watchHistoryDao->clearWatchHistory()) {
+        qWarning() << "[TraktCoreService] Failed to clear watch history";
+        emit syncError("resync", "Failed to clear watch history");
+        return;
+    }
+    
+    // Clear sync tracking for both movies and shows
+    m_syncDao->deleteSyncTracking("watched_movies");
+    m_syncDao->deleteSyncTracking("watched_shows");
+    
+    qDebug() << "[TraktCoreService] Cleared watch history and sync tracking, starting full sync";
+    
+    // Trigger full sync for both movies and shows
+    syncWatchedMovies(true);  // forceFullSync = true
+    syncWatchedShows(true);   // forceFullSync = true
 }
 

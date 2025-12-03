@@ -30,8 +30,12 @@ public:
     explicit WatchHistoryDao(QSqlDatabase database);
     
     bool insertWatchHistory(const WatchHistoryRecord& item);
+    bool upsertWatchHistory(const WatchHistoryRecord& item);
     QList<WatchHistoryRecord> getWatchHistory(int limit = 100);
     QList<WatchHistoryRecord> getWatchHistoryByContentId(const QString& contentId);
+    QList<WatchHistoryRecord> getWatchHistoryForContent(const QString& contentId, const QString& type);
+    QList<WatchHistoryRecord> getWatchHistoryByTmdbId(const QString& tmdbId, const QString& type);
+    QList<WatchHistoryRecord> getWatchHistoryByContentAndDate(const QString& contentId, const QString& type, const QDateTime& watchedAt);
     bool clearWatchHistory();
     bool removeWatchHistory(const QString& contentId);
     

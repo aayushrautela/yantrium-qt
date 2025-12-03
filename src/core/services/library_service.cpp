@@ -3,6 +3,7 @@
 #include "core/services/id_parser.h"
 #include "core/services/configuration.h"
 #include "core/services/frontend_data_mapper.h"
+#include "core/services/local_library_service.h"
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -15,6 +16,7 @@ LibraryService::LibraryService(QObject* parent)
     , m_tmdbService(new TmdbDataService(this))
     , m_mediaMetadataService(new MediaMetadataService(this))
     , m_omdbService(new OmdbService(this))
+    , m_localLibraryService(new LocalLibraryService(this))
     , m_catalogPreferencesDao(new CatalogPreferencesDao(DatabaseManager::instance().database()))
     , m_pendingCatalogRequests(0)
     , m_isLoadingCatalogs(false)
@@ -49,6 +51,10 @@ LibraryService::LibraryService(QObject* parent)
             this, &LibraryService::onMediaMetadataLoaded);
     connect(m_mediaMetadataService, &MediaMetadataService::error,
             this, &LibraryService::onMediaMetadataError);
+
+    // Connect to LocalLibraryService for smart play
+    connect(m_localLibraryService, &LocalLibraryService::watchProgressLoaded,
+            this, &LibraryService::onWatchProgressLoaded);
     
     qDebug() << "[LibraryService] Connected to Trakt, TMDB, MediaMetadata, and OMDB service signals";
 }
@@ -1025,6 +1031,129 @@ void LibraryService::onMediaMetadataError(const QString& message)
     emit error(message);
 }
 
+void LibraryService::onWatchProgressLoaded(const QVariantMap& progress)
+{
+    QString contentId = progress["contentId"].toString(); // This is now TMDB ID for smart play
+    QString type = progress["type"].toString();
+
+    qDebug() << "[LibraryService] onWatchProgressLoaded for TMDB ID" << contentId << "type:" << type;
+    qDebug() << "[LibraryService] onWatchProgressLoaded - hasProgress:" << progress["hasProgress"] 
+             << "isWatched:" << progress["isWatched"] << "progress:" << progress["progress"];
+    qDebug() << "[LibraryService] onWatchProgressLoaded - pendingSmartPlayItems keys:" << m_pendingSmartPlayItems.keys();
+
+    // Check if this was for smart play (contentId is now TMDB ID)
+    if (!m_pendingSmartPlayItems.contains(contentId)) {
+        qDebug() << "[LibraryService] onWatchProgressLoaded: Not for smart play, ignoring";
+        return; // Not for smart play, ignore
+    }
+
+    QVariantMap itemData = m_pendingSmartPlayItems.take(contentId);
+    QVariantMap smartPlayState = progress;
+
+    // Default values
+    smartPlayState["buttonText"] = "Play";
+    smartPlayState["action"] = "play";
+    smartPlayState["season"] = -1;
+    smartPlayState["episode"] = -1;
+
+    bool hasProgress = progress["hasProgress"].toBool();
+    double watchProgress = progress["progress"].toDouble();
+
+    qDebug() << "[LibraryService] Processing smart play state - type:" << type 
+             << "hasProgress:" << hasProgress << "watchProgress:" << watchProgress
+             << "isWatched:" << progress["isWatched"];
+
+    if (type == "movie") {
+        if (!hasProgress) {
+            // Not watched at all
+            smartPlayState["buttonText"] = "Play";
+            smartPlayState["action"] = "play";
+        } else if (watchProgress < 0.95) {
+            // Partially watched
+            smartPlayState["buttonText"] = "Continue";
+            smartPlayState["action"] = "continue";
+        } else {
+            // Fully watched
+            smartPlayState["buttonText"] = "Rewatch";
+            smartPlayState["action"] = "rewatch";
+        }
+    } else if (type == "tv") {
+        int lastWatchedSeason = progress["lastWatchedSeason"].toInt();
+        int lastWatchedEpisode = progress["lastWatchedEpisode"].toInt();
+        bool isWatched = progress["isWatched"].toBool();
+
+        // Get episode information from itemData
+        QVariantList seasons = itemData["seasons"].toList();
+        QDateTime now = QDateTime::currentDateTimeUtc();
+
+        if (!hasProgress) {
+            // Not watched at all
+            smartPlayState["buttonText"] = "Play";
+            smartPlayState["action"] = "play";
+            smartPlayState["season"] = 1;
+            smartPlayState["episode"] = 1;
+        } else if (isWatched && lastWatchedSeason > 0 && lastWatchedEpisode > 0) {
+            // Find next episode after the last watched one
+            bool foundNext = false;
+            for (int s = lastWatchedSeason; s <= seasons.size() && !foundNext; ++s) {
+                QVariantMap season = seasons[s-1].toMap();
+                QVariantList episodes = season["episodes"].toList();
+
+                int startEpisode = (s == lastWatchedSeason) ? lastWatchedEpisode + 1 : 1;
+
+                for (int e = startEpisode; e <= episodes.size() && !foundNext; ++e) {
+                    QVariantMap episode = episodes[e-1].toMap();
+                    QString airDateStr = episode["air_date"].toString();
+
+                    if (!airDateStr.isEmpty()) {
+                        QDateTime airDate = QDateTime::fromString(airDateStr, Qt::ISODate);
+                        if (airDate.isValid()) {
+                            if (airDate <= now) {
+                                // Next episode is available
+                                smartPlayState["buttonText"] = QString("Play S%1:E%2").arg(s).arg(e);
+                                smartPlayState["action"] = "play";
+                                smartPlayState["season"] = s;
+                                smartPlayState["episode"] = e;
+                                foundNext = true;
+                            } else {
+                                // Next episode not yet aired
+                                smartPlayState["buttonText"] = "Soon";
+                                smartPlayState["action"] = "soon";
+                                smartPlayState["season"] = s;
+                                smartPlayState["episode"] = e;
+                                foundNext = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!foundNext) {
+                // No more episodes, fully watched
+                smartPlayState["buttonText"] = "Rewatch";
+                smartPlayState["action"] = "rewatch";
+            }
+        } else if (!isWatched && lastWatchedSeason > 0 && lastWatchedEpisode > 0) {
+            // Partially watched current episode
+            smartPlayState["buttonText"] = QString("Continue S%1:E%2").arg(lastWatchedSeason).arg(lastWatchedEpisode);
+            smartPlayState["action"] = "continue";
+            smartPlayState["season"] = lastWatchedSeason;
+            smartPlayState["episode"] = lastWatchedEpisode;
+        } else {
+            // Fallback to play first episode
+            smartPlayState["buttonText"] = "Play";
+            smartPlayState["action"] = "play";
+            smartPlayState["season"] = 1;
+            smartPlayState["episode"] = 1;
+        }
+    }
+
+    qDebug() << "[LibraryService] Smart play state:" << smartPlayState["buttonText"].toString()
+             << "action:" << smartPlayState["action"].toString();
+
+    emit smartPlayStateLoaded(smartPlayState);
+}
+
 void LibraryService::loadSimilarItems(int tmdbId, const QString& type)
 {
     qDebug() << "[LibraryService] Loading similar items for TMDB ID:" << tmdbId << "type:" << type;
@@ -1036,6 +1165,62 @@ void LibraryService::loadSimilarItems(int tmdbId, const QString& type)
     } else {
         emit error(QString("Unknown type for similar items: %1").arg(type));
     }
+}
+
+void LibraryService::getSmartPlayState(const QVariantMap& itemData)
+{
+    qWarning() << "[LibraryService] ===== getSmartPlayState CALLED =====";
+    
+    // Use TMDB ID as primary identifier
+    QString tmdbId = itemData["tmdbId"].toString();
+    if (tmdbId.isEmpty()) {
+        // Fallback to id if it's a number (likely TMDB ID)
+        QString idStr = itemData["id"].toString();
+        bool ok;
+        idStr.toInt(&ok);
+        if (ok) {
+            tmdbId = idStr;
+        }
+    }
+
+    QString type = itemData["type"].toString();
+    if (type.isEmpty()) {
+        type = itemData["media_type"].toString();
+    }
+
+    // Normalize type - database uses "movie" and "tv"
+    if (type == "tv" || type == "series") {
+        type = "tv";
+    } else if (type == "movie") {
+        type = "movie";
+    } else {
+        // If type is empty or unknown, try to infer from itemData
+        qWarning() << "[LibraryService] getSmartPlayState: Unknown type:" << type << ", defaulting to movie";
+        type = "movie";
+    }
+    
+    qWarning() << "[LibraryService] getSmartPlayState - tmdbId:" << tmdbId << "type:" << type;
+    qWarning() << "[LibraryService] getSmartPlayState - itemData keys:" << itemData.keys();
+
+    if (tmdbId.isEmpty()) {
+        qWarning() << "[LibraryService] getSmartPlayState: No TMDB ID found in itemData, cannot check watch history";
+        // Emit default state
+        QVariantMap defaultState;
+        defaultState["buttonText"] = "Play";
+        defaultState["action"] = "play";
+        defaultState["season"] = -1;
+        defaultState["episode"] = -1;
+        emit smartPlayStateLoaded(defaultState);
+        return;
+    }
+
+    // Store the item data for processing when progress is received (use tmdbId as key)
+    m_pendingSmartPlayItems[tmdbId] = itemData;
+    qWarning() << "[LibraryService] Stored pending item for TMDB ID:" << tmdbId << "pending keys:" << m_pendingSmartPlayItems.keys();
+
+    // Get watch progress from local library service using TMDB ID
+    qWarning() << "[LibraryService] Calling getWatchProgressByTmdbId with tmdbId:" << tmdbId << "type:" << type;
+    m_localLibraryService->getWatchProgressByTmdbId(tmdbId, type);
 }
 
 void LibraryService::onSimilarMoviesFetched(int tmdbId, const QJsonArray& results)
@@ -1052,5 +1237,28 @@ void LibraryService::onSimilarTvFetched(int tmdbId, const QJsonArray& results)
     
     QVariantList items = FrontendDataMapper::mapSimilarItemsToVariantList(results, "series");
     emit similarItemsLoaded(items);
+}
+
+void LibraryService::clearMetadataCache()
+{
+    if (m_mediaMetadataService) {
+        m_mediaMetadataService->clearMetadataCache();
+    }
+    if (m_tmdbService) {
+        m_tmdbService->clearCache();
+    }
+    qDebug() << "[LibraryService] All metadata caches cleared";
+}
+
+int LibraryService::getMetadataCacheSize() const
+{
+    int size = 0;
+    if (m_mediaMetadataService) {
+        size += m_mediaMetadataService->getMetadataCacheSize();
+    }
+    if (m_tmdbService) {
+        size += m_tmdbService->getCacheSize();
+    }
+    return size;
 }
 

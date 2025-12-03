@@ -7,6 +7,7 @@
 #include "configuration.h"
 #include <QDebug>
 #include <QJsonObject>
+#include <QDateTime>
 
 MediaMetadataService::MediaMetadataService(QObject* parent)
     : QObject(parent)
@@ -38,6 +39,20 @@ void MediaMetadataService::getCompleteMetadata(const QString& contentId, const Q
     if (contentId.isEmpty() || type.isEmpty()) {
         emit error("Missing contentId or type");
         return;
+    }
+    
+    // Check cache first
+    QString cacheKey = contentId + "|" + type;
+    if (m_metadataCache.contains(cacheKey)) {
+        const CachedMetadata& cached = m_metadataCache[cacheKey];
+        if (!cached.isExpired()) {
+            qDebug() << "[MediaMetadataService] Cache hit for:" << cacheKey;
+            emit metadataLoaded(cached.data);
+            return;
+        } else {
+            // Remove expired cache entry
+            m_metadataCache.remove(cacheKey);
+        }
     }
     
     // Try to extract TMDB ID
@@ -176,6 +191,15 @@ void MediaMetadataService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObj
         } else {
             qDebug() << "[MediaMetadataService] OMDB API key not configured, skipping ratings fetch";
         }
+        
+        // Cache and emit metadata
+        QString cacheKey = contentId + "|" + type;
+        CachedMetadata cached;
+        cached.data = details;
+        cached.timestamp = QDateTime::currentDateTime();
+        m_metadataCache[cacheKey] = cached;
+        qDebug() << "[MediaMetadataService] Cached metadata for:" << cacheKey;
+        
         emit metadataLoaded(details);
     }
 }
@@ -269,7 +293,14 @@ void MediaMetadataService::onOmdbRatingsFetched(const QString& imdbId, const QJs
     // Merge OMDB ratings into details
     FrontendDataMapper::mergeOmdbRatings(details, data);
     
-    // Emit complete metadata
+    // Cache and emit complete metadata
+    QString cacheKey = request.contentId + "|" + request.type;
+    CachedMetadata cached;
+    cached.data = details;
+    cached.timestamp = QDateTime::currentDateTime();
+    m_metadataCache[cacheKey] = cached;
+    qDebug() << "[MediaMetadataService] Cached complete metadata for:" << cacheKey;
+    
     emit metadataLoaded(details);
     
     // Clean up
@@ -283,6 +314,15 @@ void MediaMetadataService::onOmdbError(const QString& message, const QString& im
     // Even if OMDB fails, emit the details we have from TMDB
     if (m_pendingDetailsByImdbId.contains(imdbId)) {
         PendingRequest& request = m_pendingDetailsByImdbId[imdbId];
+        
+        // Cache and emit metadata
+        QString cacheKey = request.contentId + "|" + request.type;
+        CachedMetadata cached;
+        cached.data = request.details;
+        cached.timestamp = QDateTime::currentDateTime();
+        m_metadataCache[cacheKey] = cached;
+        qDebug() << "[MediaMetadataService] Cached metadata (OMDB error) for:" << cacheKey;
+        
         emit metadataLoaded(request.details);
         m_pendingDetailsByImdbId.remove(imdbId);
     }
@@ -292,6 +332,17 @@ void MediaMetadataService::onTmdbError(const QString& message)
 {
     qWarning() << "[MediaMetadataService] TMDB error:" << message;
     emit error(message);
+}
+
+void MediaMetadataService::clearMetadataCache()
+{
+    m_metadataCache.clear();
+    qDebug() << "[MediaMetadataService] Metadata cache cleared";
+}
+
+int MediaMetadataService::getMetadataCacheSize() const
+{
+    return m_metadataCache.size();
 }
 
 

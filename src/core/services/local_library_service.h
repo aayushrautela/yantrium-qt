@@ -5,9 +5,10 @@
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
-#include "../database/database_manager.h"
 #include "../database/local_library_dao.h"
 #include "../database/watch_history_dao.h"
+
+class DatabaseManager;
 
 class LocalLibraryService : public QObject
 {
@@ -25,6 +26,8 @@ public:
     // Watch history methods
     Q_INVOKABLE void addToWatchHistory(const QVariantMap& item);
     Q_INVOKABLE void getWatchHistory(int limit = 100);
+    Q_INVOKABLE void getWatchProgress(const QString& contentId, const QString& type, int season = -1, int episode = -1);
+    Q_INVOKABLE void getWatchProgressByTmdbId(const QString& tmdbId, const QString& type, int season = -1, int episode = -1);
 
 signals:
     void libraryItemsLoaded(const QVariantList& items);
@@ -32,10 +35,11 @@ signals:
     void libraryItemRemoved(bool success);
     void isInLibraryResult(bool inLibrary);
     void watchHistoryLoaded(const QVariantList& items);
+    void watchProgressLoaded(const QVariantMap& progress);
     void error(const QString& message);
 
 private:
-    DatabaseManager& m_dbManager;
+    DatabaseManager* m_dbManager;
     LocalLibraryDao* m_libraryDao;
     WatchHistoryDao* m_historyDao;
     

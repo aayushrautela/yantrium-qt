@@ -259,6 +259,16 @@ Item {
                         anchors.margins: 20
                         spacing: 20
                         
+                        property int pendingSyncs: 0
+                        
+                        function startResync() {
+                            pendingSyncs = 2  // Movies and shows
+                            traktStatusText.text = "Resyncing watch history... This may take a while."
+                            traktStatusText.color = "#2196F3"
+                            resyncButton.enabled = false
+                            TraktCoreService.resyncWatchedHistory()
+                        }
+                        
                         Text {
                             text: "Trakt Authentication"
                             font.pixelSize: 24
@@ -364,6 +374,70 @@ Item {
                             font.pixelSize: 14
                             color: "#aaaaaa"
                             wrapMode: Text.WordWrap
+                        }
+                        
+                        // Resync button (only show when authenticated)
+                        Button {
+                            id: resyncButton
+                            width: 200
+                            height: 44
+                            text: "Resync Watch History"
+                            visible: TraktAuthService.isAuthenticated
+                            enabled: TraktAuthService.isAuthenticated
+                            
+                            background: Rectangle {
+                                color: parent.pressed ? "#ff9800" : "#ff9800"
+                                radius: 4
+                            }
+                            
+                            contentItem: Text {
+                                text: parent.text
+                                color: "#000000"
+                                font.bold: true
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            
+                            onClicked: {
+                                traktSection.startResync()
+                            }
+                        }
+                        
+                        // Connections for resync status
+                        Connections {
+                            target: TraktCoreService
+                            
+                            function onWatchedMoviesSynced(addedCount, updatedCount) {
+                                traktStatusText.text = "Movies synced: " + addedCount + " items added"
+                                traktStatusText.color = "#4CAF50"
+                                traktSection.pendingSyncs = Math.max(0, traktSection.pendingSyncs - 1)
+                                
+                                // If shows are still pending, update message
+                                if (traktSection.pendingSyncs > 0) {
+                                    traktStatusText.text = "Movies synced: " + addedCount + " items. Waiting for shows..."
+                                } else {
+                                    // Both complete
+                                    resyncButton.enabled = true
+                                }
+                            }
+                            
+                            function onWatchedShowsSynced(addedCount, updatedCount) {
+                                traktStatusText.text = "Shows synced: " + addedCount + " episodes added. Resync complete!"
+                                traktStatusText.color = "#4CAF50"
+                                traktSection.pendingSyncs = Math.max(0, traktSection.pendingSyncs - 1)
+                                resyncButton.enabled = true
+                            }
+                            
+                            function onSyncError(syncType, message) {
+                                traktStatusText.text = "✗ Sync error (" + syncType + "): " + message
+                                traktStatusText.color = "#F44336"
+                                traktSection.pendingSyncs = Math.max(0, traktSection.pendingSyncs - 1)
+                                
+                                // Re-enable button when all syncs are done (or errored)
+                                if (traktSection.pendingSyncs === 0) {
+                                    resyncButton.enabled = true
+                                }
+                            }
                         }
                         
                         // Polling timer for device code

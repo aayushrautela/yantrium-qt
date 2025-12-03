@@ -24,13 +24,14 @@ Item {
     }
     
     property bool isInLibrary: false
-    
+    property var smartPlayState: ({})
+
     Connections {
         target: libraryService
         function onItemDetailsLoaded(details) {
             root.itemData = details
             root.isLoading = false
-            
+
             // Update cast list model
             root.onCastDataLoaded(details.castFull || [])
             // Load similar items
@@ -39,54 +40,86 @@ Item {
                 var tmdbId = parseInt(details.tmdbId) || details.tmdbId
                 libraryService.loadSimilarItems(tmdbId, type)
             }
-            
+
             // Check if item is in library
             checkIfInLibrary()
+
+            // Get smart play state
+            console.log("[DetailScreen] Calling getSmartPlayState with details.type:", details.type, "tmdbId:", details.tmdbId, "id:", details.id)
+            libraryService.getSmartPlayState(details)
         }
         function onSimilarItemsLoaded(items) {
             root.similarItems = items
+        }
+        function onSmartPlayStateLoaded(smartPlayState) {
+            root.smartPlayState = smartPlayState
+            console.log("[DetailScreen] Smart play state loaded:", JSON.stringify(smartPlayState))
         }
         function onError(message) {
             console.error("[DetailScreen] Error:", message)
             root.isLoading = false
         }
     }
-    
-    Connections {
-        target: traktWatchlistService
-        function onWatchlistItemAdded(success) {
-            if (success) {
-                console.log("[DetailScreen] Successfully added to Trakt watchlist")
-                root.isInLibrary = true
-            } else {
-                console.error("[DetailScreen] Failed to add to Trakt watchlist")
-            }
-        }
-        function onIsInWatchlistResult(inWatchlist) {
-            root.isInLibrary = inWatchlist
-        }
-        function onError(message) {
-            console.error("[DetailScreen] Trakt watchlist error:", message)
-        }
-    }
-    
+
     Connections {
         target: localLibraryService
         function onLibraryItemAdded(success) {
             if (success) {
-                console.log("[DetailScreen] Successfully added to local library")
+                console.log("[DetailScreen] Item added to local library successfully")
                 root.isInLibrary = true
+                root.libraryChanged()
+            }
+        }
+        function onLibraryItemRemoved(success) {
+            console.log("[DetailScreen] onLibraryItemRemoved called - success:", success, "current isInLibrary:", root.isInLibrary)
+            if (success) {
+                console.log("[DetailScreen] Item removed from local library successfully - setting isInLibrary to false")
+                // Update UI immediately - trust the removal operation result
+                root.isInLibrary = false
+                console.log("[DetailScreen] After setting false, isInLibrary is now:", root.isInLibrary)
+                root.libraryChanged()
             } else {
-                console.error("[DetailScreen] Failed to add to local library")
+                console.error("[DetailScreen] Failed to remove from local library")
+                // Re-check state on failure to see current state
+                checkIfInLibrary()
             }
         }
         function onIsInLibraryResult(inLibrary) {
+            console.log("[DetailScreen] Local library check result:", inLibrary, "current isInLibrary:", root.isInLibrary)
             root.isInLibrary = inLibrary
-        }
-        function onError(message) {
-            console.error("[DetailScreen] Local library error:", message)
+            console.log("[DetailScreen] After library check, isInLibrary is now:", root.isInLibrary)
         }
     }
+
+    Connections {
+        target: traktWatchlistService
+        function onWatchlistItemAdded(success) {
+            if (success) {
+                console.log("[DetailScreen] Item added to Trakt watchlist successfully")
+                root.isInLibrary = true
+                root.libraryChanged()
+            }
+        }
+        function onWatchlistItemRemoved(success) {
+            console.log("[DetailScreen] onWatchlistItemRemoved called - success:", success)
+            if (success) {
+                console.log("[DetailScreen] Item removed from Trakt watchlist successfully")
+                // Update UI immediately - trust the removal operation result
+                root.isInLibrary = false
+                root.libraryChanged()
+            } else {
+                console.error("[DetailScreen] Failed to remove from Trakt watchlist")
+                // Re-check state on failure to see current state
+                checkIfInLibrary()
+            }
+        }
+        function onIsInWatchlistResult(inWatchlist) {
+            console.log("[DetailScreen] Trakt watchlist check result:", inWatchlist, "current isInLibrary:", root.isInLibrary)
+            root.isInLibrary = inWatchlist
+            console.log("[DetailScreen] After watchlist check, isInLibrary is now:", root.isInLibrary)
+        }
+    }
+    
     
     Connections {
         target: traktAuthService
@@ -100,20 +133,34 @@ Item {
     }
     
     function checkIfInLibrary() {
+        // Always prefer imdbId for consistency - this is what's stored in the database
         var contentId = root.itemData.imdbId || root.itemData.id || ""
-        if (!contentId) return
-        
+        if (!contentId) {
+            console.log("[DetailScreen] checkIfInLibrary: No contentId available")
+            console.log("[DetailScreen] itemData keys:", Object.keys(root.itemData))
+            return
+        }
+
+        // Ensure we're using imdbId format if available (for consistency with database)
+        if (root.itemData.imdbId && root.itemData.imdbId.startsWith("tt")) {
+            contentId = root.itemData.imdbId
+        }
+
+        console.log("[DetailScreen] checkIfInLibrary called - contentId:", contentId, "authenticated:", traktAuthService.isAuthenticated, "imdbId:", root.itemData.imdbId, "id:", root.itemData.id, "current isInLibrary:", root.isInLibrary)
+
         if (traktAuthService.isAuthenticated) {
             // Check Trakt watchlist
             var type = root.itemData.type || "movie"
-            if (type === "tv" || type === "series") {
-                type = "show"
+            if (type === "tv") {
+                type = "show"  // UI displays as "show" but internally uses "tv"
             } else {
                 type = "movie"
             }
+            console.log("[DetailScreen] Checking Trakt watchlist - contentId:", contentId, "type:", type)
             traktWatchlistService.isInWatchlist(contentId, type)
         } else {
             // Check local library
+            console.log("[DetailScreen] Checking local library - contentId:", contentId)
             localLibraryService.isInLibrary(contentId)
         }
     }
@@ -166,14 +213,14 @@ Item {
     
     function getTabList() {
         var tabs = ["CAST & CREW", "MORE LIKE THIS", "DETAILS"]
-        if (root.itemData.type === "series" || root.itemData.type === "tv") {
+        if (root.itemData.type === "tv") {
             tabs.unshift("EPISODES")
         }
         return tabs
     }
     
     function isSeries() {
-        return root.itemData.type === "series" || root.itemData.type === "tv"
+        return root.itemData.type === "tv"
     }
     
     function getStackLayoutIndex(tabIndex) {
@@ -182,6 +229,7 @@ Item {
     }
     
     signal closeRequested()
+    signal libraryChanged()
     
     function loadDetails(contentId, type, addonId) {
         if (!contentId || !type) return
@@ -436,7 +484,7 @@ Item {
                         // Row 2: Season Count (for series only)
                         Row {
                             spacing: 12
-                            visible: root.itemData.type === "series" && root.itemData.numberOfSeasons > 0
+                            visible: root.itemData.type === "tv" && root.itemData.numberOfSeasons > 0
                             
                             Text {
                                 text: root.itemData.numberOfSeasons + " Seasons"
@@ -626,16 +674,32 @@ Item {
                                             antialiasing: true
                                         }
                                         Text {
-                                            text: "Play"
+                                            text: root.smartPlayState.buttonText || "Play"
                                             font.pixelSize: 18
-                                    font.bold: true
+                                            font.bold: true
                                             color: "#000000"
                                             anchors.verticalCenter: parent.verticalCenter
                                         }
                                     }
                                 }
                                 onClicked: {
-                                    console.log("Play clicked for:", root.itemData.title || root.itemData.name)
+                                    var action = root.smartPlayState.action || "play"
+                                    var season = root.smartPlayState.season || -1
+                                    var episode = root.smartPlayState.episode || -1
+
+                                    console.log("Play clicked for:", root.itemData.title || root.itemData.name,
+                                               "action:", action, "S" + season + "E" + episode)
+
+                                    // TODO: Implement actual playback logic based on action type
+                                    if (action === "play") {
+                                        console.log("Starting playback from beginning or specific episode")
+                                    } else if (action === "continue") {
+                                        console.log("Continuing playback from last position")
+                                    } else if (action === "rewatch") {
+                                        console.log("Starting rewatch from beginning")
+                                    } else if (action === "soon") {
+                                        console.log("Episode not yet available")
+                                    }
                                 }
                             }
                             
@@ -660,7 +724,7 @@ Item {
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                     Text {
-                                        text: "Library"
+                                        text: root.isInLibrary ? "In Library" : "Add to Library"
                                         font.pixelSize: 18
                                         color: "#ffffff"
                                         anchors.verticalCenter: parent.verticalCenter
@@ -668,48 +732,65 @@ Item {
                                     }
                                 }
                                 onClicked: {
+                                    // Always prefer imdbId for consistency - this is what's stored in the database
                                     var contentId = root.itemData.imdbId || root.itemData.id || ""
                                     var type = root.itemData.type || "movie"
-                                    
+
                                     if (!contentId) {
-                                        console.error("[DetailScreen] Cannot add to library: no contentId")
+                                        console.error("[DetailScreen] Cannot modify library: no contentId")
+                                        console.error("[DetailScreen] itemData:", JSON.stringify(root.itemData))
                                         return
                                     }
-                                    
-                                    // Normalize type
-                                    if (type === "tv" || type === "series") {
+
+                                    // Ensure we're using imdbId format if available (for consistency with database)
+                                    if (root.itemData.imdbId && root.itemData.imdbId.startsWith("tt")) {
+                                        contentId = root.itemData.imdbId
+                                    }
+
+                                    console.log("[DetailScreen] Library button clicked - contentId:", contentId, "type:", type, "isInLibrary:", root.isInLibrary, "imdbId:", root.itemData.imdbId, "id:", root.itemData.id)
+
+                                    // Normalize type - use "tv" internally, UI displays as "show"
+                                    if (type === "tv") {
                                         type = "show"
                                     } else {
                                         type = "movie"
                                     }
-                                    
-                                    // Debug: Check authentication status
-                                    console.log("[DetailScreen] Trakt auth status:", traktAuthService.isAuthenticated)
-                                    console.log("[DetailScreen] Trakt configured:", traktAuthService.isConfigured)
-                                    
-                                    if (traktAuthService.isAuthenticated) {
-                                        // Add to Trakt watchlist
-                                        console.log("[DetailScreen] Adding to Trakt watchlist:", contentId, type)
-                                        traktWatchlistService.addToWatchlist(type, contentId)
-                                    } else {
-                                        // Add to local library
-                                        console.log("[DetailScreen] Adding to local library:", contentId, type)
-                                        
-                                        var libraryItem = {
-                                            contentId: contentId,
-                                            type: type === "show" ? "series" : "movie",
-                                            title: root.itemData.title || root.itemData.name || "",
-                                            year: root.itemData.year || 0,
-                                            posterUrl: root.itemData.posterUrl || "",
-                                            backdropUrl: root.itemData.backdropUrl || "",
-                                            logoUrl: root.itemData.logoUrl || "",
-                                            description: root.itemData.description || root.itemData.overview || "",
-                                            rating: root.itemData.rating || root.itemData.imdbRating || "",
-                                            tmdbId: root.itemData.tmdbId || "",
-                                            imdbId: root.itemData.imdbId || ""
+
+                                    // Toggle: add if not in library, remove if already in library
+                                    if (root.isInLibrary) {
+                                        // Remove from library
+                                        console.log("[DetailScreen] Removing from library - contentId:", contentId, "type:", type, "isInLibrary:", root.isInLibrary)
+
+                                        if (traktAuthService.isAuthenticated) {
+                                            traktWatchlistService.removeFromWatchlist(type, contentId)
+                                        } else {
+                                            console.log("[DetailScreen] Calling removeFromLibrary with contentId:", contentId)
+                                            localLibraryService.removeFromLibrary(contentId)
                                         }
-                                        
-                                        localLibraryService.addToLibrary(libraryItem)
+                                    } else {
+                                        // Add to library
+                                        console.log("[DetailScreen] Adding to library - contentId:", contentId, "type:", type)
+
+                                        if (traktAuthService.isAuthenticated) {
+                                            traktWatchlistService.addToWatchlist(type, contentId)
+                                        } else {
+                                            var libraryItem = {
+                                                contentId: contentId,
+                                                type: type === "show" ? "tv" : "movie",  // Use "tv" internally to match database
+                                                title: root.itemData.title || root.itemData.name || "",
+                                                year: root.itemData.year || 0,
+                                                posterUrl: root.itemData.posterUrl || "",
+                                                backdropUrl: root.itemData.backdropUrl || "",
+                                                logoUrl: root.itemData.logoUrl || "",
+                                                description: root.itemData.description || root.itemData.overview || "",
+                                                rating: root.itemData.rating || root.itemData.imdbRating || "",
+                                                tmdbId: root.itemData.tmdbId || "",
+                                                imdbId: root.itemData.imdbId || ""
+                                            }
+
+                                            console.log("[DetailScreen] Calling addToLibrary with item - contentId:", libraryItem.contentId)
+                                            localLibraryService.addToLibrary(libraryItem)
+                                        }
                                     }
                                 }
                             }
@@ -855,11 +936,12 @@ Item {
                                     model: root.similarItems || []
                                     
                                     delegate: Item {
-                                        width: 240
-                                        height: 400
+                                        width: 240  // Match LibraryScreen catalog card width
+                                        height: 400  // Match LibraryScreen catalog card height
+
                                         property var itemData: modelData
                                         property bool isHovered: false
-                                        
+
                                         MouseArea {
                                             anchors.fill: parent
                                             hoverEnabled: true
@@ -870,26 +952,69 @@ Item {
                                                     root.loadDetails(parent.itemData.id, parent.itemData.type || "movie", "")
                                                 }
                                             }
+                                            cursorShape: Qt.PointingHandCursor
                                         }
-                                        
+
                                         Column {
                                             anchors.fill: parent
                                             spacing: 12
+
+                                            // Poster (exactly like LibraryScreen catalog cards)
                                             Item {
-                                                width: parent.width; height: 360
+                                                id: imageContainer
+                                                width: parent.width
+                                                height: 360
+
+                                                Rectangle { id: maskShape; anchors.fill: parent; radius: 8; visible: false }
+                                                layer.enabled: true
+                                                layer.effect: OpacityMask { maskSource: maskShape }
+
+                                                Rectangle { anchors.fill: parent; color: "#2a2a2a"; radius: 8 }
+
                                                 Image {
+                                                    id: img
                                                     anchors.fill: parent
                                                     source: itemData.posterUrl || ""
                                                     fillMode: Image.PreserveAspectCrop
+                                                    asynchronous: true
+                                                    smooth: true
                                                     scale: isHovered ? 1.10 : 1.0
-                                                    Behavior on scale { NumberAnimation { duration: 300 } }
+                                                    Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
+                                                }
+
+                                                // Rating overlay (exactly like LibraryScreen)
+                                                Rectangle {
+                                                    anchors.bottom: parent.bottom; anchors.right: parent.right; anchors.margins: 8
+                                                    visible: itemData.rating !== undefined && itemData.rating !== ""
+                                                    color: "black"
+                                                    opacity: 0.8
+                                                    radius: 4
+                                                    width: 40
+                                                    height: 20
+                                                    Row {
+                                                        anchors.centerIn: parent; spacing: 2
+                                                        Text { text: "\u2605"; color: "#ffffff"; font.pixelSize: 10 }
+                                                        Text { text: itemData.rating || ""; color: "white"; font.pixelSize: 10; font.bold: true }
+                                                    }
+                                                }
+
+                                                // Border (exactly like LibraryScreen)
+                                                Rectangle {
+                                                    anchors.fill: parent; color: "transparent"; radius: 8; z: 10
+                                                    border.width: 3; border.color: isHovered ? "#ffffff" : "transparent"
+                                                    Behavior on border.color { ColorAnimation { duration: 200 } }
                                                 }
                                             }
+
+                                            // Title (exactly like LibraryScreen - centered below poster)
                                             Text {
                                                 width: parent.width
                                                 text: itemData.title || itemData.name || ""
                                                 color: "white"
+                                                font.pixelSize: 14
+                                                font.bold: true
                                                 elide: Text.ElideRight
+                                                horizontalAlignment: Text.AlignHCenter
                                             }
                                         }
                                     }

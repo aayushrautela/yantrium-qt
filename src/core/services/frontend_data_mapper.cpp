@@ -35,7 +35,7 @@ QJsonObject FrontendDataMapper::mapTmdbToCatalogItem(const QJsonObject& tmdbData
         for (const QJsonValue& value : crew) {
             QJsonObject person = value.toObject();
             QString job = person["job"].toString().toLower();
-            if ((type == "movie" && job == "director") || (type == "series" && job == "creator")) {
+            if ((type == "movie" && job == "director") || ((type == "tv" || type == "series") && job == "creator")) {
                 directors.append(person["name"].toString());
             }
         }
@@ -129,7 +129,8 @@ QVariantMap FrontendDataMapper::mapTmdbToDetailVariantMap(const QJsonObject& tmd
     try {
         // Basic info
         map["id"] = contentId;
-        map["type"] = (type == "movie") ? "movie" : "series";
+        // Use "tv" to match database (UI can still display as "show")
+        map["type"] = (type == "movie") ? "movie" : "tv";
         
         // Title/Name - always use "title" for frontend
         if (type == "movie") {

@@ -12,8 +12,12 @@
 #include <QTimer>
 #include <QQueue>
 #include <QSqlDatabase>
+#include <QUrlQuery>
 #include "../models/trakt_models.h"
 #include "../database/trakt_auth_dao.h"
+
+class SyncTrackingDao;
+class WatchHistoryDao;
 
 class TraktCoreService : public QObject
 {
@@ -30,6 +34,9 @@ public:
     Q_INVOKABLE void getUserProfile();
     Q_INVOKABLE void getWatchedMovies();
     Q_INVOKABLE void getWatchedShows();
+    Q_INVOKABLE void syncWatchedMovies(bool forceFullSync = false);
+    Q_INVOKABLE void syncWatchedShows(bool forceFullSync = false);
+    Q_INVOKABLE bool isInitialSyncCompleted(const QString& syncType) const;
     Q_INVOKABLE void getWatchlistMoviesWithImages();
     Q_INVOKABLE void getWatchlistShowsWithImages();
     Q_INVOKABLE void getCollectionMoviesWithImages();
@@ -46,9 +53,17 @@ public:
     void logout();
     
     // Internal API request method (used by other services)
-    void apiRequest(const QString& endpoint, const QString& method = "GET", 
+    void apiRequest(const QString& endpoint, const QString& method = "GET",
                    const QJsonObject& data = QJsonObject(), QObject* receiver = nullptr,
                    const char* slot = nullptr);
+
+    // Cache management
+    void clearCache();
+    void clearCacheForEndpoint(const QString& endpoint);
+    
+    // Sync management
+    Q_INVOKABLE void clearSyncTracking(const QString& syncType);
+    Q_INVOKABLE void resyncWatchedHistory();
 
 signals:
     void authenticationStatusChanged(bool authenticated);
@@ -62,6 +77,9 @@ signals:
     void ratingsFetched(const QVariantList& ratings);
     void playbackProgressFetched(const QVariantList& progress);
     void traktIdFound(const QString& imdbId, int traktId);
+    void watchedMoviesSynced(int addedCount, int updatedCount);
+    void watchedShowsSynced(int addedCount, int updatedCount);
+    void syncError(const QString& syncType, const QString& message);
     void error(const QString& message);
 
 private slots:
@@ -127,6 +145,37 @@ private:
     
     // Cleanup timer
     QTimer* m_cleanupTimer;
+    
+    // Caching
+    struct CachedTraktData {
+        QJsonObject data;
+        QDateTime timestamp;
+        int ttlSeconds;
+        
+        CachedTraktData() : ttlSeconds(300) {}
+        
+        bool isExpired() const {
+            return QDateTime::currentDateTime().secsTo(timestamp) < -ttlSeconds;
+        }
+    };
+    QMap<QString, CachedTraktData> m_cache;
+    
+    QString getCacheKey(const QString& endpoint, const QUrlQuery& query = QUrlQuery()) const;
+    QJsonObject getCachedResponse(const QString& cacheKey) const;
+    void cacheResponse(const QString& cacheKey, const QJsonObject& data, int ttlSeconds);
+    int getTtlForEndpoint(const QString& endpoint) const;
+    
+    // Sync tracking and watch history
+    SyncTrackingDao* m_syncDao;
+    WatchHistoryDao* m_watchHistoryDao;
+    
+    // Sync helper methods
+    int processAndStoreWatchedMovies(const QVariantList& movies);
+    int processAndStoreWatchedShows(const QVariantList& shows);
+    void updateSyncTracking(const QString& syncType, bool fullSyncCompleted);
+    QDateTime getLastSyncTime(const QString& syncType) const;
+    void getWatchedMoviesSince(const QDateTime& since);
+    void getWatchedShowsSince(const QDateTime& since);
 };
 
 #endif // TRAKT_CORE_SERVICE_H

@@ -12,6 +12,7 @@ TmdbDataService::TmdbDataService(QObject* parent)
     , m_apiClient(new TmdbApiClient(this))
 {
     connect(m_apiClient, &TmdbApiClient::error, this, &TmdbDataService::onApiClientError);
+    connect(m_apiClient, &TmdbApiClient::cachedResponseReady, this, &TmdbDataService::onCachedResponseReady);
 }
 
 void TmdbDataService::onApiClientError(const TmdbErrorInfo& errorInfo)
@@ -27,6 +28,122 @@ void TmdbDataService::onApiClientError(const TmdbErrorInfo& errorInfo)
         errorMessage = errorInfo.message.isEmpty() ? "TMDB API error" : errorInfo.message;
     }
     emit error(errorMessage);
+}
+
+void TmdbDataService::onCachedResponseReady(const QString& path, const QUrlQuery& query, const QJsonObject& data)
+{
+    qDebug() << "[TmdbDataService] Processing cached response for:" << path;
+    
+    // Route cached response to appropriate handler based on path pattern
+    if (path.startsWith("/find/")) {
+        // Extract IMDB ID from path
+        QString imdbId = path.mid(6); // Remove "/find/" prefix
+        QJsonArray movieResults = data["movie_results"].toArray();
+        QJsonArray tvResults = data["tv_results"].toArray();
+        
+        int tmdbId = 0;
+        if (!movieResults.isEmpty()) {
+            tmdbId = movieResults[0].toObject()["id"].toInt();
+        } else if (!tvResults.isEmpty()) {
+            tmdbId = tvResults[0].toObject()["id"].toInt();
+        }
+        
+        if (tmdbId > 0) {
+            emit tmdbIdFound(imdbId, tmdbId);
+        } else {
+            emit error("TMDB ID not found for IMDB ID: " + imdbId);
+        }
+    } else if (path.startsWith("/movie/") && path.contains("/similar")) {
+        // Similar movies
+        int tmdbId = path.mid(8, path.indexOf("/similar") - 8).toInt();
+        QJsonArray results = data["results"].toArray();
+        emit similarMoviesFetched(tmdbId, results);
+    } else if (path.startsWith("/tv/") && path.contains("/similar")) {
+        // Similar TV shows
+        int tmdbId = path.mid(4, path.indexOf("/similar") - 4).toInt();
+        QJsonArray results = data["results"].toArray();
+        emit similarTvFetched(tmdbId, results);
+    } else if (path.startsWith("/movie/") && path.contains("/credits")) {
+        // Cast and crew for movie
+        int tmdbId = path.mid(8, path.indexOf("/credits") - 8).toInt();
+        emit castAndCrewFetched(tmdbId, "movie", data);
+    } else if (path.startsWith("/tv/") && path.contains("/credits")) {
+        // Cast and crew for TV
+        int tmdbId = path.mid(4, path.indexOf("/credits") - 4).toInt();
+        emit castAndCrewFetched(tmdbId, "tv", data);
+    } else if (path.startsWith("/movie/")) {
+        // Movie metadata
+        int tmdbId = path.mid(8).toInt();
+        emit movieMetadataFetched(tmdbId, data);
+    } else if (path.startsWith("/tv/")) {
+        // TV metadata
+        int tmdbId = path.mid(4).toInt();
+        emit tvMetadataFetched(tmdbId, data);
+    } else if (path == "/search/movie") {
+        // Movie search
+        QJsonArray resultsArray = data["results"].toArray();
+        QList<TmdbSearchResult> results;
+        
+        for (const QJsonValue& value : resultsArray) {
+            results.append(TmdbSearchResult::fromJson(value.toObject()));
+        }
+        
+        std::sort(results.begin(), results.end(), compareByPopularity);
+        
+        QVariantList variantList;
+        for (const TmdbSearchResult& result : results) {
+            QVariantMap map;
+            map["id"] = result.id();
+            map["title"] = result.title();
+            map["name"] = result.name();
+            map["overview"] = result.overview();
+            map["releaseDate"] = result.releaseDate();
+            map["firstAirDate"] = result.firstAirDate();
+            map["posterPath"] = result.posterPath();
+            map["backdropPath"] = result.backdropPath();
+            map["voteAverage"] = result.voteAverage();
+            map["voteCount"] = result.voteCount();
+            map["popularity"] = result.popularity();
+            map["adult"] = result.adult();
+            map["mediaType"] = result.mediaType();
+            variantList.append(map);
+        }
+        
+        emit moviesFound(variantList);
+    } else if (path == "/search/tv") {
+        // TV search
+        QJsonArray resultsArray = data["results"].toArray();
+        QList<TmdbSearchResult> results;
+        
+        for (const QJsonValue& value : resultsArray) {
+            results.append(TmdbSearchResult::fromJson(value.toObject()));
+        }
+        
+        std::sort(results.begin(), results.end(), compareByPopularity);
+        
+        QVariantList variantList;
+        for (const TmdbSearchResult& result : results) {
+            QVariantMap map;
+            map["id"] = result.id();
+            map["title"] = result.title();
+            map["name"] = result.name();
+            map["overview"] = result.overview();
+            map["releaseDate"] = result.releaseDate();
+            map["firstAirDate"] = result.firstAirDate();
+            map["posterPath"] = result.posterPath();
+            map["backdropPath"] = result.backdropPath();
+            map["voteAverage"] = result.voteAverage();
+            map["voteCount"] = result.voteCount();
+            map["popularity"] = result.popularity();
+            map["adult"] = result.adult();
+            map["mediaType"] = result.mediaType();
+            variantList.append(map);
+        }
+        
+        emit tvFound(variantList);
+    } else {
+        qWarning() << "[TmdbDataService] Unknown cached response path:" << path;
+    }
 }
 
 void TmdbDataService::getTmdbIdFromImdb(const QString& imdbId)
@@ -534,5 +651,10 @@ void TmdbDataService::clearCacheForId(int tmdbId, const QString& type)
 {
     QString endpoint = QString("/%1/%2").arg(type, QString::number(tmdbId));
     m_apiClient->clearCacheForEndpoint(endpoint);
+}
+
+int TmdbDataService::getCacheSize() const
+{
+    return m_apiClient->getCacheSize();
 }
 

@@ -35,6 +35,8 @@ set(PROJECT_SOURCES
     src/core/database/local_library_dao.h
     src/core/database/watch_history_dao.cpp
     src/core/database/watch_history_dao.h
+    src/core/database/sync_tracking_dao.cpp
+    src/core/database/sync_tracking_dao.h
     # Addon models
     src/features/addons/models/addon_manifest.cpp
     src/features/addons/models/addon_manifest.h

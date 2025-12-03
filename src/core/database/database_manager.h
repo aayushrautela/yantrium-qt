@@ -23,6 +23,7 @@ public:
     bool createCatalogPreferencesTable();
     bool createLocalLibraryTable();
     bool createWatchHistoryTable();
+    bool createSyncTrackingTable();
     
 private:
     DatabaseManager(QObject* parent = nullptr);

@@ -85,12 +85,12 @@ Item {
     }
     
     function loadLibrary() {
-        console.log("[LibraryScreen] loadLibrary called, authenticated:", traktAuthService.isAuthenticated)
+        console.log("[LibraryScreen] loadLibrary called, authenticated:", traktAuthService.isAuthenticated, "current model count:", libraryModel.count)
         isLoading = true
         libraryModel.clear()
         pendingTraktItems = {}
         pendingMetadataRequests = 0
-        
+
         if (traktAuthService.isAuthenticated) {
             // Load Trakt watchlist
             console.log("[LibraryScreen] Loading Trakt watchlist")
@@ -284,11 +284,8 @@ Item {
             isLoading = false
         }
         function onLibraryItemAdded(success) {
-            console.log("[LibraryScreen] Library item added, success:", success)
-            if (success && !traktAuthService.isAuthenticated) {
-                // Reload library to show the new item
-                loadLibrary()
-            }
+            console.log("[LibraryScreen] Library item added, success:", success, "- refresh will be handled by MainApp")
+            // Refresh is now handled by MainApp via libraryChanged signal
         }
         function onError(message) {
             console.error("[LibraryScreen] Local library error:", message)

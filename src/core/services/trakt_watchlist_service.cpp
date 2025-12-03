@@ -3,6 +3,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QDebug>
 
 TraktWatchlistService::TraktWatchlistService(QObject* parent)
@@ -281,12 +283,43 @@ void TraktWatchlistService::onCollectionShowsFetched(const QVariantList& shows)
 // Add missing slot implementations
 void TraktWatchlistService::onWatchlistItemAdded()
 {
+    // Clear watchlist cache so next check will fetch fresh data
+    m_watchlistMovies.clear();
+    m_watchlistShows.clear();
+    // Also clear TraktCoreService cache for watchlist endpoints
+    m_coreService.clearCacheForEndpoint("/sync/watchlist");
+    qDebug() << "[TraktWatchlistService] Cleared watchlist cache after successful addition";
     emit watchlistItemAdded(true);
 }
 
 void TraktWatchlistService::onWatchlistItemRemoved()
 {
-    emit watchlistItemRemoved(true);
+    QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+    bool success = false;
+
+    if (reply) {
+        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        // Trakt API returns 204 No Content for successful removals
+        success = (statusCode == 204 || statusCode == 200) && reply->error() == QNetworkReply::NoError;
+        qDebug() << "[TraktWatchlistService] Watchlist removal response - statusCode:" << statusCode << "error:" << reply->error();
+
+        if (success) {
+            // Clear watchlist cache so next check will fetch fresh data
+            m_watchlistMovies.clear();
+            m_watchlistShows.clear();
+            // Also clear TraktCoreService cache for watchlist endpoints
+            m_coreService.clearCacheForEndpoint("/sync/watchlist");
+            qDebug() << "[TraktWatchlistService] Cleared watchlist cache after successful removal";
+        } else {
+            qWarning() << "[TraktWatchlistService] Watchlist removal failed - statusCode:" << statusCode;
+        }
+
+        reply->deleteLater();
+    } else {
+        qWarning() << "[TraktWatchlistService] onWatchlistItemRemoved: No reply available";
+    }
+
+    emit watchlistItemRemoved(success);
 }
 
 void TraktWatchlistService::onCollectionItemAdded()

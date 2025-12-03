@@ -39,6 +39,29 @@ bool WatchHistoryDao::insertWatchHistory(const WatchHistoryRecord& item)
     return true;
 }
 
+bool WatchHistoryDao::upsertWatchHistory(const WatchHistoryRecord& item)
+{
+    // Check if record already exists with same contentId, type, and watchedAt
+    QList<WatchHistoryRecord> existing = getWatchHistoryByContentAndDate(item.contentId, item.type, item.watchedAt);
+    
+    if (!existing.isEmpty()) {
+        // Record already exists, skip insert
+        qDebug() << "[WatchHistoryDao] Record already exists, skipping:" << item.title 
+                 << "type:" << item.type << "watchedAt:" << item.watchedAt.toString();
+        return true;
+    }
+    
+    // Insert new record
+    bool success = insertWatchHistory(item);
+    if (success) {
+        qDebug() << "[WatchHistoryDao] Successfully inserted watch history:" << item.title 
+                 << "type:" << item.type << "contentId:" << item.contentId;
+    } else {
+        qWarning() << "[WatchHistoryDao] Failed to insert watch history:" << item.title;
+    }
+    return success;
+}
+
 QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistory(int limit)
 {
     QList<WatchHistoryRecord> items;
@@ -74,6 +97,67 @@ QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByContentId(const QStr
         items.append(recordFromQuery(query));
     }
     
+    return items;
+}
+
+QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryForContent(const QString& contentId, const QString& type)
+{
+    QList<WatchHistoryRecord> items;
+    QSqlQuery query(m_database);
+    query.prepare("SELECT * FROM watch_history WHERE contentId = ? AND type = ? ORDER BY watchedAt DESC");
+    query.addBindValue(contentId);
+    query.addBindValue(type);
+
+    if (!query.exec()) {
+        qWarning() << "Failed to get watch history for content:" << query.lastError().text();
+        return items;
+    }
+
+    while (query.next()) {
+        items.append(recordFromQuery(query));
+    }
+
+    return items;
+}
+
+QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByTmdbId(const QString& tmdbId, const QString& type)
+{
+    QList<WatchHistoryRecord> items;
+    QSqlQuery query(m_database);
+    query.prepare("SELECT * FROM watch_history WHERE tmdbId = ? AND type = ? ORDER BY watchedAt DESC");
+    query.addBindValue(tmdbId);
+    query.addBindValue(type);
+
+    if (!query.exec()) {
+        qWarning() << "Failed to get watch history by tmdbId:" << query.lastError().text();
+        return items;
+    }
+
+    while (query.next()) {
+        items.append(recordFromQuery(query));
+    }
+
+    return items;
+}
+
+QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByContentAndDate(const QString& contentId, const QString& type, const QDateTime& watchedAt)
+{
+    QList<WatchHistoryRecord> items;
+    QSqlQuery query(m_database);
+    query.prepare("SELECT * FROM watch_history WHERE contentId = ? AND type = ? AND watchedAt = ? ORDER BY watchedAt DESC");
+    query.addBindValue(contentId);
+    query.addBindValue(type);
+    query.addBindValue(watchedAt.toString(Qt::ISODate));
+    
+    if (!query.exec()) {
+        qWarning() << "Failed to get watch history by content and date:" << query.lastError().text();
+        return items;
+    }
+
+    while (query.next()) {
+        items.append(recordFromQuery(query));
+    }
+
     return items;
 }
 
