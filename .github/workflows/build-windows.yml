@@ -98,6 +98,13 @@ jobs:
           echo "ERROR: qwindows.dll not found in platforms directory!"
           exit /b 1
         )
+        echo "Verifying Qt Quick Controls deployment..."
+        if exist "build\${{ inputs.build_type }}\QtQuick\Controls" (
+          echo "SUCCESS: QtQuick.Controls directory found!"
+          echo "Basic style will be available (included with QtQuick.Controls)"
+        ) else (
+          echo "WARNING: QtQuick.Controls directory not found, but may be in QtQuick folder"
+        )
         
     - name: Copy SQL plugins
       shell: powershell

@@ -68,6 +68,14 @@ int main(int argc, char *argv[])
     qDebug() << "Set QSG_RHI_BACKEND to opengl";
     qDebug() << "QSG_RHI_BACKEND env var:" << qgetenv("QSG_RHI_BACKEND");
     
+    // Set Qt Quick Controls style to Basic (minimal style that supports background customization)
+    // Native Windows style doesn't support background property customization
+    // This must be set BEFORE QGuiApplication is created
+    qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
+    std::cout << "[MAIN] Set QT_QUICK_CONTROLS_STYLE to Basic" << std::endl;
+    std::cout.flush();
+    qDebug() << "QT_QUICK_CONTROLS_STYLE set to Basic";
+    
     QGuiApplication app(argc, argv);
     std::cout << "[MAIN] QGuiApplication created" << std::endl;
     std::cout.flush();

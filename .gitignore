@@ -78,6 +78,7 @@ ui_*.h
 .DS_Store
 Thumbs.db
 desktop.ini
+repo/
 
 # ============================================
 # IDE & Editor Files
@@ -201,3 +202,4 @@ logs/
 docs/_build/
 docs/.doctrees/
 *.pdf
+yantrium.flatpak
