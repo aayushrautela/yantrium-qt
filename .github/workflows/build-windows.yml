@@ -27,7 +27,7 @@ jobs:
         arch: 'win64_msvc2019_64'
         cache: 'true'
         set-env: 'true'
-        modules: 'qt5compat qtshadertools'
+        modules: 'qt5compat qtshadertools qtsvg'
         
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.1
@@ -79,6 +79,7 @@ jobs:
 
         # 1. Run windeployqt
         Write-Host "Running windeployqt..."
+        # windeployqt will now detect the installed qtsvg module and deploy qsvg.dll
         windeployqt.exe --qmldir resources/qml --network --compiler-runtime $exePath
 
         # 2. Manually copy TLS plugins
@@ -188,7 +189,8 @@ jobs:
           build/${{ inputs.build_type }}/*.dll
           build/${{ inputs.build_type }}/platforms/
           build/${{ inputs.build_type }}/sqldrivers/
-          build/${{ inputs.build_type }}/imageformats/  # <--- ADDED: Critical for loading images (jpg, webp, etc)
+          build/${{ inputs.build_type }}/imageformats/
+          build/${{ inputs.build_type }}/iconengines/
           build/${{ inputs.build_type }}/qml/
           build/${{ inputs.build_type }}/QtQuick/
           build/${{ inputs.build_type }}/QtQml/
