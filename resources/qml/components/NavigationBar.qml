@@ -6,7 +6,7 @@ Rectangle {
     
     property int currentIndex: 0
     signal tabClicked(int index)
-    signal searchClicked()
+    signal searchClicked(string query)
     
     onTabClicked: function(index) {
         currentIndex = index
@@ -71,8 +71,9 @@ Rectangle {
         anchors.rightMargin: 20
         
         onSearchRequested: function(query) {
-            root.searchClicked()
-            // Could emit a signal here if needed
+            console.warn("[NavigationBar] ===== SEARCH REQUESTED =====")
+            console.warn("[NavigationBar] Query:", query)
+            root.searchClicked(query)
         }
     }
 }

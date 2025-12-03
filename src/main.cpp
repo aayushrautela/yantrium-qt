@@ -22,6 +22,8 @@
 #include "core/services/catalog_preferences_service.h"
 #include "core/services/file_export_service.h"
 #include "core/services/local_library_service.h"
+#include "core/services/tmdb_search_service.h"
+#include "core/services/stream_service.h"
 
 // Force logging to console
 Q_LOGGING_CATEGORY(yantrium, "yantrium")
@@ -127,6 +129,18 @@ int main(int argc, char *argv[])
     std::cout << "[MAIN] Registered LocalLibraryService" << std::endl;
     std::cout.flush();
     qDebug() << "Registered LocalLibraryService";
+    
+    // Register TMDB Search service
+    qmlRegisterType<TmdbSearchService>("Yantrium.Services", 1, 0, "TmdbSearchService");
+    std::cout << "[MAIN] Registered TmdbSearchService" << std::endl;
+    std::cout.flush();
+    qDebug() << "Registered TmdbSearchService";
+    
+    // Register Stream service
+    qmlRegisterType<StreamService>("Yantrium.Services", 1, 0, "StreamService");
+    std::cout << "[MAIN] Registered StreamService" << std::endl;
+    std::cout.flush();
+    qDebug() << "Registered StreamService";
 
     QQmlApplicationEngine engine;
     const QUrl url(QStringLiteral("qrc:/qml/MainApp.qml"));

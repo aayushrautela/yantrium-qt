@@ -28,12 +28,17 @@ QUrl TmdbSearchService::buildUrl(const QString& path, const QUrlQuery& query)
 
 void TmdbSearchService::searchMovies(const QString& query, int page)
 {
+    qWarning() << "[TmdbSearchService] ===== searchMovies CALLED =====";
+    qWarning() << "[TmdbSearchService] Query:" << query << "Page:" << page;
+    
     if (query.trimmed().isEmpty()) {
+        qWarning() << "[TmdbSearchService] Empty query, emitting error";
         emit error("Search query cannot be empty");
         return;
     }
     
     if (page < 1) {
+        qWarning() << "[TmdbSearchService] Invalid page, emitting error";
         emit error("Page number must be >= 1");
         return;
     }
@@ -43,26 +48,36 @@ void TmdbSearchService::searchMovies(const QString& query, int page)
     urlQuery.addQueryItem("page", QString::number(page));
     
     QUrl url = buildUrl("/search/movie", urlQuery);
+    qWarning() << "[TmdbSearchService] Built URL:" << url.toString();
+    
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader("Accept", "application/json");
     
+    qWarning() << "[TmdbSearchService] Sending GET request for movies";
     m_currentReply = m_networkManager->get(request);
     m_currentReply->setProperty("requestType", "movies");
     connect(m_currentReply, &QNetworkReply::finished, this, &TmdbSearchService::onMoviesReplyFinished);
     connect(m_currentReply, &QNetworkReply::errorOccurred, this, [this]() {
+        qWarning() << "[TmdbSearchService] Network error occurred for movies search";
         handleError(m_currentReply, "Search movies");
     });
+    qWarning() << "[TmdbSearchService] Request sent, waiting for reply";
 }
 
 void TmdbSearchService::searchTv(const QString& query, int page)
 {
+    qWarning() << "[TmdbSearchService] ===== searchTv CALLED =====";
+    qWarning() << "[TmdbSearchService] Query:" << query << "Page:" << page;
+    
     if (query.trimmed().isEmpty()) {
+        qWarning() << "[TmdbSearchService] Empty query, emitting error";
         emit error("Search query cannot be empty");
         return;
     }
     
     if (page < 1) {
+        qWarning() << "[TmdbSearchService] Invalid page, emitting error";
         emit error("Page number must be >= 1");
         return;
     }
@@ -72,36 +87,56 @@ void TmdbSearchService::searchTv(const QString& query, int page)
     urlQuery.addQueryItem("page", QString::number(page));
     
     QUrl url = buildUrl("/search/tv", urlQuery);
+    qWarning() << "[TmdbSearchService] Built URL:" << url.toString();
+    
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader("Accept", "application/json");
     
+    qWarning() << "[TmdbSearchService] Sending GET request for TV";
     m_currentReply = m_networkManager->get(request);
     m_currentReply->setProperty("requestType", "tv");
     connect(m_currentReply, &QNetworkReply::finished, this, &TmdbSearchService::onTvReplyFinished);
     connect(m_currentReply, &QNetworkReply::errorOccurred, this, [this]() {
+        qWarning() << "[TmdbSearchService] Network error occurred for TV search";
         handleError(m_currentReply, "Search TV");
     });
+    qWarning() << "[TmdbSearchService] Request sent, waiting for reply";
 }
 
 void TmdbSearchService::onMoviesReplyFinished()
 {
+    qWarning() << "[TmdbSearchService] ===== onMoviesReplyFinished CALLED =====";
     QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
-    if (!reply) return;
+    if (!reply) {
+        qWarning() << "[TmdbSearchService] ERROR: No reply object";
+        return;
+    }
+    
+    qWarning() << "[TmdbSearchService] Reply error code:" << reply->error();
+    qWarning() << "[TmdbSearchService] Reply URL:" << reply->url().toString();
     
     if (reply->error() != QNetworkReply::NoError) {
+        qWarning() << "[TmdbSearchService] Network error:" << reply->errorString();
         handleError(reply, "Search movies");
         return;
     }
     
-    QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    QByteArray data = reply->readAll();
+    qWarning() << "[TmdbSearchService] Received" << data.size() << "bytes of data";
+    
+    QJsonDocument doc = QJsonDocument::fromJson(data);
     if (doc.isNull() || !doc.isObject()) {
+        qWarning() << "[TmdbSearchService] ERROR: Failed to parse JSON";
         emit error("Failed to parse search results");
         reply->deleteLater();
         return;
     }
     
-    QJsonArray resultsArray = doc.object()["results"].toArray();
+    QJsonObject rootObj = doc.object();
+    QJsonArray resultsArray = rootObj["results"].toArray();
+    qWarning() << "[TmdbSearchService] Found" << resultsArray.size() << "movies in JSON response";
+    
     QList<TmdbSearchResult> results;
     
     for (const QJsonValue& value : resultsArray) {
@@ -131,29 +166,48 @@ void TmdbSearchService::onMoviesReplyFinished()
         variantList.append(map);
     }
     
-    qDebug() << "Found" << results.size() << "movies";
+    qWarning() << "[TmdbSearchService] Emitting moviesFound signal with" << variantList.size() << "movies";
+    if (variantList.size() > 0) {
+        qWarning() << "[TmdbSearchService] First movie:" << variantList.first().toMap();
+    }
     emit moviesFound(variantList);
+    qWarning() << "[TmdbSearchService] moviesFound signal emitted";
     reply->deleteLater();
 }
 
 void TmdbSearchService::onTvReplyFinished()
 {
+    qWarning() << "[TmdbSearchService] ===== onTvReplyFinished CALLED =====";
     QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
-    if (!reply) return;
+    if (!reply) {
+        qWarning() << "[TmdbSearchService] ERROR: No reply object";
+        return;
+    }
+    
+    qWarning() << "[TmdbSearchService] Reply error code:" << reply->error();
+    qWarning() << "[TmdbSearchService] Reply URL:" << reply->url().toString();
     
     if (reply->error() != QNetworkReply::NoError) {
+        qWarning() << "[TmdbSearchService] Network error:" << reply->errorString();
         handleError(reply, "Search TV");
         return;
     }
     
-    QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    QByteArray data = reply->readAll();
+    qWarning() << "[TmdbSearchService] Received" << data.size() << "bytes of data";
+    
+    QJsonDocument doc = QJsonDocument::fromJson(data);
     if (doc.isNull() || !doc.isObject()) {
+        qWarning() << "[TmdbSearchService] ERROR: Failed to parse JSON";
         emit error("Failed to parse search results");
         reply->deleteLater();
         return;
     }
     
-    QJsonArray resultsArray = doc.object()["results"].toArray();
+    QJsonObject rootObj = doc.object();
+    QJsonArray resultsArray = rootObj["results"].toArray();
+    qWarning() << "[TmdbSearchService] Found" << resultsArray.size() << "TV shows in JSON response";
+    
     QList<TmdbSearchResult> results;
     
     for (const QJsonValue& value : resultsArray) {
@@ -183,8 +237,12 @@ void TmdbSearchService::onTvReplyFinished()
         variantList.append(map);
     }
     
-    qDebug() << "Found" << results.size() << "TV shows";
+    qWarning() << "[TmdbSearchService] Emitting tvFound signal with" << variantList.size() << "TV shows";
+    if (variantList.size() > 0) {
+        qWarning() << "[TmdbSearchService] First TV show:" << variantList.first().toMap();
+    }
     emit tvFound(variantList);
+    qWarning() << "[TmdbSearchService] tvFound signal emitted";
     reply->deleteLater();
 }
 

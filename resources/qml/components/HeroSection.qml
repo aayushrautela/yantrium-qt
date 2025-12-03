@@ -11,6 +11,10 @@ Item {
     property string logoUrl: ""
     property var metadata: [] // Array of strings e.g. ["2024", "PG-13"]
     
+    // --- Signals ---
+    signal playClicked()
+    signal addToLibraryClicked()
+    
     // --- Internal Logic ---
     // We use two images to ping-pong: one is visible, one waits to slide in.
     property bool useImageA: true 
@@ -224,6 +228,7 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
+                    onClicked: root.playClicked()
                 }
                 
                 Button {
@@ -243,6 +248,7 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
+                    onClicked: root.addToLibraryClicked()
                 }
             }
         }

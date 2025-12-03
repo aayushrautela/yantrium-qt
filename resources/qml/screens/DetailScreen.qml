@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Yantrium.Services 1.0
+import "../components"
 
 Item {
     id: root
@@ -47,6 +48,20 @@ Item {
             // Get smart play state
             console.log("[DetailScreen] Calling getSmartPlayState with details.type:", details.type, "tmdbId:", details.tmdbId, "id:", details.id)
             libraryService.getSmartPlayState(details)
+            
+            // Initialize seasons list for TV shows
+            if (details.type === "tv" && details.tmdbId) {
+                var numSeasons = details.numberOfSeasons || 1
+                var seasons = []
+                for (var i = 1; i <= numSeasons; i++) {
+                    seasons.push(i)
+                }
+                root.availableSeasons = seasons
+                root.selectedSeasonNumber = 1
+                // Load first season episodes
+                var tmdbId = parseInt(details.tmdbId) || details.tmdbId
+                libraryService.loadSeasonEpisodes(tmdbId, 1)
+            }
         }
         function onSimilarItemsLoaded(items) {
             root.similarItems = items
@@ -54,6 +69,12 @@ Item {
         function onSmartPlayStateLoaded(smartPlayState) {
             root.smartPlayState = smartPlayState
             console.log("[DetailScreen] Smart play state loaded:", JSON.stringify(smartPlayState))
+        }
+        function onSeasonEpisodesLoaded(seasonNumber, episodes) {
+            if (seasonNumber === root.selectedSeasonNumber) {
+                root.currentSeasonEpisodes = episodes
+                console.log("[DetailScreen] Episodes loaded for season", seasonNumber, "count:", episodes.length)
+            }
         }
         function onError(message) {
             console.error("[DetailScreen] Error:", message)
@@ -175,6 +196,9 @@ Item {
     property int currentTabIndex: 0
     property int selectedSeason: 1
     property var similarItems: []
+    property var availableSeasons: []
+    property var currentSeasonEpisodes: []
+    property int selectedSeasonNumber: 1
     
     ListModel {
         id: castModel
@@ -230,6 +254,7 @@ Item {
     
     signal closeRequested()
     signal libraryChanged()
+    signal playRequested(string streamUrl)
     
     function loadDetails(contentId, type, addonId) {
         if (!contentId || !type) return
@@ -688,18 +713,18 @@ Item {
                                     var episode = root.smartPlayState.episode || -1
 
                                     console.log("Play clicked for:", root.itemData.title || root.itemData.name,
-                                               "action:", action, "S" + season + "E" + episode)
+                                               "action:", action, "type:", root.itemData.type)
 
-                                    // TODO: Implement actual playback logic based on action type
-                                    if (action === "play") {
-                                        console.log("Starting playback from beginning or specific episode")
-                                    } else if (action === "continue") {
-                                        console.log("Continuing playback from last position")
-                                    } else if (action === "rewatch") {
-                                        console.log("Starting rewatch from beginning")
-                                    } else if (action === "soon") {
-                                        console.log("Episode not yet available")
+                                    // Format episode ID for TV shows only (not for movies)
+                                    var episodeId = ""
+                                    if (root.itemData.type === "tv" && season > 0 && episode > 0) {
+                                        episodeId = "S" + String(season).padStart(2, '0') + "E" + String(episode).padStart(2, '0')
+                                        console.log("TV show - formatted episode ID:", episodeId)
                                     }
+
+                                    // Open stream selection dialog
+                                    streamDialog.loadStreams(root.itemData, episodeId)
+                                    streamDialog.open()
                                 }
                             }
                             
@@ -865,12 +890,240 @@ Item {
                         Rectangle {
                             visible: root.isSeries()
                             color: "#09090b"
-                            // ... (Episodes content same as before)
+                            
+                            Item {
+                                anchors.fill: parent
+                                anchors.leftMargin: 50
+                                anchors.rightMargin: 50
+                                anchors.topMargin: 30
+                                
+                                Column {
+                                    anchors.fill: parent
+                                    spacing: 20
+                                    
+                                    // Season selector and episode count
+                                    Row {
+                                        spacing: 20
+                                    
+                                    // Season dropdown
+                                    ComboBox {
+                                        id: seasonComboBox
+                                        width: 200
+                                        height: 40
+                                        model: root.availableSeasons
+                                        currentIndex: {
+                                            var idx = root.availableSeasons.indexOf(root.selectedSeasonNumber)
+                                            return idx >= 0 ? idx : 0
+                                        }
+                                        visible: root.availableSeasons.length > 0
+                                        
+                                        background: Rectangle {
+                                            color: "#2d2d2d"
+                                            radius: 4
+                                        }
+                                        
+                                        contentItem: Row {
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 12
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 8
+                                            
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: "Season " + (root.availableSeasons[seasonComboBox.currentIndex] || root.selectedSeasonNumber)
+                                                color: "#ffffff"
+                                                font.pixelSize: 16
+                                            }
+                                            
+                                            Item {
+                                                width: 16
+                                                height: 16
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "▼"
+                                                    color: "#ffffff"
+                                                    font.pixelSize: 10
+                                                }
+                                            }
+                                        }
+                                        
+                                        popup: Popup {
+                                            y: seasonComboBox.height
+                                            width: seasonComboBox.width
+                                            implicitHeight: contentItem.implicitHeight
+                                            padding: 4
+                                            
+                                            contentItem: ListView {
+                                                clip: true
+                                                implicitHeight: contentHeight
+                                                model: seasonComboBox.popup.visible ? seasonComboBox.delegateModel : null
+                                                currentIndex: seasonComboBox.highlightedIndex
+                                                
+                                                ScrollIndicator.vertical: ScrollIndicator { }
+                                            }
+                                            
+                                            background: Rectangle {
+                                                color: "#2d2d2d"
+                                                radius: 4
+                                            }
+                                        }
+                                        
+                                        delegate: ItemDelegate {
+                                            width: seasonComboBox.width
+                                            height: 40
+                                            
+                                            background: Rectangle {
+                                                color: parent.hovered ? "#3d3d3d" : "#2d2d2d"
+                                            }
+                                            
+                                            contentItem: Text {
+                                                text: "Season " + modelData
+                                                color: "#ffffff"
+                                                font.pixelSize: 16
+                                                anchors.left: parent.left
+                                                anchors.leftMargin: 12
+                                                anchors.verticalCenter: parent.verticalCenter
+                                            }
+                                        }
+                                        
+                                        onActivated: function(index) {
+                                            var newSeason = root.availableSeasons[index]
+                                            if (newSeason !== root.selectedSeasonNumber) {
+                                                root.selectedSeasonNumber = newSeason
+                                                root.currentSeasonEpisodes = [] // Clear while loading
+                                                var tmdbId = parseInt(root.itemData.tmdbId) || root.itemData.tmdbId
+                                                if (tmdbId) {
+                                                    libraryService.loadSeasonEpisodes(tmdbId, newSeason)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Episode count
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: root.currentSeasonEpisodes.length + " Episodes"
+                                        color: "#ffffff"
+                                        font.pixelSize: 16
+                                    }
+                                    }
+                                
+                                // Episode cards list
+                                ScrollView {
+                                    width: parent.width
+                                    height: parent.height - 60
+                                    clip: true
+                                    
+                                    ScrollBar.horizontal: ScrollBar {
+                                        policy: ScrollBar.AlwaysOn
+                                    }
+                                    
+                                    ListView {
+                                        id: episodesListView
+                                        orientation: ListView.Horizontal
+                                        spacing: 20
+                                        model: root.currentSeasonEpisodes
+                                        width: parent.width
+                                        height: parent.height
+                                        
+                                        delegate: Item {
+                                            width: 320
+                                            height: episodesListView.height
+                                            
+                                            Column {
+                                                width: parent.width
+                                                spacing: 12
+                                                
+                                                // Thumbnail
+                                                Item {
+                                                    width: parent.width
+                                                    height: 180
+                                                    
+                                                    Rectangle {
+                                                        id: maskShape
+                                                        anchors.fill: parent
+                                                        radius: 8
+                                                        visible: false
+                                                    }
+                                                    
+                                                    layer.enabled: true
+                                                    layer.effect: OpacityMask {
+                                                        maskSource: maskShape
+                                                    }
+                                                    
+                                                    Rectangle {
+                                                        anchors.fill: parent
+                                                        color: "#2a2a2a"
+                                                        radius: 8
+                                                    }
+                                                    
+                                                    Image {
+                                                        anchors.fill: parent
+                                                        source: modelData.thumbnailUrl || ""
+                                                        fillMode: Image.PreserveAspectCrop
+                                                        asynchronous: true
+                                                        smooth: true
+                                                    }
+                                                    
+                                                    // Duration badge
+                                                    Rectangle {
+                                                        anchors.bottom: parent.bottom
+                                                        anchors.right: parent.right
+                                                        anchors.margins: 8
+                                                        width: durationText.width + 12
+                                                        height: 24
+                                                        color: "#2d2d2d"
+                                                        opacity: 0.9
+                                                        radius: 4
+                                                        
+                                                        Text {
+                                                            id: durationText
+                                                            anchors.centerIn: parent
+                                                            text: (modelData.duration || 0) + "m"
+                                                            color: "#ffffff"
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // Episode number and title
+                                                Text {
+                                                    width: parent.width
+                                                    text: "E" + modelData.episodeNumber + ": " + (modelData.title || "")
+                                                    color: "#ffffff"
+                                                    font.pixelSize: 16
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                }
+                                                
+                                                // Description
+                                                Text {
+                                                    width: parent.width
+                                                    text: modelData.description || ""
+                                                    color: "#aaaaaa"
+                                                    font.pixelSize: 14
+                                                    wrapMode: Text.WordWrap
+                                                    maximumLineCount: 3
+                                                    elide: Text.ElideRight
+                                                    lineHeight: 1.3
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                }
+                            }
+                            
+                            // Empty state
                             Text {
                                 anchors.centerIn: parent
-                                text: "Episodes content placeholder"
-                                color: "#666"
-                                visible: (root.itemData.numberOfSeasons || 0) === 0
+                                text: "No episodes available"
+                                color: "#666666"
+                                font.pixelSize: 16
+                                visible: root.currentSeasonEpisodes.length === 0 && !root.isLoading
                             }
                         }
                         
@@ -1049,6 +1302,22 @@ Item {
                         font.pixelSize: 16
                     }
                 }
+            }
+        }
+    }
+    
+    // Stream Selection Dialog
+    StreamSelectionDialog {
+        id: streamDialog
+        parent: root.parent
+        
+        onStreamSelected: function(stream) {
+            console.log("[DetailScreen] Stream selected:", JSON.stringify(stream))
+            console.log("[DetailScreen] Stream URL:", stream.url)
+            
+            // Emit signal to request playback
+            if (stream.url) {
+                root.playRequested(stream.url)
             }
         }
     }

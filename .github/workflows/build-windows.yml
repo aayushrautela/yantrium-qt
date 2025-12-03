@@ -1,0 +1,105 @@
+name: Build Windows (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Release
+          - Debug
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Qt6
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: '6.7.0'
+        modules: 'qt.qt6.6070.win64_msvc2019_64.qtquick qt.qt6.6070.win64_msvc2019_64.qtwidgets qt.qt6.6070.win64_msvc2019_64.qtnetwork qt.qt6.6070.win64_msvc2019_64.qtgui qt.qt6.6070.win64_msvc2019_64.qtsql'
+        cache: true
+        
+    - name: Setup MSVC
+      uses: microsoft/setup-msbuild@v1.1
+      
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v1.14
+      with:
+        cmake-version: '3.31'
+        
+    - name: Configure CMake
+      shell: cmd
+      env:
+        TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+        TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+        OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+      run: |
+        cmake -B build -S . ^
+          -G "Visual Studio 17 2022" ^
+          -A x64 ^
+          -DCMAKE_BUILD_TYPE=${{ inputs.build_type }} ^
+          -DTMDB_API_KEY="%TMDB_API_KEY%" ^
+          -DTRAKT_CLIENT_ID="%TRAKT_CLIENT_ID%" ^
+          -DTRAKT_CLIENT_SECRET="%TRAKT_CLIENT_SECRET%" ^
+          -DOMDB_API_KEY="%OMDB_API_KEY%"
+          
+    - name: Build
+      shell: cmd
+      run: |
+        cmake --build build --config ${{ inputs.build_type }}
+        
+    - name: Check for MDK SDK Windows binaries
+      shell: cmd
+      run: |
+        if not exist "vendor\mdk-sdk\lib\x64\mdk.lib" (
+          echo "Warning: MDK SDK Windows library not found at vendor\mdk-sdk\lib\x64\mdk.lib"
+          echo "Build may fail if MDK SDK is required."
+        )
+        if not exist "vendor\mdk-sdk\bin\x64" (
+          echo "Warning: MDK SDK Windows binaries directory not found at vendor\mdk-sdk\bin\x64"
+        )
+        
+    - name: Deploy Qt dependencies
+      shell: cmd
+      run: |
+        if exist "build\${{ inputs.build_type }}\Yantrium.exe" (
+          windeployqt.exe build\${{ inputs.build_type }}\Yantrium.exe
+        ) else (
+          echo "Executable not found, skipping windeployqt"
+        )
+        
+    - name: Copy MDK DLLs
+      shell: cmd
+      run: |
+        if exist "vendor\mdk-sdk\bin\x64\*.dll" (
+          echo "Copying MDK DLLs..."
+          copy /Y vendor\mdk-sdk\bin\x64\*.dll build\${{ inputs.build_type }}\
+        ) else (
+          echo "No MDK DLLs found to copy"
+        )
+        
+    - name: List build artifacts
+      shell: cmd
+      run: |
+        echo "Build artifacts:"
+        dir /B build\${{ inputs.build_type }}\
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: Yantrium-Windows-${{ inputs.build_type }}
+        path: |
+          build/${{ inputs.build_type }}/Yantrium.exe
+          build/${{ inputs.build_type }}/*.dll
+        retention-days: 30
+        if-no-files-found: warn
+

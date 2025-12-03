@@ -56,6 +56,8 @@ set(PROJECT_SOURCES
     src/core/models/tmdb_models.h
     src/core/models/trakt_models.cpp
     src/core/models/trakt_models.h
+    src/core/models/stream_info.cpp
+    src/core/models/stream_info.h
     # Core services
     src/core/services/configuration.cpp
     src/core/services/configuration.h
@@ -65,6 +67,8 @@ set(PROJECT_SOURCES
     src/core/services/tmdb_api_client.h
     src/core/services/tmdb_data_service.cpp
     src/core/services/tmdb_data_service.h
+    src/core/services/tmdb_search_service.cpp
+    src/core/services/tmdb_search_service.h
     src/core/services/tmdb_data_mapper.cpp
     src/core/services/tmdb_data_mapper.h
     src/core/services/frontend_data_mapper.cpp
@@ -89,6 +93,8 @@ set(PROJECT_SOURCES
     src/core/services/file_export_service.h
     src/core/services/local_library_service.cpp
     src/core/services/local_library_service.h
+    src/core/services/stream_service.cpp
+    src/core/services/stream_service.h
     resources/qml.qrc
 )
 

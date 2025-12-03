@@ -14,6 +14,7 @@ LibraryService::LibraryService(QObject* parent)
     , m_addonRepository(new AddonRepository(this))
     , m_traktService(&TraktCoreService::instance())
     , m_tmdbService(new TmdbDataService(this))
+    , m_tmdbSearchService(new TmdbSearchService(this))
     , m_mediaMetadataService(new MediaMetadataService(this))
     , m_omdbService(new OmdbService(this))
     , m_localLibraryService(new LocalLibraryService(this))
@@ -24,9 +25,12 @@ LibraryService::LibraryService(QObject* parent)
     , m_pendingHeroRequests(0)
     , m_isLoadingHeroItems(false)
     , m_pendingTmdbRequests(0)
+    , m_searchMoviesReceived(false)
+    , m_searchTvReceived(false)
 {
-    qDebug() << "[LibraryService] ===== Constructor called =====";
-    qDebug() << "[LibraryService] LibraryService instance created";
+    qWarning() << "[LibraryService] ===== Constructor called =====";
+    qWarning() << "[LibraryService] LibraryService instance created";
+    qWarning() << "[LibraryService] m_tmdbSearchService pointer:" << (void*)m_tmdbSearchService;
     
     // Connect to Trakt service for continue watching
     connect(m_traktService, &TraktCoreService::playbackProgressFetched,
@@ -45,6 +49,8 @@ LibraryService::LibraryService(QObject* parent)
             this, &LibraryService::onSimilarMoviesFetched);
     connect(m_tmdbService, &TmdbDataService::similarTvFetched,
             this, &LibraryService::onSimilarTvFetched);
+    connect(m_tmdbService, &TmdbDataService::tvSeasonDetailsFetched,
+            this, &LibraryService::onTvSeasonDetailsFetched);
     
     // Connect to MediaMetadataService for item details
     connect(m_mediaMetadataService, &MediaMetadataService::metadataLoaded,
@@ -316,6 +322,200 @@ void LibraryService::searchCatalogs(const QString& query)
     }
     
     emit searchResultsLoaded(results);
+}
+
+void LibraryService::searchTmdb(const QString& query)
+{
+    qWarning() << "[LibraryService] ===== searchTmdb CALLED =====";
+    qWarning() << "[LibraryService] Query:" << query;
+    
+    if (query.trimmed().isEmpty()) {
+        qWarning() << "[LibraryService] Empty query, emitting empty results";
+        emit tmdbSearchResultsLoaded(QVariantList());
+        return;
+    }
+    
+    if (!m_tmdbSearchService) {
+        qWarning() << "[LibraryService] ERROR: m_tmdbSearchService is null!";
+        emit tmdbSearchResultsLoaded(QVariantList());
+        return;
+    }
+    
+    qWarning() << "[LibraryService] Searching TMDB for:" << query;
+    qWarning() << "[LibraryService] m_tmdbSearchService pointer:" << (void*)m_tmdbSearchService;
+    
+    // Track pending searches
+    m_pendingSearchQuery = query;
+    m_pendingSearchMovies.clear();
+    m_pendingSearchTv.clear();
+    m_searchMoviesReceived = false;
+    m_searchTvReceived = false;
+    
+    qWarning() << "[LibraryService] Disconnecting previous signal connections";
+    // Connect to search service signals (use disconnect first to avoid duplicates)
+    disconnect(m_tmdbSearchService, &TmdbSearchService::moviesFound, this, nullptr);
+    disconnect(m_tmdbSearchService, &TmdbSearchService::tvFound, this, nullptr);
+    disconnect(m_tmdbSearchService, &TmdbSearchService::error, this, nullptr);
+    
+    qWarning() << "[LibraryService] Connecting to search service signals";
+    bool moviesConnected = connect(m_tmdbSearchService, &TmdbSearchService::moviesFound, this, &LibraryService::onSearchMoviesFound);
+    bool tvConnected = connect(m_tmdbSearchService, &TmdbSearchService::tvFound, this, &LibraryService::onSearchTvFound);
+    bool errorConnected = connect(m_tmdbSearchService, &TmdbSearchService::error, this, &LibraryService::onSearchError);
+    
+    qWarning() << "[LibraryService] Signal connections - movies:" << moviesConnected << "tv:" << tvConnected << "error:" << errorConnected;
+    
+    // Search both movies and TV
+    qWarning() << "[LibraryService] Calling searchMovies and searchTv";
+    m_tmdbSearchService->searchMovies(query);
+    m_tmdbSearchService->searchTv(query);
+    qWarning() << "[LibraryService] Search requests sent";
+}
+
+void LibraryService::onSearchMoviesFound(const QVariantList& results)
+{
+    qWarning() << "[LibraryService] ===== onSearchMoviesFound CALLED =====";
+    qWarning() << "[LibraryService] Movies found:" << results.size() << "results";
+    
+    if (results.size() > 0) {
+        qWarning() << "[LibraryService] First movie sample:" << results.first().toMap();
+    }
+    
+    m_pendingSearchMovies = results;
+    m_searchMoviesReceived = true;
+    qWarning() << "[LibraryService] Movies received flag set, calling finishSearch";
+    finishSearch();
+}
+
+void LibraryService::onSearchTvFound(const QVariantList& results)
+{
+    qWarning() << "[LibraryService] ===== onSearchTvFound CALLED =====";
+    qWarning() << "[LibraryService] TV found:" << results.size() << "results";
+    
+    if (results.size() > 0) {
+        qWarning() << "[LibraryService] First TV show sample:" << results.first().toMap();
+    }
+    
+    m_pendingSearchTv = results;
+    m_searchTvReceived = true;
+    qWarning() << "[LibraryService] TV received flag set, calling finishSearch";
+    finishSearch();
+}
+
+void LibraryService::onSearchError(const QString& message)
+{
+    qWarning() << "[LibraryService] ===== onSearchError CALLED =====";
+    qWarning() << "[LibraryService] Search error:" << message;
+    // Still try to finish with what we have
+    finishSearch();
+}
+
+void LibraryService::finishSearch()
+{
+    qWarning() << "[LibraryService] ===== finishSearch CALLED =====";
+    qWarning() << "[LibraryService] Movies received:" << m_searchMoviesReceived << "TV received:" << m_searchTvReceived;
+    
+    // Wait for both searches to complete
+    if (!m_searchMoviesReceived || !m_searchTvReceived) {
+        qWarning() << "[LibraryService] Waiting for both searches to complete...";
+        return;
+    }
+    
+    qWarning() << "[LibraryService] Both searches complete, combining results";
+    qWarning() << "[LibraryService] Movies count:" << m_pendingSearchMovies.size() << "TV count:" << m_pendingSearchTv.size();
+    
+    // Combine results and format for frontend
+    QVariantList combinedResults;
+    
+    // Add movies with type
+    for (const QVariant& item : m_pendingSearchMovies) {
+        QVariantMap movie = item.toMap();
+        movie["type"] = "movie";
+        // Extract year from releaseDate
+        QString releaseDate = movie["releaseDate"].toString();
+        if (!releaseDate.isEmpty() && releaseDate.length() >= 4) {
+            movie["year"] = releaseDate.left(4).toInt();
+        }
+        // Use title for both title and name
+        if (movie["title"].toString().isEmpty() && !movie["name"].toString().isEmpty()) {
+            movie["title"] = movie["name"];
+        }
+        // Ensure we have contentId and tmdbId
+        int id = movie["id"].toInt();
+        if (id > 0) {
+            movie["tmdbId"] = QString::number(id);
+            movie["contentId"] = "tmdb:" + QString::number(id);
+        }
+        // Build poster URL if we have posterPath
+        if (movie.contains("posterPath") && !movie["posterPath"].toString().isEmpty()) {
+            QString posterPath = movie["posterPath"].toString();
+            if (!posterPath.startsWith("http")) {
+                movie["posterUrl"] = "https://image.tmdb.org/t/p/w500" + posterPath;
+            } else {
+                movie["posterUrl"] = posterPath;
+            }
+        }
+        // Format rating
+        if (movie.contains("voteAverage")) {
+            double rating = movie["voteAverage"].toDouble();
+            movie["rating"] = QString::number(rating, 'f', 1);
+        }
+        combinedResults.append(movie);
+    }
+    
+    // Add TV shows with type
+    for (const QVariant& item : m_pendingSearchTv) {
+        QVariantMap tv = item.toMap();
+        tv["type"] = "tv";
+        // Extract year from firstAirDate
+        QString firstAirDate = tv["firstAirDate"].toString();
+        if (!firstAirDate.isEmpty() && firstAirDate.length() >= 4) {
+            tv["year"] = firstAirDate.left(4).toInt();
+        }
+        // Use name for title
+        if (tv["title"].toString().isEmpty() && !tv["name"].toString().isEmpty()) {
+            tv["title"] = tv["name"];
+        }
+        // Ensure we have contentId and tmdbId
+        int id = tv["id"].toInt();
+        if (id > 0) {
+            tv["tmdbId"] = QString::number(id);
+            tv["contentId"] = "tmdb:" + QString::number(id);
+        }
+        // Build poster URL if we have posterPath
+        if (tv.contains("posterPath") && !tv["posterPath"].toString().isEmpty()) {
+            QString posterPath = tv["posterPath"].toString();
+            if (!posterPath.startsWith("http")) {
+                tv["posterUrl"] = "https://image.tmdb.org/t/p/w500" + posterPath;
+            } else {
+                tv["posterUrl"] = posterPath;
+            }
+        }
+        // Format rating
+        if (tv.contains("voteAverage")) {
+            double rating = tv["voteAverage"].toDouble();
+            tv["rating"] = QString::number(rating, 'f', 1);
+        }
+        combinedResults.append(tv);
+    }
+    
+    qWarning() << "[LibraryService] ===== SEARCH COMPLETE =====";
+    qWarning() << "[LibraryService] Total combined results:" << combinedResults.size();
+    
+    if (combinedResults.size() > 0) {
+        qWarning() << "[LibraryService] First result sample:" << combinedResults.first().toMap();
+    }
+    
+    qWarning() << "[LibraryService] Emitting tmdbSearchResultsLoaded signal with" << combinedResults.size() << "results";
+    emit tmdbSearchResultsLoaded(combinedResults);
+    qWarning() << "[LibraryService] Signal emitted";
+    
+    // Reset state
+    m_pendingSearchQuery = "";
+    m_pendingSearchMovies.clear();
+    m_pendingSearchTv.clear();
+    m_searchMoviesReceived = false;
+    m_searchTvReceived = false;
+    qWarning() << "[LibraryService] Search state reset";
 }
 
 QVariantList LibraryService::getCatalogSections()
@@ -1237,6 +1437,51 @@ void LibraryService::onSimilarTvFetched(int tmdbId, const QJsonArray& results)
     
     QVariantList items = FrontendDataMapper::mapSimilarItemsToVariantList(results, "series");
     emit similarItemsLoaded(items);
+}
+
+void LibraryService::loadSeasonEpisodes(int tmdbId, int seasonNumber)
+{
+    qDebug() << "[LibraryService] Loading episodes for TMDB ID:" << tmdbId << "Season:" << seasonNumber;
+    m_tmdbService->getTvSeasonDetails(tmdbId, seasonNumber);
+}
+
+void LibraryService::onTvSeasonDetailsFetched(int tmdbId, int seasonNumber, const QJsonObject& data)
+{
+    qDebug() << "[LibraryService] Season details fetched for TMDB ID:" << tmdbId << "Season:" << seasonNumber;
+    
+    QVariantList episodes;
+    QJsonArray episodesArray = data["episodes"].toArray();
+    
+    for (const QJsonValue& value : episodesArray) {
+        QJsonObject episodeObj = value.toObject();
+        QVariantMap episode;
+        
+        episode["episodeNumber"] = episodeObj["episode_number"].toInt();
+        episode["title"] = episodeObj["name"].toString();
+        episode["description"] = episodeObj["overview"].toString();
+        episode["airDate"] = episodeObj["air_date"].toString();
+        
+        // Extract runtime (duration in minutes)
+        int runtime = episodeObj["runtime"].toInt();
+        if (runtime <= 0) {
+            // Try to get from show-level runtime if episode doesn't have it
+            runtime = data["runtime"].toInt();
+        }
+        episode["duration"] = runtime;
+        
+        // Extract thumbnail (still_path)
+        QString stillPath = episodeObj["still_path"].toString();
+        QString thumbnailUrl = "";
+        if (!stillPath.isEmpty()) {
+            thumbnailUrl = QString("https://image.tmdb.org/t/p/w500%1").arg(stillPath);
+        }
+        episode["thumbnailUrl"] = thumbnailUrl;
+        
+        episodes.append(episode);
+    }
+    
+    qDebug() << "[LibraryService] Mapped" << episodes.size() << "episodes for Season" << seasonNumber;
+    emit seasonEpisodesLoaded(seasonNumber, episodes);
 }
 
 void LibraryService::clearMetadataCache()

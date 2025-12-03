@@ -221,6 +221,17 @@ void TmdbDataService::getSimilarTv(int tmdbId)
     }
 }
 
+void TmdbDataService::getTvSeasonDetails(int tmdbId, int seasonNumber)
+{
+    QNetworkReply* reply = m_apiClient->get(QString("/tv/%1/season/%2").arg(tmdbId).arg(seasonNumber));
+    if (reply) {
+        reply->setProperty("tmdbId", tmdbId);
+        reply->setProperty("seasonNumber", seasonNumber);
+        m_replyContexts[reply] = "Get TV season details";
+        connect(reply, &QNetworkReply::finished, this, &TmdbDataService::onTvSeasonDetailsReplyFinished);
+    }
+}
+
 void TmdbDataService::searchMovies(const QString& query, int page)
 {
     if (query.trimmed().isEmpty()) {
@@ -634,6 +645,35 @@ void TmdbDataService::onTvSearchReplyFinished()
     
     qDebug() << "[TmdbDataService] Found" << results.size() << "TV shows";
     emit tvFound(variantList);
+    reply->deleteLater();
+}
+
+void TmdbDataService::onTvSeasonDetailsReplyFinished()
+{
+    QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) return;
+    
+    QString context = m_replyContexts.take(reply);
+    int tmdbId = reply->property("tmdbId").toInt();
+    int seasonNumber = reply->property("seasonNumber").toInt();
+    
+    if (reply->error() != QNetworkReply::NoError) {
+        qWarning() << "[TmdbDataService] Season details request error for TMDB ID" << tmdbId << "Season" << seasonNumber << ":" << reply->errorString();
+        emit error(QString("%1 failed: %2").arg(context, reply->errorString()));
+        reply->deleteLater();
+        return;
+    }
+    
+    QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (doc.isNull() || !doc.isObject()) {
+        emit error("Failed to parse season details");
+        reply->deleteLater();
+        return;
+    }
+    
+    QJsonObject data = doc.object();
+    qDebug() << "[TmdbDataService] Season details fetched for TMDB ID" << tmdbId << "Season" << seasonNumber;
+    emit tvSeasonDetailsFetched(tmdbId, seasonNumber, data);
     reply->deleteLater();
 }
 

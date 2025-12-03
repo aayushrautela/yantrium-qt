@@ -15,6 +15,7 @@
 #include "features/addons/models/addon_manifest.h"
 #include "core/services/trakt_core_service.h"
 #include "core/services/tmdb_data_service.h"
+#include "core/services/tmdb_search_service.h"
 #include "core/services/media_metadata_service.h"
 #include "core/services/tmdb_data_mapper.h"
 #include "core/services/frontend_data_mapper.h"
@@ -35,6 +36,7 @@ public:
     Q_INVOKABLE void loadCatalogs();
     Q_INVOKABLE void loadCatalog(const QString& addonId, const QString& type, const QString& id = QString());
     Q_INVOKABLE void searchCatalogs(const QString& query);
+    Q_INVOKABLE void searchTmdb(const QString& query);  // Search TMDB for movies and TV
     Q_INVOKABLE QVariantList getCatalogSections();
     Q_INVOKABLE QVariantList getContinueWatching();
     Q_INVOKABLE void loadCatalogsRaw(); // Load catalogs without processing (for raw export)
@@ -42,6 +44,7 @@ public:
     Q_INVOKABLE void loadItemDetails(const QString& contentId, const QString& type, const QString& addonId = QString());
     Q_INVOKABLE void loadSimilarItems(int tmdbId, const QString& type);
     Q_INVOKABLE void getSmartPlayState(const QVariantMap& itemData);
+    Q_INVOKABLE void loadSeasonEpisodes(int tmdbId, int seasonNumber);
 
     // Cache management
     Q_INVOKABLE void clearMetadataCache();
@@ -54,11 +57,13 @@ signals:
     void catalogsLoaded(const QVariantList& sections);
     void continueWatchingLoaded(const QVariantList& items);
     void searchResultsLoaded(const QVariantList& results);
+    void tmdbSearchResultsLoaded(const QVariantList& results);  // Combined movies + TV results
     void rawCatalogsLoaded(const QVariantList& rawData); // Raw unprocessed catalog data
     void heroItemsLoaded(const QVariantList& items); // Hero items loaded
     void itemDetailsLoaded(const QVariantMap& details);
     void similarItemsLoaded(const QVariantList& items);
     void smartPlayStateLoaded(const QVariantMap& smartPlayState);
+    void seasonEpisodesLoaded(int seasonNumber, const QVariantList& episodes);
     void error(const QString& message);
 
 private slots:
@@ -76,6 +81,10 @@ private slots:
     void onWatchProgressLoaded(const QVariantMap& progress);
     void onSimilarMoviesFetched(int tmdbId, const QJsonArray& results);
     void onSimilarTvFetched(int tmdbId, const QJsonArray& results);
+    void onSearchMoviesFound(const QVariantList& results);
+    void onSearchTvFound(const QVariantList& results);
+    void onSearchError(const QString& message);
+    void onTvSeasonDetailsFetched(int tmdbId, int seasonNumber, const QJsonObject& data);
 
 private:
     struct CatalogSection {
@@ -92,6 +101,7 @@ private:
     AddonRepository* m_addonRepository;
     TraktCoreService* m_traktService;
     TmdbDataService* m_tmdbService;
+    TmdbSearchService* m_tmdbSearchService;
     MediaMetadataService* m_mediaMetadataService;
     OmdbService* m_omdbService;
     LocalLibraryService* m_localLibraryService;
@@ -115,6 +125,14 @@ private:
     QMap<int, QString> m_tmdbIdToImdbId; // TMDB ID -> IMDB ID
     int m_pendingTmdbRequests;
     void finishContinueWatchingLoading();
+    
+    // Search state
+    QString m_pendingSearchQuery;
+    QVariantList m_pendingSearchMovies;
+    QVariantList m_pendingSearchTv;
+    bool m_searchMoviesReceived;
+    bool m_searchTvReceived;
+    void finishSearch();
     
     // Item details loading
     QString m_pendingDetailsContentId;

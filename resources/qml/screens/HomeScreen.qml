@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Yantrium.Services 1.0
+import "../components"
 
 Item {
     id: root
@@ -15,6 +16,20 @@ Item {
 
     property CatalogPreferencesService catalogPrefsService: CatalogPreferencesService {
         id: catalogPrefsService
+    }
+    
+    property LocalLibraryService localLibraryService: LocalLibraryService {
+        id: localLibraryService
+    }
+    
+    property TraktAuthService traktAuthService: TraktAuthService
+    
+    property TraktWatchlistService traktWatchlistService: TraktWatchlistService {
+        id: traktWatchlistService
+    }
+    
+    property StreamService streamService: StreamService {
+        id: streamService
     }
 
     // --- Connections ---
@@ -159,6 +174,72 @@ Item {
         console.error("[HomeScreen] Error:", message)
         isLoading = false
     }
+    
+    function onHeroPlayClicked() {
+        if (heroItems.length === 0 || currentHeroIndex < 0 || currentHeroIndex >= heroItems.length) {
+            console.warn("[HomeScreen] No hero item available for play")
+            return
+        }
+        
+        var heroItem = heroItems[currentHeroIndex]
+        console.log("[HomeScreen] Hero play clicked for:", heroItem.title || heroItem.name)
+        
+        // Open stream selection dialog
+        streamDialog.loadStreams(heroItem, "")
+        streamDialog.open()
+    }
+    
+    function onHeroAddToLibraryClicked() {
+        if (heroItems.length === 0 || currentHeroIndex < 0 || currentHeroIndex >= heroItems.length) {
+            console.warn("[HomeScreen] No hero item available for library")
+            return
+        }
+        
+        var heroItem = heroItems[currentHeroIndex]
+        console.log("[HomeScreen] Hero add to library clicked for:", heroItem.title || heroItem.name)
+        
+        // Get content ID (prefer imdbId)
+        var contentId = heroItem.imdbId || heroItem.id || ""
+        var type = heroItem.type || "movie"
+        
+        if (!contentId) {
+            console.error("[HomeScreen] Cannot add to library: no contentId")
+            return
+        }
+        
+        // Ensure we're using imdbId format if available
+        if (heroItem.imdbId && heroItem.imdbId.startsWith("tt")) {
+            contentId = heroItem.imdbId
+        }
+        
+        // Normalize type
+        if (type === "tv" || type === "series") {
+            type = "show"
+        } else {
+            type = "movie"
+        }
+        
+        // Add to library
+        if (traktAuthService.isAuthenticated) {
+            // Add to Trakt watchlist
+            traktWatchlistService.addToWatchlist(type, contentId)
+        } else {
+            // Add to local library
+            var libraryItem = {
+                contentId: contentId,
+                type: type,
+                title: heroItem.title || heroItem.name || "",
+                year: heroItem.year || 0,
+                posterUrl: heroItem.posterUrl || heroItem.poster || "",
+                backdropUrl: heroItem.backdropUrl || heroItem.background || heroItem.backdrop || "",
+                description: heroItem.description || "",
+                rating: heroItem.rating || heroItem.imdbRating || "",
+                tmdbId: heroItem.tmdbId || "",
+                imdbId: heroItem.imdbId || ""
+            }
+            localLibraryService.addToLibrary(libraryItem)
+        }
+    }
 
     // --- UI Layout ---
     Rectangle {
@@ -186,6 +267,17 @@ Item {
                     width: parent.width
                     height: 650
                     source: "qrc:/qml/components/HeroSection.qml"
+                    
+                    onLoaded: {
+                        if (item) {
+                            item.playClicked.connect(function() {
+                                root.onHeroPlayClicked()
+                            })
+                            item.addToLibraryClicked.connect(function() {
+                                root.onHeroAddToLibraryClicked()
+                            })
+                        }
+                    }
                     
                     MouseArea {
                         anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 100
@@ -416,12 +508,31 @@ Item {
                                         )
                                         sectionScrollAnimation.to = targetX
                                         sectionScrollAnimation.start()
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
+            }
+        }
+    }
+    
+    // Stream Selection Dialog
+    StreamSelectionDialog {
+        id: streamDialog
+        parent: root.parent
+        
+        onStreamSelected: function(stream) {
+            console.log("[HomeScreen] Stream selected:", JSON.stringify(stream))
+            console.log("[HomeScreen] Stream URL:", stream.url)
+            
+            // Emit signal to request playback (will be handled by MainApp)
+            if (stream.url) {
+                root.playRequested(stream.url)
+            }
+        }
+    }
+    
+    // Signal for playback request
+    signal playRequested(string streamUrl)
+}
 
                 // 4. Loading & Empty States
                 Rectangle {
@@ -444,4 +555,23 @@ Item {
             }
         }
     }
+    
+    // Stream Selection Dialog
+    StreamSelectionDialog {
+        id: streamDialog
+        parent: root.parent
+        
+        onStreamSelected: function(stream) {
+            console.log("[HomeScreen] Stream selected:", JSON.stringify(stream))
+            console.log("[HomeScreen] Stream URL:", stream.url)
+            
+            // Emit signal to request playback (will be handled by MainApp)
+            if (stream.url) {
+                root.playRequested(stream.url)
+            }
+        }
+    }
+    
+    // Signal for playback request
+    signal playRequested(string streamUrl)
 }

@@ -24,6 +24,7 @@ public:
     Q_INVOKABLE void getSimilarTv(int tmdbId);
     Q_INVOKABLE void searchMovies(const QString& query, int page = 1);
     Q_INVOKABLE void searchTv(const QString& query, int page = 1);
+    Q_INVOKABLE void getTvSeasonDetails(int tmdbId, int seasonNumber);
     
     // Cache management (delegates to api client)
     void clearCache();
@@ -39,6 +40,7 @@ signals:
     void similarTvFetched(int tmdbId, const QJsonArray& results);
     void moviesFound(const QVariantList& results);
     void tvFound(const QVariantList& results);
+    void tvSeasonDetailsFetched(int tmdbId, int seasonNumber, const QJsonObject& data);
     void error(const QString& message);
 
 private slots:
@@ -52,6 +54,7 @@ private slots:
     void onSimilarTvReplyFinished();
     void onMoviesSearchReplyFinished();
     void onTvSearchReplyFinished();
+    void onTvSeasonDetailsReplyFinished();
 
 private:
     TmdbApiClient* m_apiClient;

@@ -5,6 +5,9 @@ import Yantrium.Components 1.0
 Item {
     id: root
     
+    // Expose videoPlayer for external access
+    property alias videoPlayer: videoPlayer
+    
     // Video Element: Use the VideoPlayer item we registered. Make it fill the parent.
     // Rounded Corners: Apply layer.effect in Qt 6 to give it 24px rounded corners
     Rectangle {
