@@ -9,15 +9,13 @@ AddonClient::AddonClient(const QString& baseUrl, QObject* parent)
     : QObject(parent)
     , m_baseUrl(normalizeBaseUrl(baseUrl))
     , m_networkManager(new QNetworkAccessManager(this))
-    , m_currentReply(nullptr)
 {
 }
 
 AddonClient::~AddonClient()
 {
-    if (m_currentReply) {
-        m_currentReply->deleteLater();
-    }
+    // QNetworkAccessManager is a child of this object, so it deletes automatically.
+    // Individual active replies will delete themselves via deleteLater() in their lambdas.
 }
 
 QString AddonClient::normalizeBaseUrl(const QString& url)
@@ -54,7 +52,6 @@ QString AddonClient::extractBaseUrl(const QString& manifestUrl)
     return baseUrl.toString(QUrl::RemoveFragment | QUrl::RemoveQuery);
 }
 
-
 void AddonClient::fetchManifest()
 {
     QUrl url = buildUrl("/manifest.json");
@@ -62,11 +59,25 @@ void AddonClient::fetchManifest()
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader("Accept", "application/json");
     
-    m_currentReply = m_networkManager->get(request);
-    connect(m_currentReply, &QNetworkReply::finished, this, &AddonClient::onManifestReplyFinished);
-    connect(m_currentReply, &QNetworkReply::errorOccurred, this, [this](QNetworkReply::NetworkError error) {
-        Q_UNUSED(error);
-        emit this->error(QString("Network error: %1").arg(m_currentReply->errorString()));
+    // Create local pointer (not member variable)
+    QNetworkReply* reply = m_networkManager->get(request);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater(); // Schedule cleanup
+
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(QString("Failed to fetch manifest: %1").arg(reply->errorString()));
+            return;
+        }
+
+        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (doc.isNull() || !doc.isObject()) {
+            emit error("Invalid JSON response for manifest");
+            return;
+        }
+
+        AddonManifest manifest = AddonManifest::fromJson(doc.object());
+        emit manifestFetched(manifest);
     });
 }
 
@@ -84,16 +95,31 @@ void AddonClient::getCatalog(const QString& type, const QString& id)
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader("Accept", "application/json");
     
-    m_currentReply = m_networkManager->get(request);
-    connect(m_currentReply, &QNetworkReply::finished, this, &AddonClient::onCatalogReplyFinished);
-    connect(m_currentReply, &QNetworkReply::errorOccurred, this, [this](QNetworkReply::NetworkError error) {
-        Q_UNUSED(error);
-        if (m_currentReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404) {
-            // 404 for catalogs returns empty list
-            emit this->catalogFetched("", QJsonArray());
-        } else {
-            emit this->error(QString("Network error: %1").arg(m_currentReply->errorString()));
+    QNetworkReply* reply = m_networkManager->get(request);
+
+    // Capture 'type' to send back with the signal
+    connect(reply, &QNetworkReply::finished, this, [this, reply, type]() {
+        reply->deleteLater();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            // 404 on a catalog usually just means "empty list", not a critical error
+            if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404) {
+                emit catalogFetched(type, QJsonArray());
+            } else {
+                emit error(QString("Failed to fetch catalog: %1").arg(reply->errorString()));
+            }
+            return;
         }
+
+        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (doc.isNull() || !doc.isObject()) {
+            // Fallback to empty if JSON is bad
+            emit catalogFetched(type, QJsonArray());
+            return;
+        }
+
+        QJsonObject obj = doc.object();
+        emit catalogFetched(type, obj["metas"].toArray());
     });
 }
 
@@ -101,19 +127,32 @@ void AddonClient::getMeta(const QString& type, const QString& id)
 {
     QString path = QString("/meta/%1/%2.json").arg(type, QUrl::toPercentEncoding(id));
     QUrl url = buildUrl(path);
+    
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader("Accept", "application/json");
     
-    m_currentReply = m_networkManager->get(request);
-    connect(m_currentReply, &QNetworkReply::finished, this, &AddonClient::onMetaReplyFinished);
-    connect(m_currentReply, &QNetworkReply::errorOccurred, this, [this, type, id](QNetworkReply::NetworkError error) {
-        Q_UNUSED(error);
-        if (m_currentReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404) {
-            emit this->error(QString("Metadata not found for %1/%2").arg(type, id));
-        } else {
-            emit this->error(QString("Network error: %1").arg(m_currentReply->errorString()));
+    QNetworkReply* reply = m_networkManager->get(request);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, type, id]() {
+        reply->deleteLater();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404) {
+                emit error(QString("Metadata not found for %1/%2").arg(type, id));
+            } else {
+                emit error(QString("Failed to fetch metadata: %1").arg(reply->errorString()));
+            }
+            return;
         }
+
+        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (doc.isNull() || !doc.isObject()) {
+            emit error("Invalid JSON response for metadata");
+            return;
+        }
+
+        emit metaFetched(type, id, doc.object());
     });
 }
 
@@ -122,182 +161,43 @@ void AddonClient::getStreams(const QString& type, const QString& id)
     QString path = QString("/stream/%1/%2.json").arg(type, QUrl::toPercentEncoding(id));
     QUrl url = buildUrl(path);
     
-    qDebug() << "AddonClient: Making GET request to:" << path;
-    qDebug() << "AddonClient: Full URL:" << url.toString();
+    qDebug() << "AddonClient: Requesting streams:" << url.toString();
     
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader("Accept", "application/json");
     
-    m_currentReply = m_networkManager->get(request);
-    connect(m_currentReply, &QNetworkReply::finished, this, &AddonClient::onStreamsReplyFinished);
-    connect(m_currentReply, &QNetworkReply::errorOccurred, this, [this](QNetworkReply::NetworkError error) {
-        Q_UNUSED(error);
-        if (m_currentReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404) {
-            // 404 for streams returns empty list
-            emit this->streamsFetched("", "", QJsonArray());
-        } else {
-            emit this->error(QString("Network error: %1").arg(m_currentReply->errorString()));
+    QNetworkReply* reply = m_networkManager->get(request);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, type, id]() {
+        reply->deleteLater();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404) {
+                emit streamsFetched(type, id, QJsonArray());
+            } else {
+                emit error(QString("Failed to fetch streams: %1").arg(reply->errorString()));
+            }
+            return;
         }
+
+        QByteArray data = reply->readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+
+        if (doc.isNull() || !doc.isObject()) {
+            qDebug() << "AddonClient: Invalid JSON for streams";
+            emit streamsFetched(type, id, QJsonArray());
+            return;
+        }
+
+        QJsonObject obj = doc.object();
+        if (!obj.contains("streams")) {
+            emit streamsFetched(type, id, QJsonArray());
+            return;
+        }
+
+        emit streamsFetched(type, id, obj["streams"].toArray());
     });
-}
-
-void AddonClient::onManifestReplyFinished()
-{
-    if (!m_currentReply) return;
-    
-    if (m_currentReply->error() != QNetworkReply::NoError) {
-        emit error(QString("Failed to fetch manifest: %1").arg(m_currentReply->errorString()));
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
-        return;
-    }
-    
-    QByteArray data = m_currentReply->readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    
-    if (doc.isNull() || !doc.isObject()) {
-        emit error("Invalid JSON response for manifest");
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
-        return;
-    }
-    
-    AddonManifest manifest = AddonManifest::fromJson(doc.object());
-    emit manifestFetched(manifest);
-    
-    m_currentReply->deleteLater();
-    m_currentReply = nullptr;
-}
-
-void AddonClient::onCatalogReplyFinished()
-{
-    if (!m_currentReply) return;
-    
-    if (m_currentReply->error() != QNetworkReply::NoError) {
-        int statusCode = m_currentReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (statusCode == 404) {
-            emit catalogFetched("", QJsonArray());
-        } else {
-            emit error(QString("Failed to fetch catalog: %1").arg(m_currentReply->errorString()));
-        }
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
-        return;
-    }
-    
-    QByteArray data = m_currentReply->readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    
-    if (doc.isNull() || !doc.isObject()) {
-        emit catalogFetched("", QJsonArray());
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
-        return;
-    }
-    
-    QJsonObject obj = doc.object();
-    QJsonArray metas = obj["metas"].toArray();
-    
-    emit catalogFetched("", metas);
-    
-    m_currentReply->deleteLater();
-    m_currentReply = nullptr;
-}
-
-void AddonClient::onMetaReplyFinished()
-{
-    if (!m_currentReply) return;
-    
-    if (m_currentReply->error() != QNetworkReply::NoError) {
-        int statusCode = m_currentReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (statusCode == 404) {
-            emit error("Metadata not found");
-        } else {
-            emit error(QString("Failed to fetch metadata: %1").arg(m_currentReply->errorString()));
-        }
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
-        return;
-    }
-    
-    QByteArray data = m_currentReply->readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    
-    if (doc.isNull() || !doc.isObject()) {
-        emit error("Invalid JSON response for metadata");
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
-        return;
-    }
-    
-    // Extract type and id from URL path
-    QString path = m_currentReply->url().path();
-    QStringList parts = path.split('/', Qt::SkipEmptyParts);
-    QString type = parts.size() > 1 ? parts[1] : "";
-    QString id = parts.size() > 2 ? QUrl::fromPercentEncoding(parts[2].replace(".json", "").toUtf8()) : "";
-    
-    emit metaFetched(type, id, doc.object());
-    
-    m_currentReply->deleteLater();
-    m_currentReply = nullptr;
-}
-
-void AddonClient::onStreamsReplyFinished()
-{
-    if (!m_currentReply) return;
-    
-    if (m_currentReply->error() != QNetworkReply::NoError) {
-        int statusCode = m_currentReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (statusCode == 404) {
-            emit streamsFetched("", "", QJsonArray());
-        } else {
-            emit error(QString("Failed to fetch streams: %1").arg(m_currentReply->errorString()));
-        }
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
-        return;
-    }
-    
-    QByteArray data = m_currentReply->readAll();
-    
-    qDebug() << "AddonClient: Response status:" << m_currentReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    qDebug() << "AddonClient: Raw response data:" << data;
-    
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    
-    if (doc.isNull() || !doc.isObject()) {
-        qDebug() << "AddonClient: Invalid JSON response";
-        emit streamsFetched("", "", QJsonArray());
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
-        return;
-    }
-    
-    QJsonObject obj = doc.object();
-    
-    if (!obj.contains("streams")) {
-        qDebug() << "AddonClient: Response missing streams key";
-        emit streamsFetched("", "", QJsonArray());
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
-        return;
-    }
-    
-    QJsonArray streams = obj["streams"].toArray();
-    
-    qDebug() << "AddonClient: Extracted" << streams.size() << "stream(s) from response";
-    
-    // Extract type and id from URL path
-    QString path = m_currentReply->url().path();
-    QStringList parts = path.split('/', Qt::SkipEmptyParts);
-    QString type = parts.size() > 1 ? parts[1] : "";
-    QString id = parts.size() > 2 ? QUrl::fromPercentEncoding(parts[2].replace(".json", "").toUtf8()) : "";
-    
-    emit streamsFetched(type, id, streams);
-    
-    m_currentReply->deleteLater();
-    m_currentReply = nullptr;
 }
 
 bool AddonClient::validateManifest(const AddonManifest& manifest)
@@ -309,4 +209,3 @@ bool AddonClient::validateManifest(const AddonManifest& manifest)
     if (manifest.types().isEmpty()) return false;
     return true;
 }
-

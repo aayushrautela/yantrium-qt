@@ -42,21 +42,16 @@ signals:
     void metaFetched(const QString& type, const QString& id, const QJsonObject& meta);
     void streamsFetched(const QString& type, const QString& id, const QJsonArray& streams);
     void error(const QString& errorMessage);
-    
-private slots:
-    void onManifestReplyFinished();
-    void onCatalogReplyFinished();
-    void onMetaReplyFinished();
-    void onStreamsReplyFinished();
-    
+
 private:
     QString normalizeBaseUrl(const QString& url);
     QUrl buildUrl(const QString& path);
     
     QString m_baseUrl;
     QNetworkAccessManager* m_networkManager;
-    QNetworkReply* m_currentReply;
+    
+    // REMOVED: QNetworkReply* m_currentReply; 
+    // REMOVED: private slots for replies
 };
 
 #endif // ADDON_CLIENT_H
-
