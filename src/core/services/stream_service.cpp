@@ -161,7 +161,7 @@ void StreamService::fetchStreamsFromAddons()
         bool hasStreamResource = AddonRepository::hasResource(resources, "stream");
         bool supportsType = manifest.types().contains(type);
         
-        qDebug() << "[StreamService] Addon" << addon.name() << "(" << addon.id() << "): hasStream=" << hasStreamResource << ", supportsType=" << supportsType;
+        qDebug() << "[StreamService] Addon" << addon.name << "(" << addon.id << "): hasStream=" << hasStreamResource << ", supportsType=" << supportsType;
         
         if (hasStreamResource && supportsType) {
             streamingAddons.append(addon);
@@ -184,12 +184,12 @@ void StreamService::fetchStreamsFromAddons()
     m_completedRequests = 0;
     
     for (const AddonConfig& addon : streamingAddons) {
-        QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl());
+        QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
         AddonClient* client = new AddonClient(baseUrl, this);
         
         PendingRequest request;
-        request.addonId = addon.id();
-        request.addonName = addon.name();
+        request.addonId = addon.id;
+        request.addonName = addon.name;
         request.type = type;
         request.streamId = streamId;
         m_pendingRequests.append(request);
@@ -197,7 +197,7 @@ void StreamService::fetchStreamsFromAddons()
         connect(client, &AddonClient::streamsFetched, this, &StreamService::onStreamsFetched);
         connect(client, &AddonClient::error, this, &StreamService::onAddonError);
         
-        qDebug() << "[StreamService] Requesting streams from addon" << addon.name() << "for" << type << streamId;
+        qDebug() << "[StreamService] Requesting streams from addon" << addon.name << "for" << type << streamId;
         client->getStreams(type, streamId);
     }
 }

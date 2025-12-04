@@ -119,28 +119,28 @@ void LibraryService::loadCatalogsRaw(bool rawMode)
     
     // For each enabled addon, fetch its catalogs
     for (const AddonConfig& addon : enabledAddons) {
-        qDebug() << "[LibraryService] Processing addon:" << addon.id() << "(" << addon.name() << ")";
+        qDebug() << "[LibraryService] Processing addon:" << addon.id << "(" << addon.name << ")";
         
         AddonManifest manifest = m_addonRepository->getManifest(addon);
         if (manifest.id().isEmpty()) {
-            qDebug() << "[LibraryService] ERROR: Could not get manifest for addon:" << addon.id();
+            qDebug() << "[LibraryService] ERROR: Could not get manifest for addon:" << addon.id;
             continue;
         }
         
-        qDebug() << "[LibraryService] Got manifest for addon:" << addon.id();
+            qDebug() << "[LibraryService] Got manifest for addon:" << addon.id;
         
         // Get catalogs from manifest
         QList<CatalogDefinition> catalogs = manifest.catalogs();
-        qDebug() << "[LibraryService] Found" << catalogs.size() << "catalog definitions in manifest for addon:" << addon.id();
+        qDebug() << "[LibraryService] Found" << catalogs.size() << "catalog definitions in manifest for addon:" << addon.id;
         
         if (catalogs.isEmpty()) {
-            qDebug() << "[LibraryService] WARNING: No catalogs found for addon:" << addon.id();
+            qDebug() << "[LibraryService] WARNING: No catalogs found for addon:" << addon.id;
             continue;
         }
         
         // Get base URL for this addon
-        QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl());
-        qDebug() << "[LibraryService] Extracted base URL:" << baseUrl << "for addon:" << addon.id();
+        QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
+        qDebug() << "[LibraryService] Extracted base URL:" << baseUrl << "for addon:" << addon.id;
         
         int enabledCatalogCount = 0;
         int disabledCatalogCount = 0;
@@ -156,7 +156,7 @@ void LibraryService::loadCatalogsRaw(bool rawMode)
             qDebug() << "[LibraryService] Checking catalog:" << catalogName << "type:" << catalogType << "id:" << catalogId;
             
             // Check if this catalog is enabled (default to enabled if no preference exists)
-            auto preference = m_catalogPreferencesDao->getPreference(addon.id(), catalogType, catalogId);
+            auto preference = m_catalogPreferencesDao->getPreference(addon.id, catalogType, catalogId);
             bool isEnabled = preference ? preference->enabled : true;
             
             qDebug() << "[LibraryService] Catalog preference check - enabled:" << isEnabled 
@@ -164,13 +164,13 @@ void LibraryService::loadCatalogsRaw(bool rawMode)
             
             if (!isEnabled) {
                 disabledCatalogCount++;
-                qDebug() << "[LibraryService] SKIPPING disabled catalog:" << catalogName << "(" << catalogType << "," << catalogId << ") from addon:" << addon.id();
+                qDebug() << "[LibraryService] SKIPPING disabled catalog:" << catalogName << "(" << catalogType << "," << catalogId << ") from addon:" << addon.id;
                 continue;
             }
             
             enabledCatalogCount++;
             m_pendingCatalogRequests++;
-            qDebug() << "[LibraryService] FETCHING catalog:" << catalogName << "(" << catalogType << "," << catalogId << ") from addon:" << addon.id();
+            qDebug() << "[LibraryService] FETCHING catalog:" << catalogName << "(" << catalogType << "," << catalogId << ") from addon:" << addon.id;
             qDebug() << "[LibraryService] Pending requests now:" << m_pendingCatalogRequests;
             
             // Create a NEW AddonClient for each catalog request
@@ -179,7 +179,7 @@ void LibraryService::loadCatalogsRaw(bool rawMode)
             m_activeClients.append(client);
             
             // Store addon ID and catalog info on client for this specific request
-            client->setProperty("addonId", addon.id());
+            client->setProperty("addonId", addon.id);
             client->setProperty("baseUrl", baseUrl);
             client->setProperty("catalogType", catalogType);
             client->setProperty("catalogId", catalogId);
@@ -193,7 +193,7 @@ void LibraryService::loadCatalogsRaw(bool rawMode)
             client->getCatalog(catalogType, catalogId);
         }
         
-        qDebug() << "[LibraryService] Addon" << addon.id() << "- Enabled catalogs:" << enabledCatalogCount << "Disabled catalogs:" << disabledCatalogCount;
+        qDebug() << "[LibraryService] Addon" << addon.id << "- Enabled catalogs:" << enabledCatalogCount << "Disabled catalogs:" << disabledCatalogCount;
     }
     
     qDebug() << "[LibraryService] Total pending catalog requests:" << m_pendingCatalogRequests;
@@ -214,12 +214,12 @@ void LibraryService::loadCatalogsRaw(bool rawMode)
 void LibraryService::loadCatalog(const QString& addonId, const QString& type, const QString& id)
 {
     AddonConfig addon = m_addonRepository->getAddon(addonId);
-    if (addon.id().isEmpty()) {
+    if (addon.id.isEmpty()) {
         emit error(QString("Addon not found: %1").arg(addonId));
         return;
     }
-    
-    QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl());
+
+    QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
     AddonClient* client = new AddonClient(baseUrl, this);
     m_activeClients.append(client);
     
@@ -260,12 +260,12 @@ void LibraryService::loadHeroItems()
     for (const CatalogPreferenceRecord& heroCatalog : heroCatalogs) {
         try {
             AddonConfig addon = m_addonRepository->getAddon(heroCatalog.addonId);
-            if (addon.id().isEmpty()) {
+            if (addon.id.isEmpty()) {
                 qWarning() << "[LibraryService] Hero catalog addon not found:" << heroCatalog.addonId;
                 continue;
             }
-            
-            QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl());
+
+            QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
             AddonClient* client = new AddonClient(baseUrl, this);
             m_activeClients.append(client);
             m_pendingHeroRequests++;
@@ -760,7 +760,7 @@ void LibraryService::processCatalogData(const QString& addonId, const QString& c
     
     // Get addon base URL for resolving relative poster URLs
     AddonConfig addon = m_addonRepository->getAddon(addonId);
-    QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl());
+    QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
     qDebug() << "[LibraryService] Base URL for resolving images:" << baseUrl;
     
     int processedItems = 0;

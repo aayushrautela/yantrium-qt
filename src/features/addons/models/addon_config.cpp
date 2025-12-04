@@ -1,101 +1,70 @@
 #include "addon_config.h"
-#include "core/database/addon_dao.h"
+#include "core/database/addon_dao.h" 
 #include <QJsonDocument>
-#include <QJsonArray>
-#include <QDebug>
-
-AddonConfig::AddonConfig()
-    : m_enabled(true)
-{
-}
-
-AddonConfig::AddonConfig(const QString& id,
-                         const QString& name,
-                         const QString& version,
-                         const QString& description,
-                         const QString& manifestUrl,
-                         const QString& baseUrl,
-                         bool enabled,
-                         const QString& manifestData,
-                         const QJsonArray& resources,
-                         const QStringList& types,
-                         const QDateTime& createdAt,
-                         const QDateTime& updatedAt)
-    : m_id(id)
-    , m_name(name)
-    , m_version(version)
-    , m_description(description)
-    , m_manifestUrl(manifestUrl)
-    , m_baseUrl(baseUrl)
-    , m_enabled(enabled)
-    , m_manifestData(manifestData)
-    , m_resources(resources)
-    , m_types(types)
-    , m_createdAt(createdAt)
-    , m_updatedAt(updatedAt)
-{
-}
+#include <QJsonObject>
+#include <QVariant>
 
 AddonConfig AddonConfig::fromDatabase(const AddonRecord& record)
 {
     AddonConfig config;
-    config.m_id = record.id;
-    config.m_name = record.name;
-    config.m_version = record.version;
-    config.m_description = record.description;
-    config.m_manifestUrl = record.manifestUrl;
-    config.m_baseUrl = record.baseUrl;
-    config.m_enabled = record.enabled;
-    config.m_manifestData = record.manifestData;
-    config.m_createdAt = record.createdAt;
-    config.m_updatedAt = record.updatedAt;
     
-    // Parse resources JSON
-    QJsonDocument resourcesDoc = QJsonDocument::fromJson(record.resources.toUtf8());
-    if (resourcesDoc.isArray()) {
-        config.m_resources = resourcesDoc.array();
-    } else {
-        config.m_resources = QJsonArray();
+    // Direct assignment
+    config.id = record.id;
+    config.name = record.name;
+    config.version = record.version;
+    config.description = record.description;
+    config.manifestUrl = record.manifestUrl;
+    config.baseUrl = record.baseUrl;
+    config.enabled = record.enabled;
+    config.manifestData = record.manifestData;
+    config.createdAt = record.createdAt;
+    config.updatedAt = record.updatedAt;
+
+    // Modern JSON parsing
+    // 1. Resources: Parse directly to Array
+    const QByteArray resourcesJson = record.resources.toUtf8();
+    if (!resourcesJson.isEmpty()) {
+        config.resources = QJsonDocument::fromJson(resourcesJson).array();
     }
-    
-    // Parse types JSON
-    QJsonDocument typesDoc = QJsonDocument::fromJson(record.types.toUtf8());
-    if (typesDoc.isArray()) {
-        QJsonArray typesArray = typesDoc.array();
-        for (const QJsonValue& value : typesArray) {
-            config.m_types.append(value.toString());
+
+    // 2. Types: Parse manually to ensure safety
+    const QByteArray typesJson = record.types.toUtf8();
+    if (!typesJson.isEmpty()) {
+        QJsonArray arr = QJsonDocument::fromJson(typesJson).array();
+        for (const auto& val : arr) {
+            config.types.append(val.toString());
         }
     }
-    
+
     return config;
 }
 
 AddonRecord AddonConfig::toDatabaseRecord() const
 {
     AddonRecord record;
-    record.id = m_id;
-    record.name = m_name;
-    record.version = m_version;
-    record.description = m_description;
-    record.manifestUrl = m_manifestUrl;
-    record.baseUrl = m_baseUrl;
-    record.enabled = m_enabled;
-    record.manifestData = m_manifestData;
-    record.createdAt = m_createdAt;
-    record.updatedAt = m_updatedAt;
+
+    record.id = id;
+    record.name = name;
+    record.version = version;
+    record.description = description;
+    record.manifestUrl = manifestUrl;
+    record.baseUrl = baseUrl;
+    record.enabled = enabled;
+    record.manifestData = manifestData;
+    record.createdAt = createdAt;
+    record.updatedAt = updatedAt;
+
+    // Modern JSON Serialization
     
-    // Convert resources to JSON string
-    QJsonDocument resourcesDoc(m_resources);
-    record.resources = QString::fromUtf8(resourcesDoc.toJson(QJsonDocument::Compact));
-    
-    // Convert types to JSON string
-    QJsonArray typesArray;
-    for (const QString& type : m_types) {
-        typesArray.append(type);
-    }
-    QJsonDocument typesDoc(typesArray);
-    record.types = QString::fromUtf8(typesDoc.toJson(QJsonDocument::Compact));
-    
+    // 1. Resources -> JSON String
+    record.resources = QString::fromUtf8(
+        QJsonDocument(resources).toJson(QJsonDocument::Compact)
+    );
+
+    // 2. StringList -> JSON String
+    record.types = QString::fromUtf8(
+        QJsonDocument(QJsonArray::fromStringList(types)).toJson(QJsonDocument::Compact)
+    );
+
     return record;
 }
-

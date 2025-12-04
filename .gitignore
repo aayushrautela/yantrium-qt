@@ -178,6 +178,7 @@ dart_old/
 # Build scripts with sensitive data
 build.sh
 !build.sh.example
+org.yantrium.Yantrium.filled.yml
 
 # API keys and secrets
 *.key

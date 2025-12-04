@@ -4,7 +4,13 @@
 #include <QObject>
 #include <QString>
 #include <QDateTime>
-#include "../models/addon_config.h"
+#include <functional>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+
+// FIX: We must include the full header because we hold m_existingAddon by value
+#include "../models/addon_config.h" 
 #include "../models/addon_manifest.h"
 
 class AddonInstaller : public QObject
@@ -12,35 +18,38 @@ class AddonInstaller : public QObject
     Q_OBJECT
 
 public:
+    using SuccessCallback = std::function<void(const AddonConfig&)>;
+    using ErrorCallback = std::function<void(const QString&)>;
+
     explicit AddonInstaller(QObject* parent = nullptr);
-    
-    // Install addon from manifest URL
-    static void installAddon(const QString& manifestUrl, QObject* receiver, const char* slot);
-    
-    // Update addon manifest (refresh from URL)
-    static void updateAddon(const AddonConfig& existingAddon, QObject* receiver, const char* slot);
-    
-    // Setter methods for direct installation
-    void setManifestUrl(const QString& url) { m_manifestUrl = url; }
-    void setExistingAddon(const AddonConfig& addon) { m_existingAddon = addon; }
-    void setIsUpdate(bool isUpdate) { m_isUpdate = isUpdate; }
-    
+    ~AddonInstaller();
+
+    // Static entry point for installation
+    static void installAddon(const QString& manifestUrl, 
+                             SuccessCallback onSuccess, 
+                             ErrorCallback onError = nullptr);
+
+    // Static entry point for updates
+    static void updateAddon(const AddonConfig& existingAddon, 
+                            SuccessCallback onSuccess, 
+                            ErrorCallback onError = nullptr);
+
 signals:
     void addonInstalled(const AddonConfig& addon);
     void addonUpdated(const AddonConfig& addon);
     void error(const QString& errorMessage);
-    
-public slots:
+
+private slots:
     void onManifestFetched(const AddonManifest& manifest);
     void onManifestError(const QString& error);
-    
+
 private:
-    QString m_manifestUrl;
-    AddonConfig m_existingAddon;
-    bool m_isUpdate;
-    
+    void fetch(const QString& url);
     void processManifest(const AddonManifest& manifest);
+
+    QString m_manifestUrl;
+    AddonConfig m_existingAddon; 
+    bool m_isUpdate;
 };
 
 #endif // ADDON_INSTALLER_H
-

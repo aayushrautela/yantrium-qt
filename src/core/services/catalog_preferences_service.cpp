@@ -20,7 +20,7 @@ QVariantList CatalogPreferencesService::getAvailableCatalogs()
         
         for (const AddonConfig& addon : enabledAddons) {
             // Check if addon has catalog resource
-            if (!AddonRepository::hasResource(addon.resources(), "catalog")) {
+            if (!AddonRepository::hasResource(addon.resources, "catalog")) {
                 continue;
             }
             
@@ -35,7 +35,7 @@ QVariantList CatalogPreferencesService::getAvailableCatalogs()
                 QString catalogId = catalogDef.id().isEmpty() ? QString() : catalogDef.id();
                 
                 // Get preference (or default to enabled)
-                auto preference = m_dao->getPreference(addon.id(), catalogDef.type(), catalogId);
+                auto preference = m_dao->getPreference(addon.id, catalogDef.type(), catalogId);
                 bool enabled = preference ? preference->enabled : true;
                 bool isHeroSource = preference ? preference->isHeroSource : false;
                 
@@ -49,14 +49,14 @@ QVariantList CatalogPreferencesService::getAvailableCatalogs()
                 }
                 
                 QVariantMap catalogInfo;
-                catalogInfo["addonId"] = addon.id();
-                catalogInfo["addonName"] = addon.name();
+                catalogInfo["addonId"] = addon.id;
+                catalogInfo["addonName"] = addon.name;
                 catalogInfo["catalogType"] = catalogDef.type();
                 catalogInfo["catalogId"] = catalogId;
                 catalogInfo["catalogName"] = catalogName;
                 catalogInfo["enabled"] = enabled;
                 catalogInfo["isHeroSource"] = isHeroSource;
-                catalogInfo["uniqueId"] = QString("%1|%2|%3").arg(addon.id(), catalogDef.type(), catalogId);
+                catalogInfo["uniqueId"] = QString("%1|%2|%3").arg(addon.id, catalogDef.type(), catalogId);
                 
                 catalogs.append(catalogInfo);
             }
@@ -153,7 +153,7 @@ QVariantList CatalogPreferencesService::getHeroCatalogs()
             
             QVariantMap catalogInfo;
             catalogInfo["addonId"] = preference.addonId;
-            catalogInfo["addonName"] = addon.name();
+            catalogInfo["addonName"] = addon.name;
             catalogInfo["catalogType"] = preference.catalogType;
             catalogInfo["catalogId"] = preference.catalogId;
             catalogInfo["catalogName"] = catalogName;
