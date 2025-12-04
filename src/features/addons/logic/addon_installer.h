@@ -30,7 +30,7 @@ signals:
     void addonUpdated(const AddonConfig& addon);
     void error(const QString& errorMessage);
     
-private slots:
+public slots:
     void onManifestFetched(const AddonManifest& manifest);
     void onManifestError(const QString& error);
     

@@ -2,6 +2,7 @@
 #include "addon_installer.h"
 #include "addon_client.h"
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QVariantMap>
 #include <QDebug>
 
@@ -12,27 +13,47 @@ AddonRepository::AddonRepository(QObject* parent)
     if (!dbManager.isInitialized()) {
         dbManager.initialize();
     }
-    m_dao = new AddonDao(dbManager.database());
+    // MODERNIZATION: use make_unique
+    m_dao = std::make_unique<AddonDao>(dbManager.database());
+}
+
+AddonRepository::~AddonRepository()
+{
+    // unique_ptr handles m_dao deletion automatically
 }
 
 void AddonRepository::installAddon(const QString& manifestUrl)
 {
     qDebug() << "[AddonRepository] Installing addon from:" << manifestUrl;
-    
-    // Create installer and connect signals
+
+    // Create installer
+    // Note: 'this' parent means installer lives as long as Repository.
+    // Ideally, AddonInstaller should delete itself (deleteLater) when finished.
     AddonInstaller* installer = new AddonInstaller(this);
     installer->setManifestUrl(manifestUrl);
     installer->setIsUpdate(false);
-    
-    connect(installer, SIGNAL(addonInstalled(AddonConfig)), this, SLOT(onAddonInstalled(AddonConfig)));
-    connect(installer, SIGNAL(error(QString)), this, SLOT(onInstallerError(QString)));
-    
+
+    // MODERNIZATION: New Signal/Slot Syntax
+    connect(installer, &AddonInstaller::addonInstalled, 
+            this, &AddonRepository::onAddonInstalled);
+    connect(installer, &AddonInstaller::error, 
+            this, &AddonRepository::onInstallerError);
+
+    // Cleanup helper: Ensure installer deletes itself if logical flow allows
+    // connect(installer, &AddonInstaller::finished, installer, &AddonInstaller::deleteLater);
+
     // Create client and fetch manifest
     QString baseUrl = AddonClient::extractBaseUrl(manifestUrl);
-    AddonClient* client = new AddonClient(baseUrl, installer);
-    connect(client, SIGNAL(manifestFetched(AddonManifest)), installer, SLOT(onManifestFetched(AddonManifest)));
-    connect(client, SIGNAL(error(QString)), installer, SLOT(onManifestError(QString)));
     
+    // Parented to installer, so it dies when installer dies
+    AddonClient* client = new AddonClient(baseUrl, installer); 
+    
+    // MODERNIZATION: New Signal/Slot Syntax
+    connect(client, &AddonClient::manifestFetched, 
+            installer, &AddonInstaller::onManifestFetched);
+    connect(client, &AddonClient::error, 
+            installer, &AddonInstaller::onManifestError);
+
     qDebug() << "[AddonRepository] Fetching manifest from:" << baseUrl;
     client->fetchManifest();
 }
@@ -41,11 +62,12 @@ QList<AddonConfig> AddonRepository::listAddons()
 {
     QList<AddonRecord> records = m_dao->getAllAddons();
     QList<AddonConfig> addons;
-    
+    addons.reserve(records.size()); // Optimization
+
     for (const AddonRecord& record : records) {
         addons.append(AddonConfig::fromDatabase(record));
     }
-    
+
     return addons;
 }
 
@@ -84,24 +106,28 @@ void AddonRepository::updateAddon(const QString& id)
         emit error(QString("Addon not found: %1").arg(id));
         return;
     }
-    
+
     qDebug() << "[AddonRepository] Updating addon:" << existing.name();
-    
-    // Create installer and connect signals
+
     AddonInstaller* installer = new AddonInstaller(this);
     installer->setManifestUrl(existing.manifestUrl());
     installer->setExistingAddon(existing);
     installer->setIsUpdate(true);
-    
-    connect(installer, SIGNAL(addonUpdated(AddonConfig)), this, SLOT(onAddonUpdated(AddonConfig)));
-    connect(installer, SIGNAL(error(QString)), this, SLOT(onInstallerError(QString)));
-    
-    // Create client and fetch manifest
+
+    // MODERNIZATION: New Signal/Slot Syntax
+    connect(installer, &AddonInstaller::addonUpdated, 
+            this, &AddonRepository::onAddonUpdated);
+    connect(installer, &AddonInstaller::error, 
+            this, &AddonRepository::onInstallerError);
+
     QString baseUrl = AddonClient::extractBaseUrl(existing.manifestUrl());
     AddonClient* client = new AddonClient(baseUrl, installer);
-    connect(client, SIGNAL(manifestFetched(AddonManifest)), installer, SLOT(onManifestFetched(AddonManifest)));
-    connect(client, SIGNAL(error(QString)), installer, SLOT(onManifestError(QString)));
     
+    connect(client, &AddonClient::manifestFetched, 
+            installer, &AddonInstaller::onManifestFetched);
+    connect(client, &AddonClient::error, 
+            installer, &AddonInstaller::onManifestError);
+
     client->fetchManifest();
 }
 
@@ -109,11 +135,12 @@ QList<AddonConfig> AddonRepository::getEnabledAddons()
 {
     QList<AddonRecord> records = m_dao->getEnabledAddons();
     QList<AddonConfig> addons;
-    
+    addons.reserve(records.size());
+
     for (const AddonRecord& record : records) {
         addons.append(AddonConfig::fromDatabase(record));
     }
-    
+
     return addons;
 }
 
@@ -149,21 +176,31 @@ void AddonRepository::onAddonInstalled(const AddonConfig& addon)
     saveAddonToDatabase(addon);
     qDebug() << "[AddonRepository] Addon saved to database";
     emit addonInstalled(addon);
+    
+    // Optional: Clean up the installer sender
+    // sender()->deleteLater();
 }
 
 void AddonRepository::onAddonUpdated(const AddonConfig& addon)
 {
     saveAddonToDatabase(addon);
     emit addonUpdated(addon);
+    
+    // Optional: Clean up the installer sender
+    // sender()->deleteLater();
 }
 
-void AddonRepository::onInstallerError(const QString& error)
+void AddonRepository::onInstallerError(const QString& errorMsg)
 {
-    emit this->error(error);
+    emit error(errorMsg);
+    // Optional: Clean up the installer sender
+    // sender()->deleteLater();
 }
 
 int AddonRepository::listAddonsCount()
 {
+    // Note: This is slightly inefficient as it queries full records just to get count.
+    // In a real optimized scenario, DAO should have a countAllAddons() method.
     return listAddons().size();
 }
 
@@ -171,7 +208,8 @@ QVariantList AddonRepository::getAllAddons()
 {
     QList<AddonConfig> addons = listAddons();
     QVariantList result;
-    
+    result.reserve(addons.size());
+
     for (const AddonConfig& addon : addons) {
         QVariantMap map;
         map["id"] = addon.id();
@@ -181,25 +219,30 @@ QVariantList AddonRepository::getAllAddons()
         map["manifestUrl"] = addon.manifestUrl();
         result.append(map);
     }
-    
+
     return result;
 }
 
-QString AddonRepository::getAddonJson(const QString& id)
+// MODERNIZATION: Renamed from getAddonJson
+// Returns QVariantMap. In QML, you use this exactly like a JS object:
+// var addon = repo.getAddonDetails("123");
+// console.log(addon.name);
+QVariantMap AddonRepository::getAddonDetails(const QString& id)
 {
     AddonConfig addon = getAddon(id);
+    QVariantMap map;
+
     if (addon.id().isEmpty()) {
-        return QString();
+        return map;
     }
+
+    map["id"] = addon.id();
+    map["name"] = addon.name();
+    map["version"] = addon.version();
+    map["description"] = addon.description();
+    map["enabled"] = addon.enabled();
     
-    // Return JSON representation (simplified for QML)
-    QJsonObject obj;
-    obj["id"] = addon.id();
-    obj["name"] = addon.name();
-    obj["version"] = addon.version();
-    obj["description"] = addon.description();
-    obj["enabled"] = addon.enabled();
-    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+    return map;
 }
 
 int AddonRepository::getEnabledAddonsCount()
@@ -211,22 +254,19 @@ void AddonRepository::saveAddonToDatabase(const AddonConfig& addon)
 {
     qDebug() << "[AddonRepository] Saving addon to database:" << addon.id();
     AddonRecord record = addon.toDatabaseRecord();
-    
+
     // Check if addon already exists
     std::unique_ptr<AddonRecord> existing = m_dao->getAddonById(addon.id());
+    
     if (existing) {
         qDebug() << "[AddonRepository] Updating existing addon";
-        // Update existing addon
-        bool success = m_dao->updateAddon(record);
-        if (!success) {
+        if (!m_dao->updateAddon(record)) {
             qWarning() << "[AddonRepository] Failed to update addon in database";
             emit error("Failed to update addon in database");
         }
     } else {
         qDebug() << "[AddonRepository] Inserting new addon";
-        // Insert new addon
-        bool success = m_dao->insertAddon(record);
-        if (!success) {
+        if (!m_dao->insertAddon(record)) {
             qWarning() << "[AddonRepository] Failed to insert addon into database";
             emit error("Failed to insert addon into database");
         } else {
@@ -234,4 +274,3 @@ void AddonRepository::saveAddonToDatabase(const AddonConfig& addon)
         }
     }
 }
-
