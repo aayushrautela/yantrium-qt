@@ -15,7 +15,7 @@ AddonRepository::AddonRepository(QObject* parent)
     }
     
     // Modern: use make_unique
-    m_dao = std::make_unique<AddonDao>(dbManager.database());
+    m_dao = std::make_unique<AddonDao>();
 }
 
 AddonRepository::~AddonRepository()

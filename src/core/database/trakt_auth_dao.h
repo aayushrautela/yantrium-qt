@@ -21,7 +21,7 @@ struct TraktAuthRecord
 class TraktAuthDao
 {
 public:
-    explicit TraktAuthDao(QSqlDatabase database);
+    explicit TraktAuthDao();
     
     std::unique_ptr<TraktAuthRecord> getTraktAuth();
     bool upsertTraktAuth(const TraktAuthRecord& auth);

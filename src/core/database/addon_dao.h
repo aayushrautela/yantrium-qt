@@ -26,7 +26,7 @@ struct AddonRecord
 class AddonDao
 {
 public:
-    explicit AddonDao(QSqlDatabase database);
+    explicit AddonDao();
     
     bool insertAddon(const AddonRecord& addon);
     bool updateAddon(const AddonRecord& addon);

@@ -1,10 +1,11 @@
 #include "trakt_auth_dao.h"
+#include "database_manager.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
 
-TraktAuthDao::TraktAuthDao(QSqlDatabase database)
-    : m_database(database)
+TraktAuthDao::TraktAuthDao()
+    : m_database(QSqlDatabase::database(DatabaseManager::CONNECTION_NAME))
 {
 }
 

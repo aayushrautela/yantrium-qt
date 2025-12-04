@@ -1,10 +1,11 @@
 #include "watch_history_dao.h"
+#include "database_manager.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
 
-WatchHistoryDao::WatchHistoryDao(QSqlDatabase database)
-    : m_database(database)
+WatchHistoryDao::WatchHistoryDao()
+    : m_database(QSqlDatabase::database(DatabaseManager::CONNECTION_NAME))
 {
 }
 

@@ -1,10 +1,11 @@
 #include "addon_dao.h"
+#include "database_manager.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
 
-AddonDao::AddonDao(QSqlDatabase database)
-    : m_database(database)
+AddonDao::AddonDao()
+    : m_database(QSqlDatabase::database(DatabaseManager::CONNECTION_NAME))
 {
 }
 

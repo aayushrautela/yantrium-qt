@@ -15,7 +15,7 @@ TraktScrobbleService::TraktScrobbleService(QObject* parent)
 {
     DatabaseManager& dbManager = DatabaseManager::instance();
     if (dbManager.isInitialized()) {
-        m_coreService.setDatabase(dbManager.database());
+        m_coreService.initializeDatabase();
         m_coreService.initializeAuth();
     }
 }

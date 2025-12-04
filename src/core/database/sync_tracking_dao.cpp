@@ -1,10 +1,11 @@
 #include "sync_tracking_dao.h"
+#include "database_manager.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
 
-SyncTrackingDao::SyncTrackingDao(QSqlDatabase database)
-    : m_database(database)
+SyncTrackingDao::SyncTrackingDao()
+    : m_database(QSqlDatabase::database(DatabaseManager::CONNECTION_NAME))
 {
 }
 

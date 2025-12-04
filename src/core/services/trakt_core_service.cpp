@@ -49,16 +49,20 @@ TraktCoreService::~TraktCoreService()
     delete m_watchHistoryDao;
 }
 
-void TraktCoreService::setDatabase(QSqlDatabase database)
+void TraktCoreService::initializeDatabase()
 {
-    if (m_database.isValid()) {
-        qDebug() << "[TraktCoreService] Database already set";
+    if (m_authDao) {
+        qDebug() << "[TraktCoreService] Database already initialized";
         return;
     }
-    m_database = database;
-    m_authDao = new TraktAuthDao(database);
-    m_syncDao = new SyncTrackingDao(database);
-    m_watchHistoryDao = new WatchHistoryDao(database);
+
+    // Get database connection by name (new pattern)
+    m_database = QSqlDatabase::database(DatabaseManager::CONNECTION_NAME);
+
+    // Create DAO objects (new pattern - no database parameter)
+    m_authDao = new TraktAuthDao();
+    m_syncDao = new SyncTrackingDao();
+    m_watchHistoryDao = new WatchHistoryDao();
     qDebug() << "[TraktCoreService] Database initialized";
 }
 

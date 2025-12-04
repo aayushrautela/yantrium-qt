@@ -27,7 +27,7 @@ struct WatchHistoryRecord
 class WatchHistoryDao
 {
 public:
-    explicit WatchHistoryDao(QSqlDatabase database);
+    explicit WatchHistoryDao();
     
     bool insertWatchHistory(const WatchHistoryRecord& item);
     bool upsertWatchHistory(const WatchHistoryRecord& item);

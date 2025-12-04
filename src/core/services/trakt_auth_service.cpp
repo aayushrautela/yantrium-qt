@@ -32,7 +32,7 @@ TraktAuthService::TraktAuthService(QObject* parent)
     // Initialize core service database if needed
     DatabaseManager& dbManager = DatabaseManager::instance();
     if (dbManager.isInitialized()) {
-        m_coreService.setDatabase(dbManager.database());
+        m_coreService.initializeDatabase();
         m_coreService.initializeAuth();
     }
     
@@ -224,7 +224,7 @@ void TraktAuthService::onDeviceTokenReplyFinished()
         // Save tokens via core service
         DatabaseManager& dbManager = DatabaseManager::instance();
         if (dbManager.isInitialized()) {
-            TraktAuthDao dao(dbManager.database());
+            TraktAuthDao dao();
             TraktAuthRecord record;
             record.accessToken = accessToken;
             record.refreshToken = refreshToken;
@@ -288,7 +288,7 @@ void TraktAuthService::onUserInfoReplyFinished()
     // Update database with username/slug
     DatabaseManager& dbManager = DatabaseManager::instance();
     if (dbManager.isInitialized()) {
-        TraktAuthDao dao(dbManager.database());
+        TraktAuthDao dao();
         auto auth = dao.getTraktAuth();
         if (auth) {
             auth->username = username;

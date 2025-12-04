@@ -6,7 +6,7 @@
 CatalogPreferencesService::CatalogPreferencesService(QObject* parent)
     : QObject(parent)
 {
-    m_dao = new CatalogPreferencesDao(DatabaseManager::instance().database());
+    m_dao = new CatalogPreferencesDao();
     m_addonRepository = new AddonRepository(this);
 }
 

@@ -27,7 +27,7 @@ struct LocalLibraryRecord
 class LocalLibraryDao
 {
 public:
-    explicit LocalLibraryDao(QSqlDatabase database);
+    explicit LocalLibraryDao();
     
     bool insertLibraryItem(const LocalLibraryRecord& item);
     bool removeLibraryItem(const QString& contentId);

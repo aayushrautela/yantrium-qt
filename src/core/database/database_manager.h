@@ -2,39 +2,38 @@
 #define DATABASE_MANAGER_H
 
 #include <QObject>
-#include <QSqlDatabase>
 #include <QString>
-#include <memory>
+// We do NOT include QSqlDatabase here to avoid exposing the instance in the header.
+// This enforces the practice of retrieving the connection by name.
 
 class DatabaseManager : public QObject
 {
     Q_OBJECT
 
 public:
+    // Thread-safe Singleton access
     static DatabaseManager& instance();
-    
-    bool initialize(const QString& databasePath = QString());
-    QSqlDatabase database() const;
-    bool isInitialized() const { return m_initialized; }
-    
-    // Table creation
-    bool createAddonsTable();
-    bool createTraktAuthTable();
-    bool createCatalogPreferencesTable();
-    bool createLocalLibraryTable();
-    bool createWatchHistoryTable();
-    bool createSyncTrackingTable();
-    
-private:
-    DatabaseManager(QObject* parent = nullptr);
-    ~DatabaseManager() = default;
+
+    // Delete copy and move constructors to ensure Singleton uniqueness
     DatabaseManager(const DatabaseManager&) = delete;
     DatabaseManager& operator=(const DatabaseManager&) = delete;
-    
-    QSqlDatabase m_database;
+
+    // Initialization
+    bool initialize(const QString& databasePath = QString());
+    bool isInitialized() const { return m_initialized; }
+
+    // Helper to get the constant connection name used throughout the app
+    static const QString CONNECTION_NAME;
+
+private:
+    explicit DatabaseManager(QObject* parent = nullptr);
+    ~DatabaseManager();
+
+    // Internal helper to create all tables in a single transaction
+    bool createTables();
+
     bool m_initialized;
     QString m_databasePath;
 };
 
 #endif // DATABASE_MANAGER_H
-

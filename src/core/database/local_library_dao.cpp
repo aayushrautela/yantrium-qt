@@ -1,10 +1,11 @@
 #include "local_library_dao.h"
+#include "database_manager.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
 
-LocalLibraryDao::LocalLibraryDao(QSqlDatabase database)
-    : m_database(database)
+LocalLibraryDao::LocalLibraryDao()
+    : m_database(QSqlDatabase::database(DatabaseManager::CONNECTION_NAME))
 {
 }
 

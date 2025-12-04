@@ -26,7 +26,7 @@ class TraktCoreService : public QObject
 public:
     static TraktCoreService& instance();
     
-    void setDatabase(QSqlDatabase database);
+    void initializeDatabase();
     void initializeAuth();
     void reloadAuth();
     

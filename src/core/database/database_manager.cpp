@@ -1,15 +1,26 @@
 #include "database_manager.h"
+#include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QStandardPaths>
 #include <QDir>
-#include <QSqlDriver>
 #include <QDebug>
+
+// Define the connection name constant
+const QString DatabaseManager::CONNECTION_NAME = "yantrium_connection";
 
 DatabaseManager::DatabaseManager(QObject* parent)
     : QObject(parent)
     , m_initialized(false)
 {
+}
+
+DatabaseManager::~DatabaseManager()
+{
+    // Proper cleanup: Remove the connection when the app closes
+    if (QSqlDatabase::contains(CONNECTION_NAME)) {
+        QSqlDatabase::removeDatabase(CONNECTION_NAME);
+    }
 }
 
 DatabaseManager& DatabaseManager::instance()
@@ -23,255 +34,184 @@ bool DatabaseManager::initialize(const QString& databasePath)
     if (m_initialized) {
         return true;
     }
-    
-    // Check if SQLite driver is available
+
+    // 1. Check Driver
     if (!QSqlDatabase::isDriverAvailable("QSQLITE")) {
         qCritical() << "SQLite driver not available!";
         return false;
     }
-    
-    // Determine database path
+
+    // 2. Determine Path
     if (databasePath.isEmpty()) {
         QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-        QDir dir;
-        if (!dir.exists(dataDir)) {
-            if (!dir.mkpath(dataDir)) {
+        QDir dir(dataDir);
+        
+        if (!dir.exists()) {
+            if (!dir.mkpath(".")) {
                 qCritical() << "Failed to create data directory:" << dataDir;
                 return false;
             }
         }
-        m_databasePath = dataDir + "/yantrium.db";
-        qDebug() << "Database path:" << m_databasePath;
+        m_databasePath = dir.filePath("yantrium.db");
     } else {
         m_databasePath = databasePath;
     }
-    
-    // Open SQLite database
-    m_database = QSqlDatabase::addDatabase("QSQLITE", "yantrium");
-    m_database.setDatabaseName(m_databasePath);
-    
-    if (!m_database.open()) {
-        qCritical() << "Failed to open database:" << m_database.lastError().text();
-        qCritical() << "Database path:" << m_databasePath;
+
+    qDebug() << "Database path:" << m_databasePath;
+
+    // 3. Initialize Connection
+    // We add the database, but we do NOT store the object as a class member.
+    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", CONNECTION_NAME);
+    db.setDatabaseName(m_databasePath);
+
+    if (!db.open()) {
+        qCritical() << "Failed to open database:" << db.lastError().text();
         return false;
     }
-    
-    qDebug() << "Database opened successfully. Driver:" << m_database.driverName();
-    
-    qDebug() << "Database opened successfully:" << m_databasePath;
-    
-    // Create tables
-    if (!createAddonsTable()) {
-        qWarning() << "Failed to create addons table";
-        m_database.close();
+
+    qDebug() << "Database opened successfully. Driver:" << db.driverName();
+
+    // 4. Create Tables
+    if (!createTables()) {
+        qCritical() << "Failed to initialize database schema.";
+        db.close();
         return false;
     }
-    
-    if (!createTraktAuthTable()) {
-        qWarning() << "Failed to create trakt_auth table";
-        m_database.close();
-        return false;
-    }
-    
-    if (!createCatalogPreferencesTable()) {
-        qWarning() << "Failed to create catalog_preferences table";
-        m_database.close();
-        return false;
-    }
-    
-    if (!createLocalLibraryTable()) {
-        qWarning() << "Failed to create local_library table";
-        m_database.close();
-        return false;
-    }
-    
-    if (!createWatchHistoryTable()) {
-        qWarning() << "Failed to create watch_history table";
-        m_database.close();
-        return false;
-    }
-    
-    if (!createSyncTrackingTable()) {
-        qWarning() << "Failed to create sync_tracking table";
-        m_database.close();
-        return false;
-    }
-    
+
     m_initialized = true;
     return true;
 }
 
-QSqlDatabase DatabaseManager::database() const
+bool DatabaseManager::createTables()
 {
-    return m_database;
-}
+    // Retrieve the active connection
+    QSqlDatabase db = QSqlDatabase::database(CONNECTION_NAME);
+    
+    // Start a transaction. This is safer and faster.
+    if (!db.transaction()) {
+        qWarning() << "Failed to start transaction for table creation.";
+    }
 
-bool DatabaseManager::createAddonsTable()
-{
-    QSqlQuery query(m_database);
-    
-    QString createTableSql = R"(
-        CREATE TABLE IF NOT EXISTS addons (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            version TEXT NOT NULL,
-            description TEXT,
-            manifestUrl TEXT NOT NULL,
-            baseUrl TEXT NOT NULL,
-            enabled INTEGER NOT NULL DEFAULT 1,
-            manifestData TEXT NOT NULL,
-            resources TEXT NOT NULL,
-            types TEXT NOT NULL,
-            createdAt TEXT NOT NULL,
-            updatedAt TEXT NOT NULL
-        )
-    )";
-    
-    if (!query.exec(createTableSql)) {
-        qWarning() << "Failed to create addons table:" << query.lastError().text();
+    QSqlQuery query(db);
+
+    // We define a simple structure to hold table names and their creation SQL
+    struct TableSchema {
+        const char* name;
+        const char* sql;
+    };
+
+    // All your table definitions in one clean list
+    const TableSchema tables[] = {
+        {
+            "addons",
+            R"(CREATE TABLE IF NOT EXISTS addons (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                description TEXT,
+                manifestUrl TEXT NOT NULL,
+                baseUrl TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                manifestData TEXT NOT NULL,
+                resources TEXT NOT NULL,
+                types TEXT NOT NULL,
+                createdAt TEXT NOT NULL,
+                updatedAt TEXT NOT NULL
+            ))"
+        },
+        {
+            "trakt_auth",
+            R"(CREATE TABLE IF NOT EXISTS trakt_auth (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                accessToken TEXT NOT NULL,
+                refreshToken TEXT NOT NULL,
+                expiresIn INTEGER NOT NULL,
+                createdAt TEXT NOT NULL,
+                expiresAt TEXT NOT NULL,
+                username TEXT,
+                slug TEXT
+            ))"
+        },
+        {
+            "catalog_preferences",
+            R"(CREATE TABLE IF NOT EXISTS catalog_preferences (
+                addon_id TEXT NOT NULL,
+                catalog_type TEXT NOT NULL,
+                catalog_id TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                is_hero_source INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (addon_id, catalog_type, catalog_id)
+            ))"
+        },
+        {
+            "local_library",
+            R"(CREATE TABLE IF NOT EXISTS local_library (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contentId TEXT NOT NULL UNIQUE,
+                type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                year INTEGER,
+                posterUrl TEXT,
+                backdropUrl TEXT,
+                logoUrl TEXT,
+                description TEXT,
+                rating TEXT,
+                addedAt TEXT NOT NULL,
+                tmdbId TEXT,
+                imdbId TEXT
+            ))"
+        },
+        {
+            "watch_history",
+            R"(CREATE TABLE IF NOT EXISTS watch_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contentId TEXT NOT NULL,
+                type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                year INTEGER,
+                posterUrl TEXT,
+                season INTEGER,
+                episode INTEGER,
+                episodeTitle TEXT,
+                watchedAt TEXT NOT NULL,
+                progress REAL DEFAULT 0,
+                tmdbId TEXT,
+                imdbId TEXT
+            ))"
+        },
+        {
+            "sync_tracking",
+            R"(CREATE TABLE IF NOT EXISTS sync_tracking (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sync_type TEXT NOT NULL UNIQUE,
+                last_sync_at TEXT NOT NULL,
+                full_sync_completed INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            ))"
+        }
+    };
+
+    bool allSuccess = true;
+
+    // Iterate through the list and create tables
+    for (const auto& table : tables) {
+        if (!query.exec(table.sql)) {
+            qCritical() << "Failed to create table" << table.name << ":" << query.lastError().text();
+            allSuccess = false;
+            break; // Stop immediately on error
+        }
+        qDebug() << "Table ensured:" << table.name;
+    }
+
+    if (allSuccess) {
+        db.commit(); // Save everything
+        qDebug() << "All tables initialized successfully.";
+        return true;
+    } else {
+        db.rollback(); // Undo everything if something failed
         return false;
     }
-    
-    qDebug() << "Addons table created successfully";
-    return true;
 }
-
-bool DatabaseManager::createTraktAuthTable()
-{
-    QSqlQuery query(m_database);
-    
-    QString createTableSql = R"(
-        CREATE TABLE IF NOT EXISTS trakt_auth (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            accessToken TEXT NOT NULL,
-            refreshToken TEXT NOT NULL,
-            expiresIn INTEGER NOT NULL,
-            createdAt TEXT NOT NULL,
-            expiresAt TEXT NOT NULL,
-            username TEXT,
-            slug TEXT
-        )
-    )";
-    
-    if (!query.exec(createTableSql)) {
-        qWarning() << "Failed to create trakt_auth table:" << query.lastError().text();
-        return false;
-    }
-    
-    qDebug() << "Trakt auth table created successfully";
-    return true;
-}
-
-bool DatabaseManager::createCatalogPreferencesTable()
-{
-    QSqlQuery query(m_database);
-    
-    // Use empty string instead of NULL for catalog_id to avoid PRIMARY KEY issues
-    QString createTableSql = R"(
-        CREATE TABLE IF NOT EXISTS catalog_preferences (
-            addon_id TEXT NOT NULL,
-            catalog_type TEXT NOT NULL,
-            catalog_id TEXT NOT NULL DEFAULT '',
-            enabled INTEGER NOT NULL DEFAULT 1,
-            is_hero_source INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            PRIMARY KEY (addon_id, catalog_type, catalog_id)
-        )
-    )";
-    
-    if (!query.exec(createTableSql)) {
-        qWarning() << "Failed to create catalog_preferences table:" << query.lastError().text();
-        return false;
-    }
-    
-    qDebug() << "Catalog preferences table created successfully";
-    return true;
-}
-
-bool DatabaseManager::createLocalLibraryTable()
-{
-    QSqlQuery query(m_database);
-    
-    QString createTableSql = R"(
-        CREATE TABLE IF NOT EXISTS local_library (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            contentId TEXT NOT NULL UNIQUE,
-            type TEXT NOT NULL,
-            title TEXT NOT NULL,
-            year INTEGER,
-            posterUrl TEXT,
-            backdropUrl TEXT,
-            logoUrl TEXT,
-            description TEXT,
-            rating TEXT,
-            addedAt TEXT NOT NULL,
-            tmdbId TEXT,
-            imdbId TEXT
-        )
-    )";
-    
-    if (!query.exec(createTableSql)) {
-        qWarning() << "Failed to create local_library table:" << query.lastError().text();
-        return false;
-    }
-    
-    qDebug() << "Local library table created successfully";
-    return true;
-}
-
-bool DatabaseManager::createWatchHistoryTable()
-{
-    QSqlQuery query(m_database);
-    
-    QString createTableSql = R"(
-        CREATE TABLE IF NOT EXISTS watch_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            contentId TEXT NOT NULL,
-            type TEXT NOT NULL,
-            title TEXT NOT NULL,
-            year INTEGER,
-            posterUrl TEXT,
-            season INTEGER,
-            episode INTEGER,
-            episodeTitle TEXT,
-            watchedAt TEXT NOT NULL,
-            progress REAL DEFAULT 0,
-            tmdbId TEXT,
-            imdbId TEXT
-        )
-    )";
-    
-    if (!query.exec(createTableSql)) {
-        qWarning() << "Failed to create watch_history table:" << query.lastError().text();
-        return false;
-    }
-    
-    qDebug() << "Watch history table created successfully";
-    return true;
-}
-
-bool DatabaseManager::createSyncTrackingTable()
-{
-    QSqlQuery query(m_database);
-    
-    QString createTableSql = R"(
-        CREATE TABLE IF NOT EXISTS sync_tracking (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sync_type TEXT NOT NULL UNIQUE,
-            last_sync_at TEXT NOT NULL,
-            full_sync_completed INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-    )";
-    
-    if (!query.exec(createTableSql)) {
-        qWarning() << "Failed to create sync_tracking table:" << query.lastError().text();
-        return false;
-    }
-    
-    qDebug() << "Sync tracking table created successfully";
-    return true;
-}
-

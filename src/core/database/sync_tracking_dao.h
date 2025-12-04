@@ -19,7 +19,7 @@ struct SyncTrackingRecord
 class SyncTrackingDao
 {
 public:
-    explicit SyncTrackingDao(QSqlDatabase database);
+    explicit SyncTrackingDao();
     
     bool upsertSyncTracking(const QString& syncType, const QDateTime& lastSyncAt, bool fullSyncCompleted = true);
     SyncTrackingRecord getSyncTracking(const QString& syncType);
