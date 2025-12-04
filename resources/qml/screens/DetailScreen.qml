@@ -352,13 +352,14 @@ Item {
             }
         }
         
-        ScrollView {
+        Flickable {
             anchors.fill: parent
             contentWidth: width
             contentHeight: contentColumn.height
             clip: true
+            boundsBehavior: Flickable.StopAtBounds
             z: 2
-            
+
             Column {
                 id: contentColumn
                 width: parent.width
@@ -367,7 +368,7 @@ Item {
                 // Backdrop Section
                 Item {
                     width: parent.width
-                    height: Math.max(600, root.height * 0.85)
+                    height: Math.max(400, backdropContent.height + 150)  // Dynamic height based on content
                     
                     // Gradient Overlay - Full screen
                     Rectangle {
@@ -415,9 +416,10 @@ Item {
                     
                     // Title and Info Section (overlay on backdrop)
                     Column {
+                        id: backdropContent
                         anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.verticalCenterOffset: 30
+                        anchors.top: parent.top
+                        anchors.topMargin: 100  // Start from top instead of center
                         anchors.right: parent.right
                         anchors.leftMargin: 120
                         anchors.rightMargin: 40
@@ -883,7 +885,20 @@ Item {
                     StackLayout {
                         id: tabListView
                         width: parent.width
-                        height: 1000
+                        height: {
+                            switch (currentIndex) {
+                                case 0: // EPISODES (for TV shows)
+                                    return root.isSeries() ? Math.max(400, episodesListView.contentHeight + 80) : 0
+                                case 1: // CAST & CREW
+                                    return 420
+                                case 2: // MORE LIKE THIS
+                                    return 420
+                                case 3: // DETAILS
+                                    return 100
+                                default:
+                                    return 400
+                            }
+                        }
                         currentIndex: root.getStackLayoutIndex(root.currentTabIndex)
                         
                         // EPISODES Tab
@@ -1011,26 +1026,29 @@ Item {
                                     }
                                 
                                 // Episode cards list
-                                ScrollView {
+                                Item {
                                     width: parent.width
-                                    height: parent.height - 60
-                                    clip: true
-                                    
-                                    ScrollBar.horizontal: ScrollBar {
-                                        policy: ScrollBar.AlwaysOn
-                                    }
-                                    
+                                    height: Math.max(300, episodesListView.contentHeight)
+
                                     ListView {
                                         id: episodesListView
+                                        anchors.fill: parent
                                         orientation: ListView.Horizontal
                                         spacing: 20
                                         model: root.currentSeasonEpisodes
-                                        width: parent.width
-                                        height: parent.height
+                                        clip: true
+
+                                        PropertyAnimation {
+                                            id: episodeScrollAnimation
+                                            target: episodesListView
+                                            property: "contentX"
+                                            duration: 300
+                                            easing.type: Easing.OutCubic
+                                        }
                                         
                                         delegate: Item {
                                             width: 320
-                                            height: episodesListView.height
+                                            height: 300  // Fixed height for episode cards
                                             
                                             Column {
                                                 width: parent.width
@@ -1040,31 +1058,42 @@ Item {
                                                 Item {
                                                     width: parent.width
                                                     height: 180
-                                                    
+
+                                                    property bool isHovered: false
+
                                                     Rectangle {
                                                         id: maskShape
                                                         anchors.fill: parent
                                                         radius: 8
                                                         visible: false
                                                     }
-                                                    
+
                                                     layer.enabled: true
                                                     layer.effect: OpacityMask {
                                                         maskSource: maskShape
                                                     }
-                                                    
+
                                                     Rectangle {
                                                         anchors.fill: parent
                                                         color: "#2a2a2a"
                                                         radius: 8
                                                     }
-                                                    
+
                                                     Image {
                                                         anchors.fill: parent
                                                         source: modelData.thumbnailUrl || ""
                                                         fillMode: Image.PreserveAspectCrop
                                                         asynchronous: true
                                                         smooth: true
+                                                        scale: parent.isHovered ? 1.10 : 1.0
+                                                        Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        onEntered: parent.isHovered = true
+                                                        onExited: parent.isHovered = false
                                                     }
                                                     
                                                     // Duration badge
@@ -1109,6 +1138,79 @@ Item {
                                                     maximumLineCount: 3
                                                     elide: Text.ElideRight
                                                     lineHeight: 1.3
+                                                }
+                                            }
+                                        }
+
+                                        // Left arrow
+                                        Item {
+                                            anchors.left: parent.left
+                                            anchors.top: parent.top
+                                            anchors.topMargin: 90  // Center on thumbnail area (180/2)
+                                            width: 48
+                                            height: 48
+                                            visible: episodesListView.contentX > 0
+                                            z: 10
+
+                                            property bool isHovered: false
+
+                                            Image {
+                                                anchors.centerIn: parent
+                                                width: 48
+                                                height: 48
+                                                source: "qrc:/assets/icons/arrow-left.svg"
+                                                fillMode: Image.PreserveAspectFit
+                                                opacity: parent.isHovered ? 1.0 : 0.4
+                                                Behavior on opacity { NumberAnimation { duration: 200 } }
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                onEntered: parent.isHovered = true
+                                                onExited: parent.isHovered = false
+                                                onClicked: {
+                                                    var targetX = Math.max(0, episodesListView.contentX - episodesListView.width * 0.8)
+                                                    episodeScrollAnimation.to = targetX
+                                                    episodeScrollAnimation.start()
+                                                }
+                                            }
+                                        }
+
+                                        // Right arrow
+                                        Item {
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.topMargin: 90  // Center on thumbnail area (180/2)
+                                            width: 48
+                                            height: 48
+                                            visible: episodesListView.contentX < episodesListView.contentWidth - episodesListView.width
+                                            z: 10
+
+                                            property bool isHovered: false
+
+                                            Image {
+                                                anchors.centerIn: parent
+                                                width: 48
+                                                height: 48
+                                                source: "qrc:/assets/icons/arrow-right.svg"
+                                                fillMode: Image.PreserveAspectFit
+                                                opacity: parent.isHovered ? 1.0 : 0.4
+                                                Behavior on opacity { NumberAnimation { duration: 200 } }
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                onEntered: parent.isHovered = true
+                                                onExited: parent.isHovered = false
+                                                onClicked: {
+                                                    var targetX = Math.min(
+                                                        episodesListView.contentWidth - episodesListView.width,
+                                                        episodesListView.contentX + episodesListView.width * 0.8
+                                                    )
+                                                    episodeScrollAnimation.to = targetX
+                                                    episodeScrollAnimation.start()
                                                 }
                                             }
                                         }
