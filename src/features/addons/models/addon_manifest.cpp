@@ -1,9 +1,7 @@
 #include "addon_manifest.h"
-#include <QJsonArray>
 
-AddonManifest::AddonManifest()
-{
-}
+// Enables "string"_s and "string"_L1 literals
+using namespace Qt::Literals::StringLiterals; 
 
 AddonManifest::AddonManifest(const QString& id,
                              const QString& version,
@@ -25,24 +23,29 @@ AddonManifest::AddonManifest(const QString& id,
 AddonManifest AddonManifest::fromJson(const QJsonObject& json)
 {
     AddonManifest manifest;
-    manifest.m_id = json["id"].toString();
-    manifest.m_version = json["version"].toString();
-    manifest.m_name = json["name"].toString();
-    manifest.m_description = json["description"].toString();
-    manifest.m_resources = json["resources"].toArray();
+    
+    // Using _L1 (Latin1StringView) is the fastest way to look up JSON keys in Qt 6
+    // It avoids creating a temporary QString just to perform the lookup.
+    manifest.m_id = json["id"_L1].toString();
+    manifest.m_version = json["version"_L1].toString();
+    manifest.m_name = json["name"_L1].toString();
+    manifest.m_description = json["description"_L1].toString();
+    manifest.m_resources = json["resources"_L1].toArray();
     
     // Parse types array
-    if (json.contains("types") && json["types"].isArray()) {
-        QJsonArray typesArray = json["types"].toArray();
-        for (const QJsonValue& value : typesArray) {
+    if (json.contains("types"_L1) && json["types"_L1].isArray()) {
+        const auto typesArray = json["types"_L1].toArray();
+        manifest.m_types.reserve(typesArray.size()); // Pre-allocate memory
+        for (const auto& value : typesArray) {
             manifest.m_types.append(value.toString());
         }
     }
     
     // Parse catalogs array
-    if (json.contains("catalogs") && json["catalogs"].isArray()) {
-        QJsonArray catalogsArray = json["catalogs"].toArray();
-        for (const QJsonValue& value : catalogsArray) {
+    if (json.contains("catalogs"_L1) && json["catalogs"_L1].isArray()) {
+        const auto catalogsArray = json["catalogs"_L1].toArray();
+        manifest.m_catalogs.reserve(catalogsArray.size());
+        for (const auto& value : catalogsArray) {
             if (value.isObject()) {
                 manifest.m_catalogs.append(CatalogDefinition::fromJson(value.toObject()));
             }
@@ -50,19 +53,20 @@ AddonManifest AddonManifest::fromJson(const QJsonObject& json)
     }
     
     // Parse idPrefixes
-    if (json.contains("idPrefixes") && json["idPrefixes"].isArray()) {
-        QJsonArray idPrefixesArray = json["idPrefixes"].toArray();
-        for (const QJsonValue& value : idPrefixesArray) {
+    if (json.contains("idPrefixes"_L1) && json["idPrefixes"_L1].isArray()) {
+        const auto idPrefixesArray = json["idPrefixes"_L1].toArray();
+        manifest.m_idPrefixes.reserve(idPrefixesArray.size());
+        for (const auto& value : idPrefixesArray) {
             manifest.m_idPrefixes.append(value.toString());
         }
     }
     
-    manifest.m_background = json["background"].toString();
-    manifest.m_logo = json["logo"].toString();
-    manifest.m_contactEmail = json["contactEmail"].toString();
+    manifest.m_background = json["background"_L1].toString();
+    manifest.m_logo = json["logo"_L1].toString();
+    manifest.m_contactEmail = json["contactEmail"_L1].toString();
     
-    if (json.contains("behaviorHints") && json["behaviorHints"].isObject()) {
-        manifest.m_behaviorHints = json["behaviorHints"].toObject();
+    if (json.contains("behaviorHints"_L1) && json["behaviorHints"_L1].isObject()) {
+        manifest.m_behaviorHints = json["behaviorHints"_L1].toObject();
     }
     
     return manifest;
@@ -71,45 +75,43 @@ AddonManifest AddonManifest::fromJson(const QJsonObject& json)
 QJsonObject AddonManifest::toJson() const
 {
     QJsonObject json;
-    json["id"] = m_id;
-    json["version"] = m_version;
-    json["name"] = m_name;
-    if (!m_description.isEmpty()) {
-        json["description"] = m_description;
-    }
-    json["resources"] = m_resources;
     
-    QJsonArray typesArray;
-    for (const QString& type : m_types) {
-        typesArray.append(type);
+    // We use _L1 for keys, but m_id is already a QString, so it assigns naturally
+    json["id"_L1] = m_id;
+    json["version"_L1] = m_version;
+    json["name"_L1] = m_name;
+    
+    if (!m_description.isEmpty()) {
+        json["description"_L1] = m_description;
     }
-    json["types"] = typesArray;
+    
+    json["resources"_L1] = m_resources;
+    
+    // Convert StringList to JsonArray
+    // Modern Qt can often do this implicitly, but explicit conversion is safer
+    json["types"_L1] = QJsonArray::fromStringList(m_types);
     
     QJsonArray catalogsArray;
-    for (const CatalogDefinition& catalog : m_catalogs) {
+    for (const auto& catalog : m_catalogs) {
         catalogsArray.append(catalog.toJson());
     }
-    json["catalogs"] = catalogsArray;
+    json["catalogs"_L1] = catalogsArray;
     
     if (!m_idPrefixes.isEmpty()) {
-        QJsonArray idPrefixesArray;
-        for (const QString& prefix : m_idPrefixes) {
-            idPrefixesArray.append(prefix);
-        }
-        json["idPrefixes"] = idPrefixesArray;
+        json["idPrefixes"_L1] = QJsonArray::fromStringList(m_idPrefixes);
     }
     
     if (!m_background.isEmpty()) {
-        json["background"] = m_background;
+        json["background"_L1] = m_background;
     }
     if (!m_logo.isEmpty()) {
-        json["logo"] = m_logo;
+        json["logo"_L1] = m_logo;
     }
     if (!m_contactEmail.isEmpty()) {
-        json["contactEmail"] = m_contactEmail;
+        json["contactEmail"_L1] = m_contactEmail;
     }
     if (!m_behaviorHints.isEmpty()) {
-        json["behaviorHints"] = m_behaviorHints;
+        json["behaviorHints"_L1] = m_behaviorHints;
     }
     
     return json;
@@ -117,16 +119,10 @@ QJsonObject AddonManifest::toJson() const
 
 bool AddonManifest::validate(const AddonManifest& manifest)
 {
-    if (manifest.m_id.isEmpty()) return false;
-    if (manifest.m_version.isEmpty()) return false;
-    if (manifest.m_name.isEmpty()) return false;
-    if (manifest.m_resources.isEmpty()) return false;
-    if (manifest.m_types.isEmpty()) return false;
-    return true;
+    // One-liner checks are cleaner
+    return !manifest.m_id.isEmpty() &&
+           !manifest.m_version.isEmpty() &&
+           !manifest.m_name.isEmpty() &&
+           !manifest.m_resources.isEmpty() &&
+           !manifest.m_types.isEmpty();
 }
-
-
-
-
-
-
