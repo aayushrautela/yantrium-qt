@@ -1,5 +1,6 @@
 #include "trakt_core_service.h"
 #include "configuration.h"
+#include "../database/database_manager.h"
 #include "../database/sync_tracking_dao.h"
 #include "../database/watch_history_dao.h"
 #include <QUrlQuery>
@@ -586,7 +587,7 @@ void TraktCoreService::syncWatchedMovies(bool forceFullSync)
     }
     
     if (!m_syncDao) {
-        m_syncDao = new SyncTrackingDao(m_database);
+        m_syncDao = new SyncTrackingDao();
     }
     
     QString syncType = "watched_movies";
@@ -614,7 +615,7 @@ void TraktCoreService::syncWatchedShows(bool forceFullSync)
     }
     
     if (!m_syncDao) {
-        m_syncDao = new SyncTrackingDao(m_database);
+        m_syncDao = new SyncTrackingDao();
     }
     
     QString syncType = "watched_shows";

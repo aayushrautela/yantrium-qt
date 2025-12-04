@@ -224,7 +224,7 @@ void TraktAuthService::onDeviceTokenReplyFinished()
         // Save tokens via core service
         DatabaseManager& dbManager = DatabaseManager::instance();
         if (dbManager.isInitialized()) {
-            TraktAuthDao dao();
+            TraktAuthDao dao{};
             TraktAuthRecord record;
             record.accessToken = accessToken;
             record.refreshToken = refreshToken;
@@ -288,7 +288,7 @@ void TraktAuthService::onUserInfoReplyFinished()
     // Update database with username/slug
     DatabaseManager& dbManager = DatabaseManager::instance();
     if (dbManager.isInitialized()) {
-        TraktAuthDao dao();
+        TraktAuthDao dao{};
         auto auth = dao.getTraktAuth();
         if (auth) {
             auth->username = username;
