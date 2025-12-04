@@ -120,6 +120,12 @@ ApplicationWindow {
                             console.log("[MainApp] Leaving video player, stopping playback")
                             videoPlayerLoader.item.videoPlayer.stop()
                         }
+                        
+                        // Refresh home page if returning to it after watching content
+                        if (currentIndex === 0 && homeLoader.item) {
+                            console.log("[MainApp] Returning to home after watching, refreshing to update Continue Watching")
+                            homeLoader.item.loadCatalogs()
+                        }
                     }
                     
                     // Update previous index
@@ -176,18 +182,19 @@ ApplicationWindow {
                         }
                     }
 
-                    // Reload when switching to home tab
+                    // Reload library when switching to library tab
                     Connections {
                         target: stackLayout
                         function onCurrentIndexChanged() {
-                            if (stackLayout.currentIndex === 0 && homeLoader.item) {
-                                homeLoader.item.loadCatalogs()
-                            } else if (stackLayout.currentIndex === 1 && libraryLoader.item) {
+                            if (stackLayout.currentIndex === 1 && libraryLoader.item) {
                                 // Reload library when switching to library tab
                                 libraryLoader.item.loadLibrary()
                             }
                         }
                     }
+                    
+                    // Track previous index to detect when returning from video player
+                    property int previousIndex: 0
                 }
                 
                 Loader {
@@ -434,6 +441,11 @@ ApplicationWindow {
                             if (videoPlayerLoader.item && videoPlayerLoader.item.videoPlayer) {
                                 console.log("[MainApp] Stopping video playback")
                                 videoPlayerLoader.item.videoPlayer.stop()
+                            }
+                            // Refresh home page to update "Continue Watching" after watching content
+                            if (homeLoader.item) {
+                                console.log("[MainApp] Refreshing home page after watching content")
+                                homeLoader.item.loadCatalogs()
                             }
                             stackLayout.currentIndex = 4  // Go back to detail screen
                         }

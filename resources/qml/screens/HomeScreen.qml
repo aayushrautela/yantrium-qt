@@ -73,11 +73,12 @@ Item {
     Component.onCompleted: {
         console.log("[HomeScreen] Component.onCompleted")
         console.log("[HomeScreen] libraryService:", libraryService)
-        if (libraryService) {
-            console.log("[HomeScreen] Calling loadCatalogs from Component.onCompleted")
+        // Only load on first creation - MainApp will handle refreshes after watching content
+        if (libraryService && catalogSectionsModel.count === 0) {
+            console.log("[HomeScreen] Calling loadCatalogs from Component.onCompleted (first load)")
             loadCatalogs()
         } else {
-            console.error("[HomeScreen] ERROR: libraryService is null!")
+            console.log("[HomeScreen] Skipping initial load - data already exists or service unavailable")
         }
     }
 
