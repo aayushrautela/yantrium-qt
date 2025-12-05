@@ -78,7 +78,7 @@ QList<AddonConfig> AddonRepository::listAddons()
 
 AddonConfig AddonRepository::getAddon(const QString& id)
 {
-    std::unique_ptr<AddonRecord> record = m_dao->getAddonById(id);
+    std::unique_ptr<AddonRecord> record = m_dao->getAddonById(std::string_view(id.toUtf8().constData(), id.toUtf8().size()));
     if (!record) {
         return AddonConfig(); // Return empty config if not found
     }
@@ -87,17 +87,17 @@ AddonConfig AddonRepository::getAddon(const QString& id)
 
 bool AddonRepository::enableAddon(const QString& id)
 {
-    return m_dao->toggleAddonEnabled(id, true);
+    return m_dao->toggleAddonEnabled(std::string_view(id.toUtf8().constData(), id.toUtf8().size()), true);
 }
 
 bool AddonRepository::disableAddon(const QString& id)
 {
-    return m_dao->toggleAddonEnabled(id, false);
+    return m_dao->toggleAddonEnabled(std::string_view(id.toUtf8().constData(), id.toUtf8().size()), false);
 }
 
 bool AddonRepository::removeAddon(const QString& id)
 {
-    bool success = m_dao->deleteAddon(id);
+    bool success = m_dao->deleteAddon(std::string_view(id.toUtf8().constData(), id.toUtf8().size()));
     if (success) {
         emit addonRemoved(id);
     }
@@ -220,7 +220,7 @@ void AddonRepository::saveAddonToDatabase(const AddonConfig& addon)
     AddonRecord record = addon.toDatabaseRecord();
 
     // Check if addon already exists
-    std::unique_ptr<AddonRecord> existing = m_dao->getAddonById(addon.id);
+    std::unique_ptr<AddonRecord> existing = m_dao->getAddonById(std::string_view(addon.id.toUtf8().constData(), addon.id.toUtf8().size()));
     
     if (existing) {
         qDebug() << "[AddonRepository] Updating existing addon";

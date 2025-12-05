@@ -3,64 +3,58 @@
 #include <QUrl>
 #include <QDebug>
 
-StreamInfo::StreamInfo()
-    : m_fileIdx(-1)
-    , m_size(-1)
-    , m_isFree(false)
-    , m_isDebrid(false)
-{
-}
-
-StreamInfo::StreamInfo(const QString& url)
-    : m_url(url)
-    , m_fileIdx(-1)
-    , m_size(-1)
-    , m_isFree(false)
-    , m_isDebrid(false)
+// Constructor with URL
+StreamInfo::StreamInfo(const QString& urlIn)
+    : url(urlIn)
 {
 }
 
 QVariantMap StreamInfo::toVariantMap() const
 {
     QVariantMap map;
-    map["id"] = m_id;
-    map["title"] = m_title;
-    map["name"] = m_name;
-    map["description"] = m_description;
-    map["url"] = m_url;
-    map["quality"] = m_quality;
-    map["type"] = m_type;
-    map["addonId"] = m_addonId;
-    map["addonName"] = m_addonName;
-    map["infoHash"] = m_infoHash;
-    map["fileIdx"] = m_fileIdx >= 0 ? m_fileIdx : QVariant();
-    map["size"] = m_size >= 0 ? m_size : QVariant();
-    map["isFree"] = m_isFree;
-    map["isDebrid"] = m_isDebrid;
-    map["subtitles"] = m_subtitles;
-    map["behaviorHints"] = m_behaviorHints;
+    map["id"] = id;
+    map["title"] = title;
+    map["name"] = name;
+    map["description"] = description;
+    map["url"] = url;
+    map["quality"] = quality;
+    map["type"] = type;
+    map["addonId"] = addonId;
+    map["addonName"] = addonName;
+    map["infoHash"] = infoHash;
+    
+    // Only add if valid, otherwise QVariant() (null)
+    map["fileIdx"] = (fileIdx >= 0) ? fileIdx : QVariant();
+    map["size"] = (size >= 0) ? size : QVariant();
+    
+    map["isFree"] = isFree;
+    map["isDebrid"] = isDebrid;
+    map["subtitles"] = subtitles;
+    map["behaviorHints"] = behaviorHints;
     return map;
 }
 
 QString StreamInfo::extractStreamUrl(const QJsonObject& json)
 {
-    // Prefer plain string URLs
+    // 1. Prefer plain string URLs
     if (json["url"].isString()) {
         return json["url"].toString();
     }
     
-    // Some addons might nest the URL inside an object
+    // 2. Some addons might nest the URL inside an object
     if (json["url"].isObject()) {
-        QJsonObject urlObj = json["url"].toObject();
+        const QJsonObject urlObj = json["url"].toObject();
         if (urlObj.contains("url") && urlObj["url"].isString()) {
             return urlObj["url"].toString();
         }
     }
     
-    // Handle magnet links from infoHash
+    // 3. Handle magnet links from infoHash
     if (json.contains("infoHash") && json["infoHash"].isString()) {
-        QString infoHash = json["infoHash"].toString();
-        QStringList trackers = {
+        const QString hash = json["infoHash"].toString();
+        
+        // Static list to avoid recreating it every function call
+        static const QStringList trackers = {
             "udp://tracker.opentrackr.org:1337/announce",
             "udp://9.rarbg.com:2810/announce",
             "udp://tracker.openbittorrent.com:6969/announce",
@@ -76,70 +70,63 @@ QString StreamInfo::extractStreamUrl(const QJsonObject& json)
             trackersString += "&tr=" + QUrl::toPercentEncoding(tracker);
         }
         
-        QString title = json["title"].toString();
-        if (title.isEmpty()) {
-            title = json["name"].toString();
-        }
-        if (title.isEmpty()) {
-            title = "Unknown";
-        }
+        QString titleStr = json["title"].toString();
+        if (titleStr.isEmpty()) titleStr = json["name"].toString();
+        if (titleStr.isEmpty()) titleStr = "Unknown";
         
-        QString encodedTitle = QUrl::toPercentEncoding(title);
-        return QString("magnet:?xt=urn:btih:%1&dn=%2%3").arg(infoHash, encodedTitle, trackersString);
+        return QString("magnet:?xt=urn:btih:%1&dn=%2%3")
+               .arg(hash, QUrl::toPercentEncoding(titleStr), trackersString);
     }
     
     return QString();
 }
 
-StreamInfo StreamInfo::fromJson(const QJsonObject& json, const QString& addonId, const QString& addonName)
+StreamInfo StreamInfo::fromJson(const QJsonObject& json, const QString& defaultAddonId, const QString& defaultAddonName)
 {
     StreamInfo info;
     
-    // Extract URL first (required)
-    QString streamUrl = extractStreamUrl(json);
-    info.setUrl(streamUrl);
+    // Extract URL first
+    info.url = extractStreamUrl(json);
     
-    info.setId(json["id"].toString());
-    info.setTitle(json["title"].toString());
-    info.setName(json["name"].toString());
-    info.setDescription(json["description"].toString());
-    info.setQuality(json["quality"].toString());
-    info.setType(json["type"].toString());
-    info.setAddonId(addonId.isEmpty() ? json["addonId"].toString() : addonId);
-    info.setAddonName(addonName.isEmpty() ? json["addonName"].toString() : addonName);
-    info.setInfoHash(json["infoHash"].toString());
-    info.setFileIdx(json["fileIdx"].toInt(-1));
-    info.setSize(json["size"].toInt(-1));
-    info.setIsFree(json["isFree"].toBool(false));
-    info.setIsDebrid(json["isDebrid"].toBool(false));
+    // Assign fields directly
+    info.id = json["id"].toString();
+    info.title = json["title"].toString();
+    info.name = json["name"].toString();
+    info.description = json["description"].toString();
+    info.quality = json["quality"].toString();
+    info.type = json["type"].toString();
+    
+    info.addonId = defaultAddonId.isEmpty() ? json["addonId"].toString() : defaultAddonId;
+    info.addonName = defaultAddonName.isEmpty() ? json["addonName"].toString() : defaultAddonName;
+    
+    info.infoHash = json["infoHash"].toString();
+    info.fileIdx = json["fileIdx"].toInt(-1);
+    info.size = json["size"].toInt(-1);
+    info.isFree = json["isFree"].toBool(false);
+    info.isDebrid = json["isDebrid"].toBool(false);
     
     // Parse subtitles
     if (json.contains("subtitles") && json["subtitles"].isArray()) {
-        QVariantList subtitles;
-        QJsonArray subtitlesArray = json["subtitles"].toArray();
+        const QJsonArray subtitlesArray = json["subtitles"].toArray();
         for (const QJsonValue& value : subtitlesArray) {
             if (value.isObject()) {
-                QJsonObject subObj = value.toObject();
+                const QJsonObject subObj = value.toObject();
                 QVariantMap subMap;
                 subMap["url"] = subObj["url"].toString();
                 subMap["lang"] = subObj["lang"].toString();
                 subMap["id"] = subObj["id"].toString();
-                subtitles.append(subMap);
+                info.subtitles.append(subMap);
             }
         }
-        info.setSubtitles(subtitles);
     }
     
     // Parse behaviorHints
     if (json.contains("behaviorHints") && json["behaviorHints"].isObject()) {
-        QVariantMap hints;
-        QJsonObject hintsObj = json["behaviorHints"].toObject();
+        const QJsonObject hintsObj = json["behaviorHints"].toObject();
         for (auto it = hintsObj.begin(); it != hintsObj.end(); ++it) {
-            hints[it.key()] = it.value().toVariant();
+            info.behaviorHints[it.key()] = it.value().toVariant();
         }
-        info.setBehaviorHints(hints);
     }
     
     return info;
 }
-

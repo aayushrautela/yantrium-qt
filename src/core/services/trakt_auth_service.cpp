@@ -232,7 +232,7 @@ void TraktAuthService::onDeviceTokenReplyFinished()
             record.createdAt = QDateTime::currentDateTime();
             record.expiresAt = QDateTime::currentDateTime().addSecs(expiresIn);
             
-            dao.upsertTraktAuth(record);
+            (void)dao.upsertTraktAuth(record);
             m_coreService.reloadAuth();
             
             // Fetch user info
@@ -293,7 +293,7 @@ void TraktAuthService::onUserInfoReplyFinished()
         if (auth) {
             auth->username = username;
             auth->slug = slug;
-            dao.upsertTraktAuth(*auth);
+            (void)dao.upsertTraktAuth(*auth);
         }
     }
     

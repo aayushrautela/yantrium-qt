@@ -3,16 +3,16 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
+#include <utility>
 
-SyncTrackingDao::SyncTrackingDao()
-    : m_database(QSqlDatabase::database(DatabaseManager::CONNECTION_NAME))
-{
-}
+// Modern constructor implementation
+SyncTrackingDao::SyncTrackingDao() noexcept = default;
 
-bool SyncTrackingDao::upsertSyncTracking(const QString& syncType, const QDateTime& lastSyncAt, bool fullSyncCompleted)
+bool SyncTrackingDao::upsertSyncTracking(std::string_view syncType, const QDateTime& lastSyncAt, bool fullSyncCompleted)
 {
-    QSqlQuery query(m_database);
-    
+    const QString syncTypeStr = QString::fromUtf8(syncType.data(), static_cast<int>(syncType.size()));
+    QSqlQuery query(getDatabase());
+
     // Check if record exists
     SyncTrackingRecord existing = getSyncTracking(syncType);
     QDateTime now = QDateTime::currentDateTime();
@@ -29,7 +29,7 @@ bool SyncTrackingDao::upsertSyncTracking(const QString& syncType, const QDateTim
         query.addBindValue(syncAtStr);
         query.addBindValue(fullSyncCompleted ? 1 : 0);
         query.addBindValue(nowStr);
-        query.addBindValue(syncType);
+        query.addBindValue(syncTypeStr);
     } else {
         // Insert new record
         query.prepare(R"(
@@ -37,7 +37,7 @@ bool SyncTrackingDao::upsertSyncTracking(const QString& syncType, const QDateTim
                 sync_type, last_sync_at, full_sync_completed, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?)
         )");
-        query.addBindValue(syncType);
+        query.addBindValue(syncTypeStr);
         query.addBindValue(syncAtStr);
         query.addBindValue(fullSyncCompleted ? 1 : 0);
         query.addBindValue(nowStr);
@@ -52,11 +52,11 @@ bool SyncTrackingDao::upsertSyncTracking(const QString& syncType, const QDateTim
     return true;
 }
 
-SyncTrackingRecord SyncTrackingDao::getSyncTracking(const QString& syncType)
+SyncTrackingRecord SyncTrackingDao::getSyncTracking(std::string_view syncType)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM sync_tracking WHERE sync_type = ?");
-    query.addBindValue(syncType);
+    query.addBindValue(QString::fromUtf8(syncType.data(), static_cast<int>(syncType.size())));
     
     if (!query.exec()) {
         qWarning() << "Failed to get sync tracking:" << query.lastError().text();
@@ -73,7 +73,7 @@ SyncTrackingRecord SyncTrackingDao::getSyncTracking(const QString& syncType)
 QList<SyncTrackingRecord> SyncTrackingDao::getAllSyncTracking()
 {
     QList<SyncTrackingRecord> records;
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM sync_tracking ORDER BY updated_at DESC");
     
     if (!query.exec()) {
@@ -88,11 +88,11 @@ QList<SyncTrackingRecord> SyncTrackingDao::getAllSyncTracking()
     return records;
 }
 
-bool SyncTrackingDao::deleteSyncTracking(const QString& syncType)
+bool SyncTrackingDao::deleteSyncTracking(std::string_view syncType)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("DELETE FROM sync_tracking WHERE sync_type = ?");
-    query.addBindValue(syncType);
+    query.addBindValue(QString::fromUtf8(syncType.data(), static_cast<int>(syncType.size())));
     
     if (!query.exec()) {
         qWarning() << "Failed to delete sync tracking:" << query.lastError().text();
@@ -102,7 +102,8 @@ bool SyncTrackingDao::deleteSyncTracking(const QString& syncType)
     return true;
 }
 
-SyncTrackingRecord SyncTrackingDao::recordFromQuery(const QSqlQuery& query)
+// Modern implementation with manual assignment for structs with constructors
+SyncTrackingRecord SyncTrackingDao::recordFromQuery(const QSqlQuery& query) const noexcept
 {
     SyncTrackingRecord record;
     record.id = query.value("id").toInt();

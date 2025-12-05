@@ -198,7 +198,7 @@ void TraktCoreService::saveTokens(const QString& accessToken, const QString& ref
         record.createdAt = QDateTime::currentDateTime();
         record.expiresAt = QDateTime::fromMSecsSinceEpoch(m_tokenExpiry);
         
-        m_authDao->upsertTraktAuth(record);
+        (void)m_authDao->upsertTraktAuth(record);
         qDebug() << "[TraktCoreService] Tokens saved successfully";
     } else {
         qWarning() << "[TraktCoreService] Cannot save tokens: database not initialized";
@@ -212,7 +212,7 @@ void TraktCoreService::logout()
     m_tokenExpiry = 0;
     
     if (m_authDao) {
-        m_authDao->deleteTraktAuth();
+        (void)m_authDao->deleteTraktAuth();
         qDebug() << "[TraktCoreService] User logged out successfully";
     }
 }
@@ -591,7 +591,7 @@ void TraktCoreService::syncWatchedMovies(bool forceFullSync)
     }
     
     QString syncType = "watched_movies";
-    SyncTrackingRecord tracking = m_syncDao->getSyncTracking(syncType);
+    SyncTrackingRecord tracking = m_syncDao->getSyncTracking(std::string_view(syncType.toUtf8().constData(), syncType.toUtf8().size()));
     
     if (forceFullSync || !tracking.fullSyncCompleted) {
         qDebug() << "[TraktCoreService] Performing full sync for watched movies";
@@ -619,7 +619,7 @@ void TraktCoreService::syncWatchedShows(bool forceFullSync)
     }
     
     QString syncType = "watched_shows";
-    SyncTrackingRecord tracking = m_syncDao->getSyncTracking(syncType);
+    SyncTrackingRecord tracking = m_syncDao->getSyncTracking(std::string_view(syncType.toUtf8().constData(), syncType.toUtf8().size()));
     
     if (forceFullSync || !tracking.fullSyncCompleted) {
         qDebug() << "[TraktCoreService] Performing full sync for watched shows";
@@ -641,7 +641,7 @@ bool TraktCoreService::isInitialSyncCompleted(const QString& syncType) const
         return false;
     }
     
-    SyncTrackingRecord tracking = const_cast<SyncTrackingDao*>(m_syncDao)->getSyncTracking(syncType);
+    SyncTrackingRecord tracking = const_cast<SyncTrackingDao*>(m_syncDao)->getSyncTracking(std::string_view(syncType.toUtf8().constData(), syncType.toUtf8().size()));
     return tracking.fullSyncCompleted;
 }
 
@@ -651,7 +651,7 @@ QDateTime TraktCoreService::getLastSyncTime(const QString& syncType) const
         return QDateTime();
     }
     
-    SyncTrackingRecord tracking = const_cast<SyncTrackingDao*>(m_syncDao)->getSyncTracking(syncType);
+    SyncTrackingRecord tracking = const_cast<SyncTrackingDao*>(m_syncDao)->getSyncTracking(std::string_view(syncType.toUtf8().constData(), syncType.toUtf8().size()));
     return tracking.lastSyncAt;
 }
 
@@ -662,7 +662,7 @@ void TraktCoreService::updateSyncTracking(const QString& syncType, bool fullSync
     }
     
     QDateTime now = QDateTime::currentDateTime();
-    m_syncDao->upsertSyncTracking(syncType, now, fullSyncCompleted);
+    (void)m_syncDao->upsertSyncTracking(std::string_view(syncType.toUtf8().constData(), syncType.toUtf8().size()), now, fullSyncCompleted);
     qDebug() << "[TraktCoreService] Updated sync tracking for" << syncType << "at" << now.toString();
 }
 
@@ -1175,7 +1175,7 @@ void TraktCoreService::clearSyncTracking(const QString& syncType)
         return;
     }
     
-    m_syncDao->deleteSyncTracking(syncType);
+    (void)m_syncDao->deleteSyncTracking(std::string_view(syncType.toUtf8().constData(), syncType.toUtf8().size()));
     qDebug() << "[TraktCoreService] Cleared sync tracking for:" << syncType;
 }
 
@@ -1202,8 +1202,8 @@ void TraktCoreService::resyncWatchedHistory()
     }
     
     // Clear sync tracking for both movies and shows
-    m_syncDao->deleteSyncTracking("watched_movies");
-    m_syncDao->deleteSyncTracking("watched_shows");
+    (void)m_syncDao->deleteSyncTracking(std::string_view("watched_movies"));
+    (void)m_syncDao->deleteSyncTracking(std::string_view("watched_shows"));
     
     qDebug() << "[TraktCoreService] Cleared watch history and sync tracking, starting full sync";
     

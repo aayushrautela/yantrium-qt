@@ -47,7 +47,7 @@ void LocalLibraryService::removeFromLibrary(const QString& contentId)
         return;
     }
     
-    bool success = m_libraryDao->removeLibraryItem(contentId);
+    bool success = m_libraryDao->removeLibraryItem(std::string_view(contentId.toUtf8().constData(), contentId.toUtf8().size()));
     emit libraryItemRemoved(success);
     
     if (!success) {
@@ -86,7 +86,7 @@ void LocalLibraryService::isInLibrary(const QString& contentId)
         return;
     }
     
-    bool inLibrary = m_libraryDao->isInLibrary(contentId);
+    bool inLibrary = m_libraryDao->isInLibrary(std::string_view(contentId.toUtf8().constData(), contentId.toUtf8().size()));
     emit isInLibraryResult(inLibrary);
 }
 
@@ -139,7 +139,7 @@ void LocalLibraryService::getWatchProgress(const QString& contentId, const QStri
     progress["lastWatchedAt"] = "";
     progress["isWatched"] = false;
 
-    QList<WatchHistoryRecord> records = m_historyDao->getWatchHistoryForContent(contentId, type);
+    QList<WatchHistoryRecord> records = m_historyDao->getWatchHistoryForContent(std::string_view(contentId.toUtf8().constData(), contentId.toUtf8().size()), std::string_view(type.toUtf8().constData(), type.toUtf8().size()));
 
     if (records.isEmpty()) {
         qDebug() << "[LocalLibraryService] No watch history found for:" << contentId;
@@ -237,7 +237,7 @@ void LocalLibraryService::getWatchProgressByTmdbId(const QString& tmdbId, const 
     
     qWarning() << "[LocalLibraryService] Looking up watch history - tmdbId:" << tmdbId << "type:" << type << "dbType:" << dbType;
     
-    QList<WatchHistoryRecord> records = m_historyDao->getWatchHistoryByTmdbId(tmdbId, dbType);
+    QList<WatchHistoryRecord> records = m_historyDao->getWatchHistoryByTmdbId(std::string_view(tmdbId.toUtf8().constData(), tmdbId.toUtf8().size()), std::string_view(dbType.toUtf8().constData(), dbType.toUtf8().size()));
     qWarning() << "[LocalLibraryService] Database query result - Found" << records.size() << "watch history records for TMDB ID" << tmdbId << "type" << dbType;
     
     if (records.size() > 0) {

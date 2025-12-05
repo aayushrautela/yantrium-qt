@@ -3,15 +3,14 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
+#include <utility>
 
-LocalLibraryDao::LocalLibraryDao()
-    : m_database(QSqlDatabase::database(DatabaseManager::CONNECTION_NAME))
-{
-}
+// Modern constructor implementation
+LocalLibraryDao::LocalLibraryDao() noexcept = default;
 
 bool LocalLibraryDao::insertLibraryItem(const LocalLibraryRecord& item)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare(R"(
         INSERT OR REPLACE INTO local_library (
             contentId, type, title, year, posterUrl, backdropUrl, logoUrl,
@@ -40,11 +39,11 @@ bool LocalLibraryDao::insertLibraryItem(const LocalLibraryRecord& item)
     return true;
 }
 
-bool LocalLibraryDao::removeLibraryItem(const QString& contentId)
+bool LocalLibraryDao::removeLibraryItem(std::string_view contentId)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("DELETE FROM local_library WHERE contentId = ?");
-    query.addBindValue(contentId);
+    query.addBindValue(QString::fromUtf8(contentId.data(), static_cast<int>(contentId.size())));
     
     if (!query.exec()) {
         qWarning() << "Failed to remove library item:" << query.lastError().text();
@@ -57,7 +56,7 @@ bool LocalLibraryDao::removeLibraryItem(const QString& contentId)
 QList<LocalLibraryRecord> LocalLibraryDao::getAllLibraryItems()
 {
     QList<LocalLibraryRecord> items;
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM local_library ORDER BY addedAt DESC");
     
     if (!query.exec()) {
@@ -72,11 +71,11 @@ QList<LocalLibraryRecord> LocalLibraryDao::getAllLibraryItems()
     return items;
 }
 
-std::unique_ptr<LocalLibraryRecord> LocalLibraryDao::getLibraryItem(const QString& contentId)
+std::unique_ptr<LocalLibraryRecord> LocalLibraryDao::getLibraryItem(std::string_view contentId)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM local_library WHERE contentId = ?");
-    query.addBindValue(contentId);
+    query.addBindValue(QString::fromUtf8(contentId.data(), static_cast<int>(contentId.size())));
     
     if (!query.exec()) {
         qWarning() << "Failed to get library item:" << query.lastError().text();
@@ -90,11 +89,11 @@ std::unique_ptr<LocalLibraryRecord> LocalLibraryDao::getLibraryItem(const QStrin
     return std::make_unique<LocalLibraryRecord>(recordFromQuery(query));
 }
 
-bool LocalLibraryDao::isInLibrary(const QString& contentId)
+bool LocalLibraryDao::isInLibrary(std::string_view contentId) const
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT COUNT(*) FROM local_library WHERE contentId = ?");
-    query.addBindValue(contentId);
+    query.addBindValue(QString::fromUtf8(contentId.data(), static_cast<int>(contentId.size())));
     
     if (!query.exec()) {
         qWarning() << "Failed to check library item:" << query.lastError().text();
@@ -108,7 +107,8 @@ bool LocalLibraryDao::isInLibrary(const QString& contentId)
     return query.value(0).toInt() > 0;
 }
 
-LocalLibraryRecord LocalLibraryDao::recordFromQuery(const QSqlQuery& query)
+// Modern implementation with manual assignment for structs with constructors
+LocalLibraryRecord LocalLibraryDao::recordFromQuery(const QSqlQuery& query) const noexcept
 {
     LocalLibraryRecord record;
     record.id = query.value("id").toInt();

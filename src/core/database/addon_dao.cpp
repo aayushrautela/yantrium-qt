@@ -3,15 +3,14 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
+#include <utility>
 
-AddonDao::AddonDao()
-    : m_database(QSqlDatabase::database(DatabaseManager::CONNECTION_NAME))
-{
-}
+// Modern constructor implementation
+AddonDao::AddonDao() noexcept = default;
 
 bool AddonDao::insertAddon(const AddonRecord& addon)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare(R"(
         INSERT INTO addons (
             id, name, version, description, manifestUrl, baseUrl,
@@ -42,7 +41,7 @@ bool AddonDao::insertAddon(const AddonRecord& addon)
 
 bool AddonDao::updateAddon(const AddonRecord& addon)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare(R"(
         UPDATE addons SET
             name = ?, version = ?, description = ?, manifestUrl = ?,
@@ -71,11 +70,11 @@ bool AddonDao::updateAddon(const AddonRecord& addon)
     return query.numRowsAffected() > 0;
 }
 
-std::unique_ptr<AddonRecord> AddonDao::getAddonById(const QString& id)
+std::unique_ptr<AddonRecord> AddonDao::getAddonById(std::string_view id)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM addons WHERE id = ?");
-    query.addBindValue(id);
+    query.addBindValue(QString::fromUtf8(id.data(), static_cast<int>(id.size())));
     
     if (!query.exec()) {
         qWarning() << "Failed to get addon:" << query.lastError().text();
@@ -92,7 +91,7 @@ std::unique_ptr<AddonRecord> AddonDao::getAddonById(const QString& id)
 QList<AddonRecord> AddonDao::getAllAddons()
 {
     QList<AddonRecord> addons;
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     
     if (!query.exec("SELECT * FROM addons ORDER BY name")) {
         qWarning() << "Failed to get all addons:" << query.lastError().text();
@@ -109,7 +108,7 @@ QList<AddonRecord> AddonDao::getAllAddons()
 QList<AddonRecord> AddonDao::getEnabledAddons()
 {
     QList<AddonRecord> addons;
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM addons WHERE enabled = 1 ORDER BY name");
     
     if (!query.exec()) {
@@ -124,11 +123,11 @@ QList<AddonRecord> AddonDao::getEnabledAddons()
     return addons;
 }
 
-bool AddonDao::deleteAddon(const QString& id)
+bool AddonDao::deleteAddon(std::string_view id)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("DELETE FROM addons WHERE id = ?");
-    query.addBindValue(id);
+    query.addBindValue(QString::fromUtf8(id.data(), static_cast<int>(id.size())));
     
     if (!query.exec()) {
         qWarning() << "Failed to delete addon:" << query.lastError().text();
@@ -138,12 +137,12 @@ bool AddonDao::deleteAddon(const QString& id)
     return query.numRowsAffected() > 0;
 }
 
-bool AddonDao::toggleAddonEnabled(const QString& id, bool enabled)
+bool AddonDao::toggleAddonEnabled(std::string_view id, bool enabled)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("UPDATE addons SET enabled = ? WHERE id = ?");
     query.addBindValue(enabled ? 1 : 0);
-    query.addBindValue(id);
+    query.addBindValue(QString::fromUtf8(id.data(), static_cast<int>(id.size())));
     
     if (!query.exec()) {
         qWarning() << "Failed to toggle addon enabled:" << query.lastError().text();
@@ -153,7 +152,8 @@ bool AddonDao::toggleAddonEnabled(const QString& id, bool enabled)
     return query.numRowsAffected() > 0;
 }
 
-AddonRecord AddonDao::recordFromQuery(const QSqlQuery& query)
+// Modern implementation with manual assignment for structs with constructors
+AddonRecord AddonDao::recordFromQuery(const QSqlQuery& query) const noexcept
 {
     AddonRecord record;
     record.id = query.value("id").toString();

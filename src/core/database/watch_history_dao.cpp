@@ -3,15 +3,14 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
+#include <utility>
 
-WatchHistoryDao::WatchHistoryDao()
-    : m_database(QSqlDatabase::database(DatabaseManager::CONNECTION_NAME))
-{
-}
+// Modern constructor implementation
+WatchHistoryDao::WatchHistoryDao() noexcept = default;
 
 bool WatchHistoryDao::insertWatchHistory(const WatchHistoryRecord& item)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare(R"(
         INSERT INTO watch_history (
             contentId, type, title, year, posterUrl, season, episode,
@@ -43,7 +42,10 @@ bool WatchHistoryDao::insertWatchHistory(const WatchHistoryRecord& item)
 bool WatchHistoryDao::upsertWatchHistory(const WatchHistoryRecord& item)
 {
     // Check if record already exists with same contentId, type, and watchedAt
-    QList<WatchHistoryRecord> existing = getWatchHistoryByContentAndDate(item.contentId, item.type, item.watchedAt);
+    QList<WatchHistoryRecord> existing = getWatchHistoryByContentAndDate(
+        std::string_view(item.contentId.toUtf8().constData(), item.contentId.toUtf8().size()),
+        std::string_view(item.type.toUtf8().constData(), item.type.toUtf8().size()),
+        item.watchedAt);
     
     if (!existing.isEmpty()) {
         // Record already exists, skip insert
@@ -66,7 +68,7 @@ bool WatchHistoryDao::upsertWatchHistory(const WatchHistoryRecord& item)
 QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistory(int limit)
 {
     QList<WatchHistoryRecord> items;
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM watch_history ORDER BY watchedAt DESC LIMIT ?");
     query.addBindValue(limit);
     
@@ -82,12 +84,12 @@ QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistory(int limit)
     return items;
 }
 
-QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByContentId(const QString& contentId)
+QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByContentId(std::string_view contentId)
 {
     QList<WatchHistoryRecord> items;
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM watch_history WHERE contentId = ? ORDER BY watchedAt DESC");
-    query.addBindValue(contentId);
+    query.addBindValue(QString::fromUtf8(contentId.data(), static_cast<int>(contentId.size())));
     
     if (!query.exec()) {
         qWarning() << "Failed to get watch history by contentId:" << query.lastError().text();
@@ -101,13 +103,13 @@ QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByContentId(const QStr
     return items;
 }
 
-QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryForContent(const QString& contentId, const QString& type)
+QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryForContent(std::string_view contentId, std::string_view type)
 {
     QList<WatchHistoryRecord> items;
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM watch_history WHERE contentId = ? AND type = ? ORDER BY watchedAt DESC");
-    query.addBindValue(contentId);
-    query.addBindValue(type);
+    query.addBindValue(QString::fromUtf8(contentId.data(), static_cast<int>(contentId.size())));
+    query.addBindValue(QString::fromUtf8(type.data(), static_cast<int>(type.size())));
 
     if (!query.exec()) {
         qWarning() << "Failed to get watch history for content:" << query.lastError().text();
@@ -121,13 +123,13 @@ QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryForContent(const QStri
     return items;
 }
 
-QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByTmdbId(const QString& tmdbId, const QString& type)
+QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByTmdbId(std::string_view tmdbId, std::string_view type)
 {
     QList<WatchHistoryRecord> items;
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM watch_history WHERE tmdbId = ? AND type = ? ORDER BY watchedAt DESC");
-    query.addBindValue(tmdbId);
-    query.addBindValue(type);
+    query.addBindValue(QString::fromUtf8(tmdbId.data(), static_cast<int>(tmdbId.size())));
+    query.addBindValue(QString::fromUtf8(type.data(), static_cast<int>(type.size())));
 
     if (!query.exec()) {
         qWarning() << "Failed to get watch history by tmdbId:" << query.lastError().text();
@@ -141,13 +143,13 @@ QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByTmdbId(const QString
     return items;
 }
 
-QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByContentAndDate(const QString& contentId, const QString& type, const QDateTime& watchedAt)
+QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByContentAndDate(std::string_view contentId, std::string_view type, const QDateTime& watchedAt)
 {
     QList<WatchHistoryRecord> items;
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM watch_history WHERE contentId = ? AND type = ? AND watchedAt = ? ORDER BY watchedAt DESC");
-    query.addBindValue(contentId);
-    query.addBindValue(type);
+    query.addBindValue(QString::fromUtf8(contentId.data(), static_cast<int>(contentId.size())));
+    query.addBindValue(QString::fromUtf8(type.data(), static_cast<int>(type.size())));
     query.addBindValue(watchedAt.toString(Qt::ISODate));
     
     if (!query.exec()) {
@@ -164,7 +166,7 @@ QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByContentAndDate(const
 
 bool WatchHistoryDao::clearWatchHistory()
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("DELETE FROM watch_history");
     
     if (!query.exec()) {
@@ -175,11 +177,11 @@ bool WatchHistoryDao::clearWatchHistory()
     return true;
 }
 
-bool WatchHistoryDao::removeWatchHistory(const QString& contentId)
+bool WatchHistoryDao::removeWatchHistory(std::string_view contentId)
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("DELETE FROM watch_history WHERE contentId = ?");
-    query.addBindValue(contentId);
+    query.addBindValue(QString::fromUtf8(contentId.data(), static_cast<int>(contentId.size())));
     
     if (!query.exec()) {
         qWarning() << "Failed to remove watch history:" << query.lastError().text();
@@ -189,7 +191,8 @@ bool WatchHistoryDao::removeWatchHistory(const QString& contentId)
     return true;
 }
 
-WatchHistoryRecord WatchHistoryDao::recordFromQuery(const QSqlQuery& query)
+// Modern implementation with manual assignment for structs with constructors
+WatchHistoryRecord WatchHistoryDao::recordFromQuery(const QSqlQuery& query) const noexcept
 {
     WatchHistoryRecord record;
     record.id = query.value("id").toInt();

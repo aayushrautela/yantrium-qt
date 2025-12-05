@@ -2,35 +2,56 @@
 #define TRAKT_AUTH_DAO_H
 
 #include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QString>
 #include <QDateTime>
 #include <memory>
+#include <string_view>
+
+#include "database_manager.h"
 
 struct TraktAuthRecord
 {
-    int id;
+    int id = 0;
     QString accessToken;
     QString refreshToken;
-    int expiresIn;
+    int expiresIn = 0;
     QDateTime createdAt;
     QDateTime expiresAt;
     QString username;  // nullable
     QString slug;      // nullable
+
+    // Default constructor with modern initialization
+    TraktAuthRecord() = default;
+
+    // Constructor for authenticated records
+    TraktAuthRecord(QString accessToken, QString refreshToken, int expiresIn,
+                   QDateTime createdAt, QDateTime expiresAt,
+                   QString username = {}, QString slug = {})
+        : accessToken(std::move(accessToken)), refreshToken(std::move(refreshToken)),
+          expiresIn(expiresIn), createdAt(createdAt), expiresAt(expiresAt),
+          username(std::move(username)), slug(std::move(slug)) {}
 };
 
 class TraktAuthDao
 {
 public:
-    explicit TraktAuthDao();
-    
-    std::unique_ptr<TraktAuthRecord> getTraktAuth();
-    bool upsertTraktAuth(const TraktAuthRecord& auth);
-    bool deleteTraktAuth();
-    
+    // Modern constructor - explicit and noexcept
+    explicit TraktAuthDao() noexcept;
+
+    // Critical authentication operations - mark as [[nodiscard]]
+    [[nodiscard]] std::unique_ptr<TraktAuthRecord> getTraktAuth();
+    [[nodiscard]] bool upsertTraktAuth(const TraktAuthRecord& auth);
+    [[nodiscard]] bool deleteTraktAuth();
+
 private:
-    QSqlDatabase m_database;
-    
-    TraktAuthRecord recordFromQuery(const QSqlQuery& query);
+    // Helper method - const and noexcept where safe
+    [[nodiscard]] TraktAuthRecord recordFromQuery(const QSqlQuery& query) const noexcept;
+
+    // Database connection getter - modern approach (replaces member variable)
+    [[nodiscard]] static QSqlDatabase getDatabase() noexcept {
+        return QSqlDatabase::database(DatabaseManager::CONNECTION_NAME);
+    }
 };
 
 #endif // TRAKT_AUTH_DAO_H

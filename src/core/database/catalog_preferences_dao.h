@@ -22,7 +22,7 @@ class CatalogPreferencesDao
 {
 public:
     explicit CatalogPreferencesDao();
-
+    
     // Creates or completely overwrites a record
     bool upsertPreference(const CatalogPreferenceRecord& preference);
 
@@ -55,10 +55,10 @@ public:
 
     // Returns all catalogs marked as hero
     QList<CatalogPreferenceRecord> getHeroCatalogs();
-
+    
 private:
     QSqlDatabase m_database;
-
+    
     CatalogPreferenceRecord recordFromQuery(const QSqlQuery& query);
     QString normalizeId(const QString& id) const;
 };

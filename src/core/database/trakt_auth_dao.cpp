@@ -3,15 +3,14 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
+#include <utility>
 
-TraktAuthDao::TraktAuthDao()
-    : m_database(QSqlDatabase::database(DatabaseManager::CONNECTION_NAME))
-{
-}
+// Modern constructor implementation
+TraktAuthDao::TraktAuthDao() noexcept = default;
 
 std::unique_ptr<TraktAuthRecord> TraktAuthDao::getTraktAuth()
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM trakt_auth ORDER BY id DESC LIMIT 1");
     
     if (!query.exec()) {
@@ -34,7 +33,7 @@ bool TraktAuthDao::upsertTraktAuth(const TraktAuthRecord& auth)
         return false;
     }
     
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare(R"(
         INSERT INTO trakt_auth (
             accessToken, refreshToken, expiresIn, createdAt, expiresAt, username, slug
@@ -59,7 +58,7 @@ bool TraktAuthDao::upsertTraktAuth(const TraktAuthRecord& auth)
 
 bool TraktAuthDao::deleteTraktAuth()
 {
-    QSqlQuery query(m_database);
+    QSqlQuery query(getDatabase());
     query.prepare("DELETE FROM trakt_auth");
     
     if (!query.exec()) {
@@ -70,7 +69,8 @@ bool TraktAuthDao::deleteTraktAuth()
     return true;
 }
 
-TraktAuthRecord TraktAuthDao::recordFromQuery(const QSqlQuery& query)
+// Modern implementation with manual assignment for structs with constructors
+TraktAuthRecord TraktAuthDao::recordFromQuery(const QSqlQuery& query) const noexcept
 {
     TraktAuthRecord record;
     record.id = query.value("id").toInt();

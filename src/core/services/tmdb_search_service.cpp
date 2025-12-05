@@ -150,19 +150,19 @@ void TmdbSearchService::onMoviesReplyFinished()
     QVariantList variantList;
     for (const TmdbSearchResult& result : results) {
         QVariantMap map;
-        map["id"] = result.id();
-        map["title"] = result.title();
-        map["name"] = result.name();
-        map["overview"] = result.overview();
-        map["releaseDate"] = result.releaseDate();
-        map["firstAirDate"] = result.firstAirDate();
-        map["posterPath"] = result.posterPath();
-        map["backdropPath"] = result.backdropPath();
-        map["voteAverage"] = result.voteAverage();
-        map["voteCount"] = result.voteCount();
-        map["popularity"] = result.popularity();
-        map["adult"] = result.adult();
-        map["mediaType"] = result.mediaType();
+        map["id"] = result.id;
+        map["title"] = result.title;
+        map["name"] = result.name;
+        map["overview"] = result.overview;
+        map["releaseDate"] = result.releaseDate;
+        map["firstAirDate"] = result.firstAirDate;
+        map["posterPath"] = result.posterPath;
+        map["backdropPath"] = result.backdropPath;
+        map["voteAverage"] = result.voteAverage;
+        map["voteCount"] = result.voteCount;
+        map["popularity"] = result.popularity;
+        map["adult"] = result.adult;
+        map["mediaType"] = result.mediaType;
         variantList.append(map);
     }
     
@@ -221,19 +221,19 @@ void TmdbSearchService::onTvReplyFinished()
     QVariantList variantList;
     for (const TmdbSearchResult& result : results) {
         QVariantMap map;
-        map["id"] = result.id();
-        map["title"] = result.title();
-        map["name"] = result.name();
-        map["overview"] = result.overview();
-        map["releaseDate"] = result.releaseDate();
-        map["firstAirDate"] = result.firstAirDate();
-        map["posterPath"] = result.posterPath();
-        map["backdropPath"] = result.backdropPath();
-        map["voteAverage"] = result.voteAverage();
-        map["voteCount"] = result.voteCount();
-        map["popularity"] = result.popularity();
-        map["adult"] = result.adult();
-        map["mediaType"] = result.mediaType();
+        map["id"] = result.id;
+        map["title"] = result.title;
+        map["name"] = result.name;
+        map["overview"] = result.overview;
+        map["releaseDate"] = result.releaseDate;
+        map["firstAirDate"] = result.firstAirDate;
+        map["posterPath"] = result.posterPath;
+        map["backdropPath"] = result.backdropPath;
+        map["voteAverage"] = result.voteAverage;
+        map["voteCount"] = result.voteCount;
+        map["popularity"] = result.popularity;
+        map["adult"] = result.adult;
+        map["mediaType"] = result.mediaType;
         variantList.append(map);
     }
     
@@ -261,6 +261,6 @@ void TmdbSearchService::handleError(QNetworkReply* reply, const QString& context
 
 bool TmdbSearchService::compareByPopularity(const TmdbSearchResult& a, const TmdbSearchResult& b)
 {
-    return a.popularity() > b.popularity();
+    return a.popularity > b.popularity;
 }
 

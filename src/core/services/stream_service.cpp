@@ -287,9 +287,9 @@ void StreamService::processStreamsFromAddon(const QString& addonId, const QStrin
             
             // Create StreamInfo
             StreamInfo info = StreamInfo::fromJson(streamObj, addonId, addonName);
-            info.setTitle(displayTitle);
+            info.title = displayTitle;
             if (sizeInBytes >= 0) {
-                info.setSize(sizeInBytes);
+                info.size = sizeInBytes;
             }
             
             // Convert to QVariantMap for QML
