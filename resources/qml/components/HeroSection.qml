@@ -248,7 +248,7 @@ Item {
                         color: "#40000000"
                         border.width: 1
                         border.color: "#ffffff"
-                        radius: 4
+                        radius: 26
                     }
                     contentItem: Text {
                         text: parent.text

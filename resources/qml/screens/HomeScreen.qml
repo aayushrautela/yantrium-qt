@@ -399,13 +399,64 @@ Item {
                         }
                     }
                     
-                    MouseArea {
-                        anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 100
-                        onClicked: root.cycleHero(-1); z: 100
+                    // Left arrow button
+                    Item {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 60
+                        visible: catalogSectionsModel.count > 0 && catalogSectionsModel.get(0).itemsModel.count > 1
+                        z: 200
+
+                        property bool isHovered: false
+
+                        Image {
+                            anchors.centerIn: parent
+                            width: 48
+                            height: 48
+                            source: "qrc:/assets/icons/arrow-left.svg"
+                            fillMode: Image.PreserveAspectFit
+                            opacity: parent.isHovered ? 1.0 : 0.4
+                            Behavior on opacity { NumberAnimation { duration: 200 } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onEntered: parent.isHovered = true
+                            onExited: parent.isHovered = false
+                            onClicked: root.cycleHero(-1)
+                        }
                     }
-                    MouseArea {
-                        anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 100
-                        onClicked: root.cycleHero(1); z: 100
+
+                    // Right arrow button
+                    Item {
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 60
+                        visible: catalogSectionsModel.count > 0 && catalogSectionsModel.get(0).itemsModel.count > 1
+                        z: 200
+
+                        property bool isHovered: false
+
+                        Image {
+                            anchors.centerIn: parent
+                            width: 48
+                            height: 48
+                            source: "qrc:/assets/icons/arrow-right.svg"
+                            fillMode: Image.PreserveAspectFit
+                            opacity: parent.isHovered ? 1.0 : 0.4
+                            Behavior on opacity { NumberAnimation { duration: 200 } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onEntered: parent.isHovered = true
+                            onExited: parent.isHovered = false
+                            onClicked: root.cycleHero(1)
+                        }
                     }
                 }
                 
