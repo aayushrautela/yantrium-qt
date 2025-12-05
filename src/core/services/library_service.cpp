@@ -24,6 +24,7 @@ LibraryService::LibraryService(QObject* parent)
     , m_isRawExport(false)
     , m_pendingHeroRequests(0)
     , m_isLoadingHeroItems(false)
+    , m_pendingHeroTmdbRequests(0)
     , m_pendingTmdbRequests(0)
     , m_searchMoviesReceived(false)
     , m_searchTvReceived(false)
@@ -1013,7 +1014,11 @@ void LibraryService::onHeroCatalogFetched(const QString& type, const QJsonArray&
     QString baseUrl = senderClient->property("baseUrl").toString();
     int itemsPerCatalog = senderClient->property("itemsPerCatalog").toInt();
     
-    qDebug() << "[LibraryService] Hero catalog fetched, items:" << metas.size() << "taking" << itemsPerCatalog;
+    QString addonId = senderClient->property("addonId").toString();
+
+    qCritical() << "[LibraryService] ========== HERO CATALOG FETCHED ==========";
+    qCritical() << "[LibraryService] Hero catalog fetched from" << addonId << ", type:" << type << ", items:" << metas.size() << "taking" << itemsPerCatalog;
+    qCritical() << "[LibraryService] Current hero items count:" << m_heroItems.size() << ", pending requests:" << m_pendingHeroRequests;
     
     int count = 0;
     for (const QJsonValue& value : metas) {
@@ -1033,12 +1038,200 @@ void LibraryService::onHeroCatalogFetched(const QString& type, const QJsonArray&
     m_activeClients.removeAll(senderClient);
     senderClient->deleteLater();
     
-    // If all requests completed or we have enough items, emit signal
+    // Enrich when we have enough items OR all requests are complete
     if (m_pendingHeroRequests == 0 || m_heroItems.size() >= 10) {
-        m_isLoadingHeroItems = false;
         QVariantList itemsToEmit = m_heroItems.mid(0, 10); // Limit to 10 items
-        qDebug() << "[LibraryService] Emitting hero items loaded:" << itemsToEmit.size();
-        emit heroItemsLoaded(itemsToEmit);
+        qCritical() << "[LibraryService] ========== STARTING HERO TMDB ENRICHMENT ==========";
+        qCritical() << "[LibraryService] Trigger condition: pendingRequests=" << m_pendingHeroRequests << ", totalItems=" << m_heroItems.size();
+        qCritical() << "[LibraryService] Starting TMDB enrichment for" << itemsToEmit.size() << "hero items";
+
+        // Enrich hero items with TMDB data
+        enrichHeroItemsWithTmdbData(itemsToEmit);
+    }
+}
+
+void LibraryService::enrichHeroItemsWithTmdbData(const QVariantList& heroItems)
+{
+    qCritical() << "[LibraryService] ========== HERO ENRICHMENT START ==========";
+    qCritical() << "[LibraryService] Enriching" << heroItems.size() << "hero items with TMDB data";
+
+    if (heroItems.isEmpty()) {
+        qCritical() << "[LibraryService] No hero items to enrich, emitting empty list";
+        m_isLoadingHeroItems = false;
+        emit heroItemsLoaded(QVariantList());
+        return;
+    }
+
+    // Store the items we need to enrich
+    m_pendingHeroTmdbItems = heroItems;
+    m_pendingHeroTmdbRequests = 0;
+
+    qCritical() << "[LibraryService] Stored" << m_pendingHeroTmdbItems.size() << "hero items for enrichment";
+
+    // Process each hero item
+    for (int i = 0; i < heroItems.size(); ++i) {
+        const QVariant& itemVar = heroItems[i];
+        QVariantMap item = itemVar.toMap();
+
+        qCritical() << "[LibraryService] Processing hero item" << i << ":" << item["title"].toString()
+                    << "Type:" << item["type"].toString()
+                    << "TMDB ID:" << item["tmdbId"].toString()
+                    << "IMDB ID:" << item["imdbId"].toString();
+
+        // Extract TMDB ID
+        int tmdbId = 0;
+        QString tmdbIdStr = item["tmdbId"].toString();
+        if (!tmdbIdStr.isEmpty()) {
+            tmdbId = tmdbIdStr.toInt();
+            qWarning() << "[LibraryService] Found TMDB ID:" << tmdbId << "for item:" << item["title"].toString();
+        }
+
+        // If no TMDB ID, check if we have IMDB ID to convert
+        if (tmdbId == 0) {
+            QString imdbId = item["imdbId"].toString();
+            if (!imdbId.isEmpty()) {
+                qWarning() << "[LibraryService] No TMDB ID for hero item, trying IMDB lookup:" << imdbId
+                           << "for item:" << item["title"].toString();
+                m_pendingHeroTmdbRequests++;
+                m_tmdbService->getTmdbIdFromImdb(imdbId);
+                continue;
+            } else {
+                qWarning() << "[LibraryService] No TMDB or IMDB ID for hero item:" << item["title"].toString()
+                           << "- SKIPPING";
+                continue;
+            }
+        }
+
+        // We have TMDB ID, fetch metadata
+        QString type = item["type"].toString();
+        qWarning() << "[LibraryService] Fetching TMDB metadata for" << type << "ID:" << tmdbId
+                   << "Title:" << item["title"].toString();
+
+        if (type == "movie") {
+            m_pendingHeroTmdbRequests++;
+            m_tmdbService->getMovieMetadata(tmdbId);
+        } else if (type == "tv" || type == "show") {
+            m_pendingHeroTmdbRequests++;
+            m_tmdbService->getTvMetadata(tmdbId);
+        } else {
+            qWarning() << "[LibraryService] Unknown type for TMDB fetch:" << type << "- SKIPPING";
+        }
+    }
+
+    qWarning() << "[LibraryService] Total TMDB requests initiated:" << m_pendingHeroTmdbRequests;
+
+    // If no requests were made, emit immediately
+    if (m_pendingHeroTmdbRequests == 0) {
+        qWarning() << "[LibraryService] No TMDB requests needed, emitting hero items immediately";
+        m_isLoadingHeroItems = false;
+        emit heroItemsLoaded(heroItems);
+    } else {
+        qWarning() << "[LibraryService] Waiting for" << m_pendingHeroTmdbRequests << "TMDB requests to complete";
+    }
+}
+
+bool LibraryService::updateHeroItemWithTmdbData(int tmdbId, const QJsonObject& data, const QString& type)
+{
+    qWarning() << "[LibraryService] Processing TMDB response for hero item - TMDB ID:" << tmdbId << "Type:" << type;
+
+    // Find the hero item with this TMDB ID
+    for (int i = 0; i < m_pendingHeroTmdbItems.size(); ++i) {
+        QVariantMap heroItem = m_pendingHeroTmdbItems[i].toMap();
+        QString itemTmdbIdStr = heroItem["tmdbId"].toString();
+        int itemTmdbId = itemTmdbIdStr.toInt();
+
+        if (itemTmdbId == tmdbId) {
+            qWarning() << "[LibraryService] Found matching hero item for TMDB ID:" << tmdbId
+                       << "Title:" << heroItem["title"].toString();
+
+            // Enrich the hero item with TMDB data
+            QVariantMap enrichedItem = FrontendDataMapper::enrichItemWithTmdbData(heroItem, data, type);
+
+            // Log what enrichment added
+            QStringList addedFields;
+            if (enrichedItem.contains("runtimeFormatted")) addedFields << "runtime";
+            if (enrichedItem.contains("genres")) addedFields << "genres";
+            if (enrichedItem.contains("badgeText")) addedFields << "badge";
+
+            qWarning() << "[LibraryService] Enriched hero item with:" << addedFields.join(", ")
+                       << "- Badge:" << enrichedItem["badgeText"].toString()
+                       << "- Runtime:" << enrichedItem["runtimeFormatted"].toString()
+                       << "- Genres:" << enrichedItem["genres"].toString();
+
+            // Update the item in our list
+            m_pendingHeroTmdbItems[i] = enrichedItem;
+
+            return true;
+        }
+    }
+
+    qWarning() << "[LibraryService] No matching hero item found for TMDB ID:" << tmdbId;
+    return false;
+}
+
+bool LibraryService::handleHeroTmdbIdLookup(const QString& imdbId, int tmdbId)
+{
+    qWarning() << "[LibraryService] TMDB ID lookup result - IMDB:" << imdbId << "-> TMDB:" << tmdbId;
+
+    // Find the hero item with this IMDB ID and update its TMDB ID
+    for (int i = 0; i < m_pendingHeroTmdbItems.size(); ++i) {
+        QVariantMap heroItem = m_pendingHeroTmdbItems[i].toMap();
+        QString itemImdbId = heroItem["imdbId"].toString();
+
+        if (itemImdbId == imdbId) {
+            qWarning() << "[LibraryService] Found matching hero item for IMDB ID:" << imdbId
+                       << ", setting TMDB ID:" << tmdbId << "for item:" << heroItem["title"].toString();
+
+            // Update the TMDB ID in the hero item
+            heroItem["tmdbId"] = QString::number(tmdbId);
+            m_pendingHeroTmdbItems[i] = heroItem;
+
+            // Now fetch the metadata for this TMDB ID
+            QString type = heroItem["type"].toString();
+            qWarning() << "[LibraryService] Now fetching TMDB metadata for" << type << "TMDB ID:" << tmdbId;
+
+            if (type == "movie") {
+                m_tmdbService->getMovieMetadata(tmdbId);
+            } else if (type == "tv" || type == "show") {
+                m_tmdbService->getTvMetadata(tmdbId);
+            }
+
+            return true;
+        }
+    }
+
+    qWarning() << "[LibraryService] No matching hero item found for IMDB ID:" << imdbId;
+    return false;
+}
+
+void LibraryService::emitHeroItemsWhenReady()
+{
+    if (m_pendingHeroTmdbRequests == 0) {
+        qCritical() << "[LibraryService] ========== HERO ENRICHMENT COMPLETE ==========";
+        qCritical() << "[LibraryService] All hero TMDB requests completed, emitting" << m_pendingHeroTmdbItems.size() << "enriched hero items";
+
+        // Log summary of enriched items
+        for (int i = 0; i < m_pendingHeroTmdbItems.size(); ++i) {
+            QVariantMap item = m_pendingHeroTmdbItems[i].toMap();
+            bool hasEnrichment = item["tmdbDataAvailable"].toBool();
+            QString badge = item["badgeText"].toString();
+            QString runtime = item["runtimeFormatted"].toString();
+            QStringList genres = item["genres"].toStringList();
+
+            qWarning() << "[LibraryService] Hero item" << i << ":"
+                       << item["title"].toString()
+                       << "| Enriched:" << (hasEnrichment ? "YES" : "NO")
+                       << "| Badge:" << (badge.isEmpty() ? "none" : badge)
+                       << "| Runtime:" << (runtime.isEmpty() ? "none" : runtime)
+                       << "| Genres:" << (genres.isEmpty() ? "none" : genres.join(","));
+        }
+
+        m_isLoadingHeroItems = false;
+        emit heroItemsLoaded(m_pendingHeroTmdbItems);
+        qWarning() << "[LibraryService] ========== HERO ITEMS EMITTED ==========";
+    } else {
+        qWarning() << "[LibraryService] emitHeroItemsWhenReady called but still waiting for"
+                   << m_pendingHeroTmdbRequests << "TMDB requests";
     }
 }
 
@@ -1065,7 +1258,13 @@ void LibraryService::onHeroClientError(const QString& errorMessage)
 void LibraryService::onTmdbIdFound(const QString& imdbId, int tmdbId)
 {
     qDebug() << "[LibraryService] TMDB ID found for IMDB" << imdbId << "-> TMDB" << tmdbId;
-    
+
+    // Check if this is for a hero item
+    bool isHeroItem = handleHeroTmdbIdLookup(imdbId, tmdbId);
+    if (isHeroItem) {
+        return;
+    }
+
     if (!m_pendingContinueWatchingItems.contains(imdbId)) {
         qWarning() << "[LibraryService] Received TMDB ID for unknown IMDB ID:" << imdbId;
         m_pendingTmdbRequests--;
@@ -1096,8 +1295,22 @@ void LibraryService::onTmdbIdFound(const QString& imdbId, int tmdbId)
 
 void LibraryService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& data)
 {
-    qDebug() << "[LibraryService] TMDB movie metadata fetched for TMDB ID:" << tmdbId;
-    
+    qCritical() << "[LibraryService] TMDB MOVIE metadata fetched for TMDB ID:" << tmdbId
+                << "(Title:" << data["title"].toString() << ")";
+
+    // Check if this is for a hero item
+    bool isHeroItem = updateHeroItemWithTmdbData(tmdbId, data, "movie");
+    if (isHeroItem) {
+        qCritical() << "[LibraryService] This was a HERO ITEM - remaining requests:" << (m_pendingHeroTmdbRequests - 1);
+        m_pendingHeroTmdbRequests--;
+        if (m_pendingHeroTmdbRequests == 0) {
+            emitHeroItemsWhenReady();
+        }
+        return;
+    }
+
+    qCritical() << "[LibraryService] This was NOT a hero item, processing as regular request";
+
     if (!m_tmdbIdToImdbId.contains(tmdbId)) {
         qWarning() << "[LibraryService] Received movie metadata for unknown TMDB ID:" << tmdbId;
         m_pendingTmdbRequests--;
@@ -1132,8 +1345,22 @@ void LibraryService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& d
 
 void LibraryService::onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data)
 {
-    qDebug() << "[LibraryService] TMDB TV metadata fetched for TMDB ID:" << tmdbId;
-    
+    qCritical() << "[LibraryService] TMDB TV metadata fetched for TMDB ID:" << tmdbId
+                << "(Title:" << data["name"].toString() << ")";
+
+    // Check if this is for a hero item
+    bool isHeroItem = updateHeroItemWithTmdbData(tmdbId, data, "tv");
+    if (isHeroItem) {
+        qCritical() << "[LibraryService] This was a HERO ITEM - remaining requests:" << (m_pendingHeroTmdbRequests - 1);
+        m_pendingHeroTmdbRequests--;
+        if (m_pendingHeroTmdbRequests == 0) {
+            emitHeroItemsWhenReady();
+        }
+        return;
+    }
+
+    qCritical() << "[LibraryService] This was NOT a hero item, processing as regular request";
+
     if (!m_tmdbIdToImdbId.contains(tmdbId)) {
         qWarning() << "[LibraryService] Received TV metadata for unknown TMDB ID:" << tmdbId;
         m_pendingTmdbRequests--;
@@ -1185,7 +1412,23 @@ void LibraryService::onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data
 
 void LibraryService::onTmdbError(const QString& message)
 {
-    qWarning() << "[LibraryService] TMDB error:" << message;
+    qWarning() << "[LibraryService] TMDB ERROR:" << message;
+    qWarning() << "[LibraryService] Current hero TMDB requests pending:" << m_pendingHeroTmdbRequests;
+
+    // Check if this affects hero items
+    if (m_pendingHeroTmdbRequests > 0) {
+        qWarning() << "[LibraryService] TMDB error occurred while processing hero items!"
+                   << "Remaining hero requests:" << m_pendingHeroTmdbRequests;
+
+        // For hero items, we should still emit what we have after a timeout or error
+        // For now, decrement and check if we're done
+        m_pendingHeroTmdbRequests--;
+        if (m_pendingHeroTmdbRequests == 0) {
+            qWarning() << "[LibraryService] All hero TMDB requests failed or completed with errors, emitting what we have";
+            emitHeroItemsWhenReady();
+        }
+    }
+
     // Decrement pending requests and finish if all done
     m_pendingTmdbRequests--;
     if (m_pendingTmdbRequests == 0) {

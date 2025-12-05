@@ -35,6 +35,13 @@ public:
     
     // Merge OMDB ratings into detail map
     static QVariantMap mergeOmdbRatings(QVariantMap& detailMap, const QJsonObject& omdbData);
+
+    // Enrich catalog item with TMDB data (for hero items)
+    static QVariantMap enrichItemWithTmdbData(const QVariantMap& item, const QJsonObject& tmdbData, const QString& type);
+
+    // Helper functions for TMDB data processing
+    static QString determineBadgeText(const QJsonObject& tmdbData, const QString& type);
+    static QString formatRuntime(int minutes);
 };
 
 #endif // FRONTEND_DATA_MAPPER_H

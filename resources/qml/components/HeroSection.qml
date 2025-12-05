@@ -13,7 +13,7 @@ Item {
     
     // --- Signals ---
     signal playClicked()
-    signal addToLibraryClicked()
+    signal moreInfoClicked()
     
     // --- Internal Logic ---
     // We use two images to ping-pong: one is visible, one waits to slide in.
@@ -141,10 +141,10 @@ Item {
         anchors.left: parent.left
         anchors.bottom: parent.bottom
         anchors.right: parent.right
-        anchors.leftMargin: 60
+        anchors.leftMargin: 120
         anchors.rightMargin: 40
         anchors.bottomMargin: 80
-        spacing: 16
+        spacing: 24
         
         // Logo or Text Title
         Item {
@@ -176,27 +176,32 @@ Item {
             }
             }
             
-            // Metadata tags
-            Row {
-                spacing: 8
-            visible: root.metadata.length > 0
-                Repeater {
-                    model: root.metadata
-                    Rectangle {
-                        height: 28
-                        width: metadataText.width + 16
-                        radius: 4
-                        color: "#40ffffff"
-                        
-                        Text {
-                            id: metadataText
-                            anchors.centerIn: parent
-                            text: modelData
-                            font.pixelSize: 12
-                            color: "#ffffff"
+            // Metadata as plain text
+            Text {
+                text: {
+                    if (root.metadata.length === 0) return "";
+
+                    // Format: rating • year • runtime • genre1 genre2 •
+                    var result = "";
+                    if (root.metadata.length >= 1) result += root.metadata[0]; // rating
+                    if (root.metadata.length >= 2) result += " • " + root.metadata[1]; // year
+                    if (root.metadata.length >= 3) result += " • " + root.metadata[2]; // runtime
+
+                    // Add genres separated by spaces, max 2 genres
+                    if (root.metadata.length >= 4) {
+                        result += " • ";
+                        var genres = [];
+                        for (var i = 3; i < Math.min(root.metadata.length, 5); i++) { // genres start at index 3, max 2
+                            genres.push(root.metadata[i]);
                         }
+                        result += genres.join(" ");
                     }
+
+                    return result;
                 }
+                font.pixelSize: 14
+                color: "#ffffff"
+                visible: root.metadata.length > 0
             }
             
             // Description
@@ -204,8 +209,10 @@ Item {
             width: Math.min(parent.width * 0.75, 600)
                 text: root.description
             color: "#e0e0e0"
-                font.pixelSize: 16
+                font.pixelSize: 18
                 wrapMode: Text.WordWrap
+                maximumLineCount: 3
+                elide: Text.ElideRight
             }
             
         // Buttons
@@ -213,18 +220,20 @@ Item {
                 spacing: 12
                 
                 Button {
-                    width: 140
-                    height: 44
+                    width: 160
+                    height: 52
                     text: "▶ Play Now"
+                    scale: hovered ? 1.05 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
                     background: Rectangle {
-                        color: "#ff0000"
-                        radius: 4
+                        color: "#ffffff"
+                        radius: 26 // Pill shape (half of height)
                     }
                     contentItem: Text {
                         text: parent.text
-                        font.pixelSize: 16
+                        font.pixelSize: 18
                         font.bold: true
-                        color: "#ffffff"
+                        color: "#000000"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -233,8 +242,8 @@ Item {
                 
                 Button {
                     width: 160
-                    height: 44
-                    text: "+ Add to Library"
+                    height: 52
+                    text: "More Info"
                     background: Rectangle {
                         color: "#40000000"
                         border.width: 1
@@ -248,7 +257,7 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
-                    onClicked: root.addToLibraryClicked()
+                    onClicked: root.moreInfoClicked()
                 }
             }
         }

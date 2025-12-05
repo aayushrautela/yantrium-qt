@@ -106,9 +106,15 @@ Item {
         heroItems = []
         if (sections[0].items && sections[0].items.length > 0) {
             heroItems = sections[0].items
+            console.log("[HomeScreen] Loaded", heroItems.length, "hero items")
+            for (let i = 0; i < heroItems.length; i++) {
+                console.log("[HomeScreen] Hero item", i, ":", heroItems[i].title, "- TMDB enriched:", heroItems[i].tmdbDataAvailable || false)
+            }
             currentHeroIndex = 0
             updateHeroSection(heroItems[0], false, 0)
             heroRotationTimer.restart()
+        } else {
+            console.log("[HomeScreen] No hero items found in first section")
         }
 
         // Populate Models
@@ -153,18 +159,67 @@ Item {
     }
 
     function updateHeroSection(data, animate, direction) {
-        if (!heroLoader.item) return
+        console.log("[HomeScreen] Updating hero section for:", data.title || "Unknown")
+        console.log("[HomeScreen] Hero data keys:", Object.keys(data))
+        console.log("[HomeScreen] TMDB enriched:", data.tmdbDataAvailable || false)
+        console.log("[HomeScreen] Badge:", data.badgeText || "none")
+        console.log("[HomeScreen] Runtime:", data.runtimeFormatted || "none")
+        console.log("[HomeScreen] Genres:", data.genres || "none")
+        console.log("[HomeScreen] Rating:", data.rating || "none", "Year:", data.year || "none")
+
+        if (!heroLoader.item) {
+            console.log("[HomeScreen] Hero loader item not ready")
+            return
+        }
+
         heroLoader.item.title = data.title || ""
         heroLoader.item.logoUrl = data.logoUrl || data.logo || ""
         heroLoader.item.description = data.description || "No description available."
-        
+
+        // Build metadata array with runtime, genres, and badges
         let meta = []
-        if (data.year) meta.push(data.year.toString())
+
+        // Add rating first
         if (data.rating) meta.push(data.rating.toString())
+
+        // Add year
+        if (data.year) meta.push(data.year.toString())
+
+        // Add runtime (formatted as hours/minutes)
+        if (data.runtimeFormatted) {
+            meta.push(data.runtimeFormatted)
+        }
+
+        // Add genres (up to 2, space-separated)
+        // Handle different data types from C++ (QVariantList, QStringList, etc.)
+        let genreList = []
+        if (data.genres) {
+            // Try different ways to access the genres
+            if (Array.isArray(data.genres)) {
+                genreList = data.genres
+            } else if (typeof data.genres === 'object' && data.genres.length !== undefined) {
+                // Handle array-like objects (QStringList, QVariantList)
+                for (let i = 0; i < data.genres.length; i++) {
+                    genreList.push(data.genres[i])
+                }
+            } else if (typeof data.genres === 'string' && data.genres.includes(',')) {
+                // Handle comma-separated string
+                genreList = data.genres.split(',')
+            }
+        }
+
+        if (genreList.length > 0) {
+            let displayGenres = genreList.slice(0, 2).map(g => g.toString().trim()) // Max 2 genres, ensure strings
+            meta.push(displayGenres.join(" "))
+        }
+
+        console.log("[HomeScreen] Final metadata array:", meta)
         heroLoader.item.metadata = meta
-        
+
         let bg = data.background || data.backdrop || ""
         heroLoader.item.updateBackdrop(bg, animate ? (direction || 1) : 0)
+
+        console.log("[HomeScreen] Hero section updated successfully")
     }
 
     function onContinueWatchingLoaded(items) {
@@ -212,31 +267,31 @@ Item {
             console.warn("[HomeScreen] No hero item available for library")
             return
         }
-        
+
         var heroItem = heroItems[currentHeroIndex]
         console.log("[HomeScreen] Hero add to library clicked for:", heroItem.title || heroItem.name)
-        
+
         // Get content ID (prefer imdbId)
         var contentId = heroItem.imdbId || heroItem.id || ""
         var type = heroItem.type || "movie"
-        
+
         if (!contentId) {
             console.error("[HomeScreen] Cannot add to library: no contentId")
             return
         }
-        
+
         // Ensure we're using imdbId format if available
         if (heroItem.imdbId && heroItem.imdbId.startsWith("tt")) {
             contentId = heroItem.imdbId
         }
-        
+
         // Normalize type
         if (type === "tv" || type === "series") {
             type = "show"
         } else {
             type = "movie"
         }
-        
+
         // Add to library
         if (traktAuthService.isAuthenticated) {
             // Add to Trakt watchlist
@@ -257,6 +312,41 @@ Item {
             }
             localLibraryService.addToLibrary(libraryItem)
         }
+    }
+
+    function onHeroMoreInfoClicked() {
+        if (heroItems.length === 0 || currentHeroIndex < 0 || currentHeroIndex >= heroItems.length) {
+            console.warn("[HomeScreen] No hero item available for more info")
+            return
+        }
+
+        var heroItem = heroItems[currentHeroIndex]
+        console.log("[HomeScreen] Hero more info clicked for:", heroItem.title || heroItem.name)
+
+        // Get content ID (prefer imdbId)
+        var contentId = heroItem.imdbId || heroItem.id || ""
+        var type = heroItem.type || "movie"
+        var addonId = heroItem.addonId || ""
+
+        if (!contentId) {
+            console.error("[HomeScreen] Cannot show more info: no contentId")
+            return
+        }
+
+        // Ensure we're using imdbId format if available
+        if (heroItem.imdbId && heroItem.imdbId.startsWith("tt")) {
+            contentId = heroItem.imdbId
+        }
+
+        // Normalize type
+        if (type === "tv" || type === "series") {
+            type = "show"
+        } else {
+            type = "movie"
+        }
+
+        // Navigate to detail screen
+        root.itemClicked(contentId, type, addonId)
     }
 
     // --- UI Layout ---
@@ -303,8 +393,8 @@ Item {
                             item.playClicked.connect(function() {
                                 root.onHeroPlayClicked()
                             })
-                            item.addToLibraryClicked.connect(function() {
-                                root.onHeroAddToLibraryClicked()
+                            item.moreInfoClicked.connect(function() {
+                                root.onHeroMoreInfoClicked()
                             })
                         }
                     }

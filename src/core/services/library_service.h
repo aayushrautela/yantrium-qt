@@ -118,6 +118,14 @@ private:
     QVariantList m_heroItems;
     int m_pendingHeroRequests;
     bool m_isLoadingHeroItems;
+    int m_pendingHeroTmdbRequests;
+    QVariantList m_pendingHeroTmdbItems;
+
+    // Hero TMDB enrichment methods
+    void enrichHeroItemsWithTmdbData(const QVariantList& heroItems);
+    bool updateHeroItemWithTmdbData(int tmdbId, const QJsonObject& data, const QString& type);
+    bool handleHeroTmdbIdLookup(const QString& imdbId, int tmdbId);
+    void emitHeroItemsWhenReady();
     
     // Continue watching TMDB loading
     QMap<QString, QVariantMap> m_pendingContinueWatchingItems; // IMDB ID -> Trakt item data

@@ -748,3 +748,107 @@ QVariantMap FrontendDataMapper::mergeOmdbRatings(QVariantMap& detailMap, const Q
     return detailMap;
 }
 
+QVariantMap FrontendDataMapper::enrichItemWithTmdbData(const QVariantMap& item, const QJsonObject& tmdbData, const QString& type)
+{
+    QVariantMap enrichedItem = item;
+
+    // Add TMDB-specific fields
+    enrichedItem["tmdbDataAvailable"] = true;
+
+    // Extract runtime
+    if (type == "movie") {
+        int runtime = tmdbData["runtime"].toInt();
+        if (runtime > 0) {
+            enrichedItem["runtime"] = runtime;
+            enrichedItem["runtimeFormatted"] = formatRuntime(runtime);
+        }
+    } else if (type == "tv" || type == "show") {
+        QJsonArray runtimeArray = tmdbData["episode_run_time"].toArray();
+        if (!runtimeArray.isEmpty()) {
+            int runtime = runtimeArray[0].toInt();
+            if (runtime > 0) {
+                enrichedItem["runtime"] = runtime;
+                enrichedItem["runtimeFormatted"] = formatRuntime(runtime);
+            }
+        }
+    }
+
+    // Extract genres
+    QJsonArray genresArray = tmdbData["genres"].toArray();
+    QStringList genres;
+    for (const QJsonValue& genreValue : genresArray) {
+        QJsonObject genre = genreValue.toObject();
+        genres.append(genre["name"].toString());
+    }
+    if (!genres.isEmpty()) {
+        enrichedItem["genres"] = genres;
+    }
+
+    // Determine badge text based on release date
+    QString badgeText = determineBadgeText(tmdbData, type);
+    if (!badgeText.isEmpty()) {
+        enrichedItem["badgeText"] = badgeText;
+    }
+
+    // Update release dates for better badge calculation
+    if (type == "movie") {
+        enrichedItem["releaseDate"] = tmdbData["release_date"].toString();
+    } else if (type == "tv" || type == "show") {
+        enrichedItem["firstAirDate"] = tmdbData["first_air_date"].toString();
+        enrichedItem["lastAirDate"] = tmdbData["last_air_date"].toString();
+        enrichedItem["status"] = tmdbData["status"].toString();
+    }
+
+    return enrichedItem;
+}
+
+QString FrontendDataMapper::determineBadgeText(const QJsonObject& tmdbData, const QString& type)
+{
+    QDateTime now = QDateTime::currentDateTime();
+    QDateTime releaseDate;
+
+    if (type == "movie") {
+        QString releaseDateStr = tmdbData["release_date"].toString();
+        if (releaseDateStr.isEmpty()) return QString();
+
+        releaseDate = QDateTime::fromString(releaseDateStr, Qt::ISODate);
+    } else if (type == "tv" || type == "show") {
+        // For TV shows, use last_air_date for "new season" detection
+        QString lastAirDateStr = tmdbData["last_air_date"].toString();
+        QString status = tmdbData["status"].toString();
+
+        if (lastAirDateStr.isEmpty()) return QString();
+
+        releaseDate = QDateTime::fromString(lastAirDateStr, Qt::ISODate);
+
+        // Only show "New Season" for shows that are still active
+        if (status != "Returning Series") return QString();
+    }
+
+    if (!releaseDate.isValid()) return QString();
+
+    // Calculate days since release
+    qint64 daysSinceRelease = releaseDate.daysTo(now);
+
+    // Show badge for content released within last 30 days
+    if (daysSinceRelease >= 0 && daysSinceRelease <= 30) {
+        return type == "movie" ? "Just Released" : "New Season";
+    }
+
+    return QString();
+}
+
+QString FrontendDataMapper::formatRuntime(int minutes)
+{
+    if (minutes <= 0) return QString();
+
+    int hours = minutes / 60;
+    int mins = minutes % 60;
+
+    if (hours > 0) {
+        return QString("%1h %2m").arg(hours).arg(mins);
+    } else {
+        return QString("%1m").arg(mins);
+    }
+}
+
