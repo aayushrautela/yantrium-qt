@@ -4,15 +4,21 @@
 #include <QObject>
 #include <QString>
 #include <QVariantList>
+#include <memory>
+#include <QtQmlIntegration/qqmlintegration.h>
 #include "core/database/catalog_preferences_dao.h"
 #include "features/addons/logic/addon_repository.h"
 
 class CatalogPreferencesService : public QObject
 {
     Q_OBJECT
+    QML_ELEMENT
 
 public:
-    explicit CatalogPreferencesService(QObject* parent = nullptr);
+    explicit CatalogPreferencesService(
+        std::unique_ptr<CatalogPreferencesDao> dao,
+        std::shared_ptr<AddonRepository> addonRepository,
+        QObject* parent = nullptr);
     
     // Get all available catalogs with their preferences
     Q_INVOKABLE QVariantList getAvailableCatalogs();
@@ -38,8 +44,8 @@ signals:
     void error(const QString& message);
 
 private:
-    CatalogPreferencesDao* m_dao;
-    AddonRepository* m_addonRepository;
+    std::unique_ptr<CatalogPreferencesDao> m_dao;
+    std::shared_ptr<AddonRepository> m_addonRepository;
     
     QString capitalize(const QString& text);
 };

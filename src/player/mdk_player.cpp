@@ -55,9 +55,9 @@ MDKPlayer::MDKPlayer(QObject *parent)
     qDebug() << "[MDKPlayer] GLRenderAPI initialized and set (OpenGL, Core profile)";
     
     // Setup timer to emit positionChanged signal periodically
-    QTimer *positionTimer = new QTimer(this);
-    connect(positionTimer, &QTimer::timeout, this, &MDKPlayer::updatePosition);
-    positionTimer->start(100); // Update every 100ms
+    m_positionTimer = std::make_unique<QTimer>(this);
+    connect(m_positionTimer.get(), &QTimer::timeout, this, &MDKPlayer::updatePosition);
+    m_positionTimer->start(100); // Update every 100ms
     qDebug() << "[MDKPlayer] Position timer started";
 }
 

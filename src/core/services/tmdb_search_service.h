@@ -8,6 +8,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QUrlQuery>
+#include <memory>
 #include "../models/tmdb_models.h"
 
 class TmdbSearchService : public QObject
@@ -30,7 +31,7 @@ private slots:
     void onTvReplyFinished();
 
 private:
-    QNetworkAccessManager* m_networkManager;
+    std::unique_ptr<QNetworkAccessManager> m_networkManager;
     QNetworkReply* m_currentReply;
     
     QUrl buildUrl(const QString& path, const QUrlQuery& query = QUrlQuery());

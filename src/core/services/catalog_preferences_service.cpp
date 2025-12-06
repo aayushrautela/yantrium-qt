@@ -3,11 +3,14 @@
 #include "features/addons/models/addon_manifest.h"
 #include <QDebug>
 
-CatalogPreferencesService::CatalogPreferencesService(QObject* parent)
+CatalogPreferencesService::CatalogPreferencesService(
+    std::unique_ptr<CatalogPreferencesDao> dao,
+    std::shared_ptr<AddonRepository> addonRepository,
+    QObject* parent)
     : QObject(parent)
+    , m_dao(std::move(dao))
+    , m_addonRepository(std::move(addonRepository))
 {
-    m_dao = new CatalogPreferencesDao();
-    m_addonRepository = new AddonRepository(this);
 }
 
 QVariantList CatalogPreferencesService::getAvailableCatalogs()

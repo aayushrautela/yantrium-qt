@@ -3,6 +3,8 @@
 
 #include <QObject>
 #include <QString>
+#include <QTimer>
+#include <memory>
 #include <mdk/Player.h>
 #include <mdk/RenderAPI.h>
 
@@ -43,6 +45,7 @@ private:
     mdk::GLRenderAPI m_renderAPI;
     bool m_renderAPISetup;
     int64_t m_lastPosition;
+    std::unique_ptr<QTimer> m_positionTimer;
     
     void updatePosition();
 };

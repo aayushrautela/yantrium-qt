@@ -5,24 +5,27 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QString>
+#include <memory>
+#include <QtQmlIntegration/qqmlintegration.h>
 #include "../models/stream_info.h"
+#include "interfaces/istream_service.h"
 
 class AddonRepository;
 class TmdbDataService;
 class LibraryService;
 
-class StreamService : public QObject
+class StreamService : public QObject, public IStreamService
 {
     Q_OBJECT
+    QML_ELEMENT
 
 public:
-    explicit StreamService(QObject* parent = nullptr);
-    ~StreamService();
-    
-    // Initialize with dependencies
-    void setAddonRepository(AddonRepository* addonRepository);
-    void setTmdbDataService(TmdbDataService* tmdbDataService);
-    void setLibraryService(LibraryService* libraryService);
+    explicit StreamService(
+        std::shared_ptr<AddonRepository> addonRepository,
+        std::shared_ptr<TmdbDataService> tmdbDataService,
+        LibraryService* libraryService = nullptr,
+        QObject* parent = nullptr);
+    ~StreamService() override = default;
     
     // Get streams for a catalog item
     // itemData: QVariantMap with id, type, name, etc.
@@ -53,8 +56,8 @@ private:
     void processStreamsFromAddon(const QString& addonId, const QString& addonName, const QJsonArray& streams);
     void checkAllRequestsComplete();
     
-    AddonRepository* m_addonRepository;
-    TmdbDataService* m_tmdbDataService;
+    std::shared_ptr<AddonRepository> m_addonRepository;
+    std::shared_ptr<TmdbDataService> m_tmdbDataService;
     LibraryService* m_libraryService;
     
     QVariantList m_allStreams;

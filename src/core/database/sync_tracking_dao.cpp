@@ -52,7 +52,7 @@ bool SyncTrackingDao::upsertSyncTracking(std::string_view syncType, const QDateT
     return true;
 }
 
-SyncTrackingRecord SyncTrackingDao::getSyncTracking(std::string_view syncType)
+SyncTrackingRecord SyncTrackingDao::getSyncTracking(std::string_view syncType) const
 {
     QSqlQuery query(getDatabase());
     query.prepare("SELECT * FROM sync_tracking WHERE sync_type = ?");

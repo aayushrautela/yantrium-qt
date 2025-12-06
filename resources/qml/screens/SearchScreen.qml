@@ -134,6 +134,8 @@ Item {
                             onEntered: isHovered = true
                             onExited: isHovered = false
                             onClicked: {
+                                // Note: Search results from TMDB only have TMDB ID
+                                // MediaMetadataService will convert TMDB to IMDB when loading details
                                 var contentId = model.contentId || model.tmdbId || ""
                                 var type = model.type || ""
                                 root.itemClicked(contentId, type, "")

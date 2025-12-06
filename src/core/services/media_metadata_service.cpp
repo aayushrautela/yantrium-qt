@@ -9,27 +9,35 @@
 #include <QJsonObject>
 #include <QDateTime>
 
-MediaMetadataService::MediaMetadataService(QObject* parent)
+MediaMetadataService::MediaMetadataService(
+    std::shared_ptr<TmdbDataService> tmdbService,
+    std::shared_ptr<OmdbService> omdbService,
+    TraktCoreService* traktService,
+    QObject* parent)
     : QObject(parent)
-    , m_tmdbService(new TmdbDataService(this))
-    , m_omdbService(new OmdbService(this))
-    , m_traktService(&TraktCoreService::instance())
+    , m_tmdbService(std::move(tmdbService))
+    , m_omdbService(std::move(omdbService))
+    , m_traktService(traktService ? traktService : &TraktCoreService::instance())
 {
     // Connect to TMDB service
-    connect(m_tmdbService, &TmdbDataService::tmdbIdFound,
-            this, &MediaMetadataService::onTmdbIdFound);
-    connect(m_tmdbService, &TmdbDataService::movieMetadataFetched,
-            this, &MediaMetadataService::onTmdbMovieMetadataFetched);
-    connect(m_tmdbService, &TmdbDataService::tvMetadataFetched,
-            this, &MediaMetadataService::onTmdbTvMetadataFetched);
-    connect(m_tmdbService, &TmdbDataService::error,
-            this, &MediaMetadataService::onTmdbError);
+    if (m_tmdbService) {
+        connect(m_tmdbService.get(), &TmdbDataService::tmdbIdFound,
+                this, &MediaMetadataService::onTmdbIdFound);
+        connect(m_tmdbService.get(), &TmdbDataService::movieMetadataFetched,
+                this, &MediaMetadataService::onTmdbMovieMetadataFetched);
+        connect(m_tmdbService.get(), &TmdbDataService::tvMetadataFetched,
+                this, &MediaMetadataService::onTmdbTvMetadataFetched);
+        connect(m_tmdbService.get(), &TmdbDataService::error,
+                this, &MediaMetadataService::onTmdbError);
+    }
     
     // Connect to OMDB service
-    connect(m_omdbService, &OmdbService::ratingsFetched,
-            this, &MediaMetadataService::onOmdbRatingsFetched);
-    connect(m_omdbService, &OmdbService::error,
-            this, &MediaMetadataService::onOmdbError);
+    if (m_omdbService) {
+        connect(m_omdbService.get(), &OmdbService::ratingsFetched,
+                this, &MediaMetadataService::onOmdbRatingsFetched);
+        connect(m_omdbService.get(), &OmdbService::error,
+                this, &MediaMetadataService::onOmdbError);
+    }
 }
 
 void MediaMetadataService::getCompleteMetadata(const QString& contentId, const QString& type)

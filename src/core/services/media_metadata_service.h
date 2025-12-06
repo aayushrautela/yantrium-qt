@@ -6,17 +6,25 @@
 #include <QVariantMap>
 #include <QMap>
 #include <QDateTime>
+#include <memory>
+#include <QtQmlIntegration/qqmlintegration.h>
+#include "interfaces/imedia_metadata_service.h"
 
 class TmdbDataService;
 class OmdbService;
 class TraktCoreService;
 
-class MediaMetadataService : public QObject
+class MediaMetadataService : public QObject, public IMediaMetadataService
 {
     Q_OBJECT
+    QML_ELEMENT
 
 public:
-    explicit MediaMetadataService(QObject* parent = nullptr);
+    explicit MediaMetadataService(
+        std::shared_ptr<TmdbDataService> tmdbService,
+        std::shared_ptr<OmdbService> omdbService,
+        TraktCoreService* traktService,
+        QObject* parent = nullptr);
     
     Q_INVOKABLE void getCompleteMetadata(const QString& contentId, const QString& type);
     Q_INVOKABLE void getCompleteMetadataFromTmdbId(int tmdbId, const QString& type);
@@ -38,8 +46,8 @@ private slots:
     void onOmdbError(const QString& message, const QString& imdbId);
 
 private:
-    TmdbDataService* m_tmdbService;
-    OmdbService* m_omdbService;
+    std::shared_ptr<TmdbDataService> m_tmdbService;
+    std::shared_ptr<OmdbService> m_omdbService;
     TraktCoreService* m_traktService;
     
     // Track pending requests

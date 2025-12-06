@@ -9,6 +9,8 @@
 #include <QJsonArray>
 #include <QMap>
 #include <QList>
+#include <memory>
+#include <QtQmlIntegration/qqmlintegration.h>
 #include "features/addons/logic/addon_repository.h"
 #include "features/addons/logic/addon_client.h"
 #include "features/addons/models/addon_config.h"
@@ -21,17 +23,27 @@
 #include "core/services/frontend_data_mapper.h"
 #include "core/services/omdb_service.h"
 #include "core/database/catalog_preferences_dao.h"
+#include "interfaces/ilibrary_service.h"
 
 class DatabaseManager;
 class LocalLibraryService;
 
-class LibraryService : public QObject
+class LibraryService : public QObject, public ILibraryService
 {
     Q_OBJECT
+    QML_ELEMENT
 
 public:
-    explicit LibraryService(QObject* parent = nullptr);
-    ~LibraryService();
+    explicit LibraryService(
+        std::shared_ptr<AddonRepository> addonRepository,
+        std::shared_ptr<TmdbDataService> tmdbService,
+        std::shared_ptr<TmdbSearchService> tmdbSearchService,
+        std::shared_ptr<MediaMetadataService> mediaMetadataService,
+        std::shared_ptr<OmdbService> omdbService,
+        std::shared_ptr<LocalLibraryService> localLibraryService,
+        std::unique_ptr<CatalogPreferencesDao> catalogPreferencesDao,
+        TraktCoreService* traktService = nullptr,
+        QObject* parent = nullptr);
     
     Q_INVOKABLE void loadCatalogs();
     Q_INVOKABLE void loadCatalog(const QString& addonId, const QString& type, const QString& id = QString());
@@ -98,14 +110,14 @@ private:
     QVariantMap traktPlaybackItemToVariantMap(const QVariantMap& traktItem);
     void finishLoadingCatalogs();
     
-    AddonRepository* m_addonRepository;
+    std::shared_ptr<AddonRepository> m_addonRepository;
     TraktCoreService* m_traktService;
-    TmdbDataService* m_tmdbService;
-    TmdbSearchService* m_tmdbSearchService;
-    MediaMetadataService* m_mediaMetadataService;
-    OmdbService* m_omdbService;
-    LocalLibraryService* m_localLibraryService;
-    CatalogPreferencesDao* m_catalogPreferencesDao;
+    std::shared_ptr<TmdbDataService> m_tmdbService;
+    std::shared_ptr<TmdbSearchService> m_tmdbSearchService;
+    std::shared_ptr<MediaMetadataService> m_mediaMetadataService;
+    std::shared_ptr<OmdbService> m_omdbService;
+    std::shared_ptr<LocalLibraryService> m_localLibraryService;
+    std::unique_ptr<CatalogPreferencesDao> m_catalogPreferencesDao;
     QList<AddonClient*> m_activeClients;
     QList<CatalogSection> m_catalogSections;
     QVariantList m_continueWatching;

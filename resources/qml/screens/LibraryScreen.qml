@@ -13,17 +13,10 @@ Item {
     // TraktCoreService is a singleton, accessed directly
     property TraktCoreService traktService: TraktCoreService
     
-    property LocalLibraryService localLibrary: LocalLibraryService {
-        id: localLibraryService
-    }
-    
-    property LibraryService libraryService: LibraryService {
-        id: libraryService
-    }
-    
-    property MediaMetadataService metadataService: MediaMetadataService {
-        id: metadataService
-    }
+    // All services are singletons, accessed directly
+    property LocalLibraryService localLibrary: LocalLibraryService
+    property LibraryService libraryService: LibraryService
+    property MediaMetadataService metadataService: MediaMetadataService
     
     signal itemClicked(string contentId, string type, string addonId)
     
@@ -99,7 +92,7 @@ Item {
         } else {
             // Load local library
             console.log("[LibraryScreen] Loading local library")
-            localLibraryService.getLibraryItems()
+            localLibrary.getLibraryItems()
         }
     }
     
@@ -258,7 +251,7 @@ Item {
     }
     
     Connections {
-        target: localLibraryService
+        target: localLibrary
         function onLibraryItemsLoaded(items) {
             console.log("[LibraryScreen] Local library items loaded:", items.length, "items")
             libraryModel.clear()

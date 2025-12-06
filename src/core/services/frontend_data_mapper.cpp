@@ -610,7 +610,7 @@ QVariantMap FrontendDataMapper::mapContinueWatchingItem(const QVariantMap& trakt
     return map;
 }
 
-QVariantList FrontendDataMapper::mapSearchResultsToVariantList(const QJsonArray& results, const QString& mediaType)
+QVariantList FrontendDataMapper::mapSearchResultsToVariantList(const QJsonArray& results, [[maybe_unused]] const QString& mediaType)
 {
     QVariantList variantList;
     

@@ -13,6 +13,7 @@
 #include <QQueue>
 #include <QSqlDatabase>
 #include <QUrlQuery>
+#include <memory>
 #include "../models/trakt_models.h"
 #include "../database/trakt_auth_dao.h"
 
@@ -101,9 +102,9 @@ private:
     QString getContentKeyFromPayload(const QJsonObject& payload);
     bool isRecentlyScrobbled(const QString& contentKey);
     
-    QNetworkAccessManager* m_networkManager;
+    std::unique_ptr<QNetworkAccessManager> m_networkManager;
     QSqlDatabase m_database;
-    TraktAuthDao* m_authDao;
+    std::unique_ptr<TraktAuthDao> m_authDao;
     
     // Authentication state
     QString m_accessToken;
@@ -124,7 +125,7 @@ private:
         const char* slot;
     };
     QQueue<QueuedRequest> m_requestQueue;
-    QTimer* m_queueTimer;
+    std::unique_ptr<QTimer> m_queueTimer;
     bool m_isProcessingQueue;
     
     // Deduplication
@@ -144,7 +145,7 @@ private:
     int m_completionThreshold;  // Default 81% (more than 80% is considered watched)
     
     // Cleanup timer
-    QTimer* m_cleanupTimer;
+    std::unique_ptr<QTimer> m_cleanupTimer;
     
     // Caching
     struct CachedTraktData {
@@ -166,8 +167,8 @@ private:
     int getTtlForEndpoint(const QString& endpoint) const;
     
     // Sync tracking and watch history
-    SyncTrackingDao* m_syncDao;
-    WatchHistoryDao* m_watchHistoryDao;
+    std::unique_ptr<SyncTrackingDao> m_syncDao;
+    std::unique_ptr<WatchHistoryDao> m_watchHistoryDao;
     
     // Sync helper methods
     int processAndStoreWatchedMovies(const QVariantList& movies);

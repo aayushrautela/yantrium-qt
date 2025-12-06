@@ -9,16 +9,25 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
-LibraryService::LibraryService(QObject* parent)
+LibraryService::LibraryService(
+    std::shared_ptr<AddonRepository> addonRepository,
+    std::shared_ptr<TmdbDataService> tmdbService,
+    std::shared_ptr<TmdbSearchService> tmdbSearchService,
+    std::shared_ptr<MediaMetadataService> mediaMetadataService,
+    std::shared_ptr<OmdbService> omdbService,
+    std::shared_ptr<LocalLibraryService> localLibraryService,
+    std::unique_ptr<CatalogPreferencesDao> catalogPreferencesDao,
+    TraktCoreService* traktService,
+    QObject* parent)
     : QObject(parent)
-    , m_addonRepository(new AddonRepository(this))
-    , m_traktService(&TraktCoreService::instance())
-    , m_tmdbService(new TmdbDataService(this))
-    , m_tmdbSearchService(new TmdbSearchService(this))
-    , m_mediaMetadataService(new MediaMetadataService(this))
-    , m_omdbService(new OmdbService(this))
-    , m_localLibraryService(new LocalLibraryService(this))
-    , m_catalogPreferencesDao(new CatalogPreferencesDao())
+    , m_addonRepository(std::move(addonRepository))
+    , m_traktService(traktService ? traktService : &TraktCoreService::instance())
+    , m_tmdbService(std::move(tmdbService))
+    , m_tmdbSearchService(std::move(tmdbSearchService))
+    , m_mediaMetadataService(std::move(mediaMetadataService))
+    , m_omdbService(std::move(omdbService))
+    , m_localLibraryService(std::move(localLibraryService))
+    , m_catalogPreferencesDao(std::move(catalogPreferencesDao))
     , m_pendingCatalogRequests(0)
     , m_isLoadingCatalogs(false)
     , m_isRawExport(false)
@@ -29,48 +38,41 @@ LibraryService::LibraryService(QObject* parent)
     , m_searchMoviesReceived(false)
     , m_searchTvReceived(false)
 {
-    qWarning() << "[LibraryService] ===== Constructor called =====";
-    qWarning() << "[LibraryService] LibraryService instance created";
-    qWarning() << "[LibraryService] m_tmdbSearchService pointer:" << (void*)m_tmdbSearchService;
-    
     // Connect to Trakt service for continue watching
     connect(m_traktService, &TraktCoreService::playbackProgressFetched,
             this, &LibraryService::onPlaybackProgressFetched);
     
     // Connect to TMDB service for continue watching images
-    connect(m_tmdbService, &TmdbDataService::movieMetadataFetched,
-            this, &LibraryService::onTmdbMovieMetadataFetched);
-    connect(m_tmdbService, &TmdbDataService::tvMetadataFetched,
-            this, &LibraryService::onTmdbTvMetadataFetched);
-    connect(m_tmdbService, &TmdbDataService::tmdbIdFound,
-            this, &LibraryService::onTmdbIdFound);
-    connect(m_tmdbService, &TmdbDataService::error,
-            this, &LibraryService::onTmdbError);
-    connect(m_tmdbService, &TmdbDataService::similarMoviesFetched,
-            this, &LibraryService::onSimilarMoviesFetched);
-    connect(m_tmdbService, &TmdbDataService::similarTvFetched,
-            this, &LibraryService::onSimilarTvFetched);
-    connect(m_tmdbService, &TmdbDataService::tvSeasonDetailsFetched,
-            this, &LibraryService::onTvSeasonDetailsFetched);
+    if (m_tmdbService) {
+        connect(m_tmdbService.get(), &TmdbDataService::movieMetadataFetched,
+                this, &LibraryService::onTmdbMovieMetadataFetched);
+        connect(m_tmdbService.get(), &TmdbDataService::tvMetadataFetched,
+                this, &LibraryService::onTmdbTvMetadataFetched);
+        connect(m_tmdbService.get(), &TmdbDataService::tmdbIdFound,
+                this, &LibraryService::onTmdbIdFound);
+        connect(m_tmdbService.get(), &TmdbDataService::error,
+                this, &LibraryService::onTmdbError);
+        connect(m_tmdbService.get(), &TmdbDataService::similarMoviesFetched,
+                this, &LibraryService::onSimilarMoviesFetched);
+        connect(m_tmdbService.get(), &TmdbDataService::similarTvFetched,
+                this, &LibraryService::onSimilarTvFetched);
+        connect(m_tmdbService.get(), &TmdbDataService::tvSeasonDetailsFetched,
+                this, &LibraryService::onTvSeasonDetailsFetched);
+    }
     
     // Connect to MediaMetadataService for item details
-    connect(m_mediaMetadataService, &MediaMetadataService::metadataLoaded,
-            this, &LibraryService::onMediaMetadataLoaded);
-    connect(m_mediaMetadataService, &MediaMetadataService::error,
-            this, &LibraryService::onMediaMetadataError);
+    if (m_mediaMetadataService) {
+        connect(m_mediaMetadataService.get(), &MediaMetadataService::metadataLoaded,
+                this, &LibraryService::onMediaMetadataLoaded);
+        connect(m_mediaMetadataService.get(), &MediaMetadataService::error,
+                this, &LibraryService::onMediaMetadataError);
+    }
 
     // Connect to LocalLibraryService for smart play
-    connect(m_localLibraryService, &LocalLibraryService::watchProgressLoaded,
-            this, &LibraryService::onWatchProgressLoaded);
-    
-    qDebug() << "[LibraryService] Connected to Trakt, TMDB, MediaMetadata, and OMDB service signals";
-}
-
-LibraryService::~LibraryService()
-{
-    // Clean up active clients
-    qDeleteAll(m_activeClients);
-    m_activeClients.clear();
+    if (m_localLibraryService) {
+        connect(m_localLibraryService.get(), &LocalLibraryService::watchProgressLoaded,
+                this, &LibraryService::onWatchProgressLoaded);
+    }
 }
 
 void LibraryService::loadCatalogs()
@@ -343,7 +345,7 @@ void LibraryService::searchTmdb(const QString& query)
     }
     
     qWarning() << "[LibraryService] Searching TMDB for:" << query;
-    qWarning() << "[LibraryService] m_tmdbSearchService pointer:" << (void*)m_tmdbSearchService;
+    qWarning() << "[LibraryService] m_tmdbSearchService pointer:" << (void*)m_tmdbSearchService.get();
     
     // Track pending searches
     m_pendingSearchQuery = query;
@@ -354,14 +356,14 @@ void LibraryService::searchTmdb(const QString& query)
     
     qWarning() << "[LibraryService] Disconnecting previous signal connections";
     // Connect to search service signals (use disconnect first to avoid duplicates)
-    disconnect(m_tmdbSearchService, &TmdbSearchService::moviesFound, this, nullptr);
-    disconnect(m_tmdbSearchService, &TmdbSearchService::tvFound, this, nullptr);
-    disconnect(m_tmdbSearchService, &TmdbSearchService::error, this, nullptr);
+    disconnect(m_tmdbSearchService.get(), &TmdbSearchService::moviesFound, this, nullptr);
+    disconnect(m_tmdbSearchService.get(), &TmdbSearchService::tvFound, this, nullptr);
+    disconnect(m_tmdbSearchService.get(), &TmdbSearchService::error, this, nullptr);
     
     qWarning() << "[LibraryService] Connecting to search service signals";
-    bool moviesConnected = connect(m_tmdbSearchService, &TmdbSearchService::moviesFound, this, &LibraryService::onSearchMoviesFound);
-    bool tvConnected = connect(m_tmdbSearchService, &TmdbSearchService::tvFound, this, &LibraryService::onSearchTvFound);
-    bool errorConnected = connect(m_tmdbSearchService, &TmdbSearchService::error, this, &LibraryService::onSearchError);
+    bool moviesConnected = connect(m_tmdbSearchService.get(), &TmdbSearchService::moviesFound, this, &LibraryService::onSearchMoviesFound);
+    bool tvConnected = connect(m_tmdbSearchService.get(), &TmdbSearchService::tvFound, this, &LibraryService::onSearchTvFound);
+    bool errorConnected = connect(m_tmdbSearchService.get(), &TmdbSearchService::error, this, &LibraryService::onSearchError);
     
     qWarning() << "[LibraryService] Signal connections - movies:" << moviesConnected << "tv:" << tvConnected << "error:" << errorConnected;
     

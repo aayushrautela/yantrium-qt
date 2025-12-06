@@ -40,7 +40,7 @@ public:
 
     // Critical sync operations - mark as [[nodiscard]]
     [[nodiscard]] bool upsertSyncTracking(std::string_view syncType, const QDateTime& lastSyncAt, bool fullSyncCompleted = true);
-    [[nodiscard]] SyncTrackingRecord getSyncTracking(std::string_view syncType);
+    [[nodiscard]] SyncTrackingRecord getSyncTracking(std::string_view syncType) const;
     [[nodiscard]] QList<SyncTrackingRecord> getAllSyncTracking();
     [[nodiscard]] bool deleteSyncTracking(std::string_view syncType);
 

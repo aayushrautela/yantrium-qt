@@ -6,15 +6,18 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QVariantList>
+#include <memory>
+#include <QtQmlIntegration/qqmlintegration.h>
 #include "tmdb_api_client.h"
 #include "../models/tmdb_models.h"
 
 class TmdbDataService : public QObject
 {
     Q_OBJECT
+    QML_ELEMENT
 
 public:
-    explicit TmdbDataService(QObject* parent = nullptr);
+    explicit TmdbDataService(std::unique_ptr<TmdbApiClient> apiClient = nullptr, QObject* parent = nullptr);
     
     Q_INVOKABLE void getTmdbIdFromImdb(const QString& imdbId);
     Q_INVOKABLE void getMovieMetadata(int tmdbId);
@@ -45,7 +48,7 @@ signals:
 
 private slots:
     void onApiClientError(const TmdbErrorInfo& errorInfo);
-    void onCachedResponseReady(const QString& path, const QUrlQuery& query, const QJsonObject& data);
+    void onCachedResponseReady(const QString& path, [[maybe_unused]] const QUrlQuery& query, const QJsonObject& data);
     void onFindReplyFinished();
     void onMovieMetadataReplyFinished();
     void onTvMetadataReplyFinished();
@@ -57,7 +60,7 @@ private slots:
     void onTvSeasonDetailsReplyFinished();
 
 private:
-    TmdbApiClient* m_apiClient;
+    std::unique_ptr<TmdbApiClient> m_apiClient;
     QMap<QNetworkReply*, QString> m_replyContexts; // Track reply context for error handling
     
     void handleReply(QNetworkReply* reply, const QString& context);

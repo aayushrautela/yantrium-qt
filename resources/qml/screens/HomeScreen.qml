@@ -9,27 +9,16 @@ Item {
     id: root
 
     // --- Services ---
-    property LibraryService libraryService: LibraryService {
-        id: libraryService
-        Component.onCompleted: console.log("[HomeScreen] LibraryService ready")
-    }
-
-    property CatalogPreferencesService catalogPrefsService: CatalogPreferencesService {
-        id: catalogPrefsService
-    }
-    
-    property LocalLibraryService localLibraryService: LocalLibraryService {
-        id: localLibraryService
-    }
-    
+    // All services are singletons, accessed directly
+    property LibraryService libraryService: LibraryService
+    property CatalogPreferencesService catalogPrefsService: CatalogPreferencesService
+    property LocalLibraryService localLibraryService: LocalLibraryService
     property TraktAuthService traktAuthService: TraktAuthService
+    property StreamService streamService: StreamService
     
+    // TraktWatchlistService is registered as a type, can be instantiated
     property TraktWatchlistService traktWatchlistService: TraktWatchlistService {
         id: traktWatchlistService
-    }
-    
-    property StreamService streamService: StreamService {
-        id: streamService
     }
 
     // --- Connections ---
@@ -72,6 +61,7 @@ Item {
     // --- Initialization ---
     Component.onCompleted: {
         console.log("[HomeScreen] Component.onCompleted")
+        console.log("[HomeScreen] LibraryService ready:", libraryService)
         console.log("[HomeScreen] libraryService:", libraryService)
         // Only load on first creation - MainApp will handle refreshes after watching content
         if (libraryService && catalogSectionsModel.count === 0) {
@@ -131,6 +121,10 @@ Item {
 
                 for (let j = 0; j < itemsArray.length; j++) {
                     let item = itemsArray[j]
+                    // Debug first few items to see what IDs we're getting
+                    if (j < 3) {
+                        console.log("[HomeScreen] Item", j, "- Title:", item.title || item.name, "ID:", item.id, "IMDB:", item.imdbId, "TMDB:", item.tmdbId)
+                    }
                     cardModel.append({
                         posterUrl: item.posterUrl || item.poster || "",
                         title: item.title || item.name || "Unknown",
@@ -140,6 +134,8 @@ Item {
                         badgeText: item.badgeText || "",
                         isHighlighted: item.isHighlighted || false,
                         id: item.id || "",
+                        imdbId: item.imdbId || "",
+                        tmdbId: item.tmdbId || "",
                         type: item.type || section.type || "",
                         addonId: section.addonId || ""
                     })
@@ -237,7 +233,9 @@ Item {
                 episode: item.episode || 0,
                 episodeTitle: item.episodeTitle || "",
                 progress: item.progress || item.progressPercent || 0,
-                rating: item.rating || ""
+                rating: item.rating || "",
+                id: item.id || "",
+                imdbId: item.imdbId || ""
             })
         }
     }
@@ -565,7 +563,35 @@ Item {
                                         onExited: isHovered = false
                                         onClicked: {
                                             var addonId = model.addonId || sectionColumn.sectionAddonId || ""
-                                            root.itemClicked(model.id || "", model.type || "", addonId)
+                                            
+                                            // Debug logging
+                                            console.log("[HomeScreen] Catalog item clicked - Title:", model.title)
+                                            console.log("[HomeScreen] Model ID:", model.id, "IMDB ID:", model.imdbId, "TMDB ID:", model.tmdbId, "Type:", model.type)
+                                            
+                                            // Get content ID - IMDB ID only (for testing)
+                                            // Note: MediaMetadataService converts IMDB to TMDB internally for metadata fetching
+                                            var contentId = ""
+                                            
+                                            // First try IMDB ID (preferred - addons use IMDB, more stable identifier)
+                                            if (model.imdbId && model.imdbId.startsWith("tt")) {
+                                                contentId = model.imdbId
+                                            }
+                                            // Then try ID field - only if it's IMDB format
+                                            else if (model.id && model.id !== "") {
+                                                if (model.id.startsWith("tt")) {
+                                                    // IMDB format
+                                                    contentId = model.id
+                                                }
+                                                // Skip TMDB formats (tmdb:123 or numeric IDs)
+                                            }
+                                            
+                                            if (!contentId) {
+                                                console.error("[HomeScreen] No contentId found for item:", model.title)
+                                                return
+                                            }
+                                            
+                                            console.log("[HomeScreen] Final contentId:", contentId, "addonId:", addonId, "type:", model.type)
+                                            root.itemClicked(contentId, model.type || "", addonId)
                                         }
                                     }
 

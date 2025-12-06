@@ -7,12 +7,12 @@
 #include <QDebug>
 #include <algorithm>
 
-TmdbDataService::TmdbDataService(QObject* parent)
+TmdbDataService::TmdbDataService(std::unique_ptr<TmdbApiClient> apiClient, QObject* parent)
     : QObject(parent)
-    , m_apiClient(new TmdbApiClient(this))
+    , m_apiClient(apiClient ? std::move(apiClient) : std::make_unique<TmdbApiClient>(this))
 {
-    connect(m_apiClient, &TmdbApiClient::error, this, &TmdbDataService::onApiClientError);
-    connect(m_apiClient, &TmdbApiClient::cachedResponseReady, this, &TmdbDataService::onCachedResponseReady);
+    connect(m_apiClient.get(), &TmdbApiClient::error, this, &TmdbDataService::onApiClientError);
+    connect(m_apiClient.get(), &TmdbApiClient::cachedResponseReady, this, &TmdbDataService::onCachedResponseReady);
 }
 
 void TmdbDataService::onApiClientError(const TmdbErrorInfo& errorInfo)
@@ -30,7 +30,7 @@ void TmdbDataService::onApiClientError(const TmdbErrorInfo& errorInfo)
     emit error(errorMessage);
 }
 
-void TmdbDataService::onCachedResponseReady(const QString& path, const QUrlQuery& query, const QJsonObject& data)
+void TmdbDataService::onCachedResponseReady(const QString& path, [[maybe_unused]] const QUrlQuery& query, const QJsonObject& data)
 {
     qDebug() << "[TmdbDataService] Processing cached response for:" << path;
     

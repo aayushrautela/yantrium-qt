@@ -147,27 +147,29 @@ ApplicationWindow {
                             item.loadCatalogs()
                             // Connect itemClicked signal to show detail screen
                             item.itemClicked.connect(function(contentId, type, addonId) {
+                                console.log("[MainApp] HomeScreen itemClicked - contentId:", contentId, "type:", type, "addonId:", addonId)
                                 if (contentId && type) {
+                                    // Always activate loader first
+                                    detailLoader.active = true
+                                    
                                     // Store pending data
                                     detailLoader.pendingContentId = contentId
                                     detailLoader.pendingType = type
                                     detailLoader.pendingAddonId = addonId || ""
                                     
-                                    // Store pending data and activate loader
-                                    // The switch will happen in onStatusChanged when loader is ready
-                                    detailLoader.pendingContentId = contentId
-                                    detailLoader.pendingType = type
-                                    detailLoader.pendingAddonId = addonId || ""
-                                    detailLoader.active = true
-                                    
-                                    // If already loaded, switch immediately
+                                    // If already loaded, switch immediately and load
                                     if (detailLoader.status === Loader.Ready && detailLoader.item) {
+                                        console.log("[MainApp] DetailScreen already loaded, calling loadDetails with contentId:", contentId)
                                         stackLayout.currentIndex = 4
                                         detailLoader.item.loadDetails(contentId, type, addonId || "")
                                         detailLoader.pendingContentId = ""
                                         detailLoader.pendingType = ""
                                         detailLoader.pendingAddonId = ""
+                                    } else {
+                                        console.log("[MainApp] DetailScreen not ready yet, will load when ready. Status:", detailLoader.status)
                                     }
+                                } else {
+                                    console.error("[MainApp] Invalid itemClicked - missing contentId or type. contentId:", contentId, "type:", type)
                                 }
                             })
                             // Connect playRequested signal to video player
@@ -341,26 +343,27 @@ ApplicationWindow {
                             })
 
                             // Load details if we have pending data
-                            if (pendingContentId && pendingType) {
+                            if (detailLoader.pendingContentId && detailLoader.pendingType) {
+                                console.log("[MainApp] DetailScreen loaded with pending data - contentId:", detailLoader.pendingContentId)
                                 // Switch to detail screen first
                                 stackLayout.currentIndex = 4
                                 // Then load details
-                                item.loadDetails(pendingContentId, pendingType, pendingAddonId)
-                                pendingContentId = ""
-                                pendingType = ""
-                                pendingAddonId = ""
+                                item.loadDetails(detailLoader.pendingContentId, detailLoader.pendingType, detailLoader.pendingAddonId)
+                                detailLoader.pendingContentId = ""
+                                detailLoader.pendingType = ""
+                                detailLoader.pendingAddonId = ""
                             }
                         }
                     }
                     
                     onStatusChanged: {
-                        // When detail loader becomes ready and we have pending data, switch to it
-                        if (status === Loader.Ready && item && pendingContentId && pendingType) {
+                        if (status === Loader.Ready && item && detailLoader.pendingContentId && detailLoader.pendingType) {
+                            console.log("[MainApp] DetailScreen became ready with pending data - contentId:", detailLoader.pendingContentId)
                             stackLayout.currentIndex = 4
-                            item.loadDetails(pendingContentId, pendingType, pendingAddonId)
-                            pendingContentId = ""
-                            pendingType = ""
-                            pendingAddonId = ""
+                            item.loadDetails(detailLoader.pendingContentId, detailLoader.pendingType, detailLoader.pendingAddonId)
+                            detailLoader.pendingContentId = ""
+                            detailLoader.pendingType = ""
+                            detailLoader.pendingAddonId = ""
                         }
                     }
                 }

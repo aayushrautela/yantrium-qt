@@ -5,6 +5,7 @@
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
+#include <memory>
 #include "../database/local_library_dao.h"
 #include "../database/watch_history_dao.h"
 
@@ -40,8 +41,8 @@ signals:
 
 private:
     DatabaseManager* m_dbManager;
-    LocalLibraryDao* m_libraryDao;
-    WatchHistoryDao* m_historyDao;
+    std::unique_ptr<LocalLibraryDao> m_libraryDao;
+    std::unique_ptr<WatchHistoryDao> m_historyDao;
     
     QVariantMap recordToVariantMap(const LocalLibraryRecord& record);
     LocalLibraryRecord variantMapToRecord(const QVariantMap& map);

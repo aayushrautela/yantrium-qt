@@ -6,9 +6,8 @@ import Yantrium.Services 1.0
 Dialog {
     id: root
     
-    property StreamService streamService: StreamService {
-        id: streamService
-    }
+    // StreamService is a singleton, accessed directly
+    property StreamService streamService: StreamService
     
     property var streams: []
     property bool isLoading: false

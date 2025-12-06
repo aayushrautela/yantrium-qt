@@ -23,32 +23,28 @@ TraktCoreService& TraktCoreService::instance()
 
 TraktCoreService::TraktCoreService(QObject* parent)
     : QObject(parent)
-    , m_networkManager(new QNetworkAccessManager(this))
+    , m_networkManager(std::make_unique<QNetworkAccessManager>(this))
     , m_authDao(nullptr)
     , m_tokenExpiry(0)
     , m_isInitialized(false)
     , m_lastApiCall(0)
-    , m_queueTimer(new QTimer(this))
+    , m_queueTimer(std::make_unique<QTimer>(this))
     , m_isProcessingQueue(false)
     , m_completionThreshold(81)  // More than 80% (>80%) is considered watched
-    , m_cleanupTimer(new QTimer(this))
+    , m_cleanupTimer(std::make_unique<QTimer>(this))
     , m_syncDao(nullptr)
     , m_watchHistoryDao(nullptr)
 {
     m_queueTimer->setSingleShot(true);
     m_queueTimer->setInterval(MIN_API_INTERVAL_MS);
-    connect(m_queueTimer, &QTimer::timeout, this, &TraktCoreService::processRequestQueue);
+    connect(m_queueTimer.get(), &QTimer::timeout, this, &TraktCoreService::processRequestQueue);
     
     m_cleanupTimer->setInterval(60000);  // Cleanup every minute
-    connect(m_cleanupTimer, &QTimer::timeout, this, &TraktCoreService::cleanupOldData);
+    connect(m_cleanupTimer.get(), &QTimer::timeout, this, &TraktCoreService::cleanupOldData);
     m_cleanupTimer->start();
 }
 
-TraktCoreService::~TraktCoreService()
-{
-    delete m_syncDao;
-    delete m_watchHistoryDao;
-}
+TraktCoreService::~TraktCoreService() = default;
 
 void TraktCoreService::initializeDatabase()
 {
@@ -61,9 +57,9 @@ void TraktCoreService::initializeDatabase()
     m_database = QSqlDatabase::database(DatabaseManager::CONNECTION_NAME);
 
     // Create DAO objects (new pattern - no database parameter)
-    m_authDao = new TraktAuthDao();
-    m_syncDao = new SyncTrackingDao();
-    m_watchHistoryDao = new WatchHistoryDao();
+    m_authDao = std::make_unique<TraktAuthDao>();
+    m_syncDao = std::make_unique<SyncTrackingDao>();
+    m_watchHistoryDao = std::make_unique<WatchHistoryDao>();
     qDebug() << "[TraktCoreService] Database initialized";
 }
 
@@ -587,7 +583,7 @@ void TraktCoreService::syncWatchedMovies(bool forceFullSync)
     }
     
     if (!m_syncDao) {
-        m_syncDao = new SyncTrackingDao();
+        m_syncDao = std::make_unique<SyncTrackingDao>();
     }
     
     QString syncType = "watched_movies";
@@ -615,7 +611,7 @@ void TraktCoreService::syncWatchedShows(bool forceFullSync)
     }
     
     if (!m_syncDao) {
-        m_syncDao = new SyncTrackingDao();
+        m_syncDao = std::make_unique<SyncTrackingDao>();
     }
     
     QString syncType = "watched_shows";
@@ -641,7 +637,7 @@ bool TraktCoreService::isInitialSyncCompleted(const QString& syncType) const
         return false;
     }
     
-    SyncTrackingRecord tracking = const_cast<SyncTrackingDao*>(m_syncDao)->getSyncTracking(std::string_view(syncType.toUtf8().constData(), syncType.toUtf8().size()));
+    SyncTrackingRecord tracking = m_syncDao->getSyncTracking(std::string_view(syncType.toUtf8().constData(), syncType.toUtf8().size()));
     return tracking.fullSyncCompleted;
 }
 
@@ -651,7 +647,7 @@ QDateTime TraktCoreService::getLastSyncTime(const QString& syncType) const
         return QDateTime();
     }
     
-    SyncTrackingRecord tracking = const_cast<SyncTrackingDao*>(m_syncDao)->getSyncTracking(std::string_view(syncType.toUtf8().constData(), syncType.toUtf8().size()));
+    SyncTrackingRecord tracking = m_syncDao->getSyncTracking(std::string_view(syncType.toUtf8().constData(), syncType.toUtf8().size()));
     return tracking.lastSyncAt;
 }
 

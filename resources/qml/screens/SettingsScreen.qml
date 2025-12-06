@@ -9,6 +9,10 @@ Item {
     id: root
     anchors.fill: parent
     
+    // Services (singletons, accessed directly)
+    property AddonRepository addonRepo: AddonRepository
+    property CatalogPreferencesService catalogPrefsService: CatalogPreferencesService
+    
     Rectangle {
         anchors.fill: parent
         color: "#09090b"
@@ -55,22 +59,21 @@ Item {
                             color: "#ffffff"
                         }
                         
-                        AddonRepository {
-                            id: addonRepo
-                            
-                            onAddonInstalled: function(addon) {
+                        Connections {
+                            target: addonRepo
+                            function onAddonInstalled(addon) {
                                 addonStatusText.text = "✓ Addon installed: " + addon.name
                                 addonStatusText.color = "#4CAF50"
                                 refreshAddonList()
                             }
                             
-                            onAddonRemoved: function(addonId) {
+                            function onAddonRemoved(addonId) {
                                 addonStatusText.text = "✓ Removed addon: " + addonId
                                 addonStatusText.color = "#FF9800"
                                 refreshAddonList()
                             }
                             
-                            onError: function(errorMessage) {
+                            function onError(errorMessage) {
                                 addonStatusText.text = "✗ Error: " + errorMessage
                                 addonStatusText.color = "#F44336"
                             }
@@ -481,14 +484,13 @@ Item {
                             color: "#ffffff"
                         }
                         
-                        CatalogPreferencesService {
-                            id: catalogPrefsService
-                            
-                            onCatalogsUpdated: {
+                        Connections {
+                            target: catalogPrefsService
+                            function onCatalogsUpdated() {
                                 refreshCatalogList()
                             }
                             
-                            onError: function(message) {
+                            function onError(message) {
                                 catalogStatusText.text = "✗ Error: " + message
                                 catalogStatusText.color = "#F44336"
                             }
@@ -823,27 +825,24 @@ Item {
         }
     }
     
-    // Library service for exporting catalog data
-    property LibraryService libraryService: LibraryService {
-        id: exportLibraryService
-        
-        Component.onCompleted: {
-            console.log("[Settings] Export LibraryService created")
-        }
-        
-        onCatalogsLoaded: function(sections) {
+    // Library service for exporting catalog data (singleton, accessed directly)
+    property LibraryService libraryService: LibraryService
+    
+    Connections {
+        target: libraryService
+        function onCatalogsLoaded(sections) {
             console.log("[Settings] Export: catalogsLoaded signal received, sections:", sections ? sections.length : 0)
             exportTimeout.stop()
             exportCatalogDataToFile(sections, false) // false = processed data
         }
         
-        onRawCatalogsLoaded: function(rawData) {
+        function onRawCatalogsLoaded(rawData) {
             console.log("[Settings] Export: rawCatalogsLoaded signal received, sections:", rawData ? rawData.length : 0)
             exportTimeout.stop()
             exportCatalogDataToFile(rawData, true) // true = raw data
         }
         
-        onError: function(message) {
+        function onError(message) {
             console.error("[Settings] Export error:", message)
             catalogStatusText.text = "✗ Export error: " + message
             catalogStatusText.color = "#F44336"

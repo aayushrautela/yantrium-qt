@@ -34,7 +34,7 @@ struct WatchHistoryRecord
     WatchHistoryRecord(QString contentId, QString type, QString title,
                       QDateTime watchedAt, int year = 0)
         : contentId(std::move(contentId)), type(std::move(type)),
-          title(std::move(title)), watchedAt(watchedAt), year(year) {}
+          title(std::move(title)), year(year), watchedAt(watchedAt) {}
 
     // Constructor for watching an episode
     WatchHistoryRecord(QString contentId, QString type, QString title,

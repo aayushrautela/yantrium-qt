@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <memory>
 #include "../models/trakt_models.h"
 #include "../services/trakt_core_service.h"
 
@@ -19,7 +20,7 @@ public:
     explicit TraktScrobbleService(QObject* parent = nullptr);
     
     Q_INVOKABLE void scrobbleStart(const QJsonObject& contentData, double progress);
-    Q_INVOKABLE void scrobblePause(const QJsonObject& contentData, double progress, bool force = false);
+    Q_INVOKABLE void scrobblePause(const QJsonObject& contentData, double progress, [[maybe_unused]] bool force = false);
     Q_INVOKABLE void scrobbleStop(const QJsonObject& contentData, double progress);
     Q_INVOKABLE void scrobblePauseImmediate(const QJsonObject& contentData, double progress);
     Q_INVOKABLE void scrobbleStopImmediate(const QJsonObject& contentData, double progress);
@@ -55,7 +56,7 @@ private slots:
 
 private:
     TraktCoreService& m_coreService;
-    QNetworkAccessManager* m_networkManager;
+    std::unique_ptr<QNetworkAccessManager> m_networkManager;
     
     bool validateContentData(const QJsonObject& contentData);
     QJsonObject buildScrobblePayload(const QJsonObject& contentData, double progress);

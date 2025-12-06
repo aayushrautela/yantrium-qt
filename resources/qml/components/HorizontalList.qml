@@ -93,7 +93,13 @@ Rectangle {
                             
                             
                             item.clicked.connect(function() {
-                                console.log("Clicked on:", model.title)
+                                // Get content ID (prefer imdbId, same as hero section)
+                                var contentId = model.imdbId || model.id || ""
+                                // Ensure we're using imdbId format if available
+                                if (model.imdbId && model.imdbId.startsWith("tt")) {
+                                    contentId = model.imdbId
+                                }
+                                root.itemClicked(contentId, model.type || "", model.addonId || root.addonId || "")
                             })
                         } else {
                             item.posterUrl = Qt.binding(function() { return model.posterUrl || model.poster || "" })
@@ -104,7 +110,13 @@ Rectangle {
                             item.badgeText = Qt.binding(function() { return model.badgeText || "" })
                             item.isHighlighted = Qt.binding(function() { return model.isHighlighted || false })
                             item.clicked.connect(function() {
-                                root.itemClicked(model.id || "", model.type || "", model.addonId || root.addonId || "")
+                                // Get content ID (prefer imdbId, same as hero section)
+                                var contentId = model.imdbId || model.id || ""
+                                // Ensure we're using imdbId format if available
+                                if (model.imdbId && model.imdbId.startsWith("tt")) {
+                                    contentId = model.imdbId
+                                }
+                                root.itemClicked(contentId, model.type || "", model.addonId || root.addonId || "")
                             })
                         }
                     }

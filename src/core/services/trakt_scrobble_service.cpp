@@ -11,7 +11,7 @@
 TraktScrobbleService::TraktScrobbleService(QObject* parent)
     : QObject(parent)
     , m_coreService(TraktCoreService::instance())
-    , m_networkManager(new QNetworkAccessManager(this))
+    , m_networkManager(std::make_unique<QNetworkAccessManager>(this))
 {
     DatabaseManager& dbManager = DatabaseManager::instance();
     if (dbManager.isInitialized()) {
@@ -118,7 +118,7 @@ void TraktScrobbleService::scrobbleStart(const QJsonObject& contentData, double 
     m_coreService.apiRequest("/scrobble/start", "POST", payload, this, SLOT(onScrobbleReplyFinished()));
 }
 
-void TraktScrobbleService::scrobblePause(const QJsonObject& contentData, double progress, bool force)
+void TraktScrobbleService::scrobblePause(const QJsonObject& contentData, double progress, [[maybe_unused]] bool force)
 {
     if (!validateContentData(contentData)) {
         return;

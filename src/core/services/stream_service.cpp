@@ -14,54 +14,26 @@
 #include <QUrl>
 #include <QList>
 
-StreamService::StreamService(QObject* parent)
+StreamService::StreamService(
+    std::shared_ptr<AddonRepository> addonRepository,
+    std::shared_ptr<TmdbDataService> tmdbDataService,
+    LibraryService* libraryService,
+    QObject* parent)
     : QObject(parent)
-    , m_addonRepository(new AddonRepository(this))
-    , m_tmdbDataService(new TmdbDataService(this))
-    , m_libraryService(nullptr)
+    , m_addonRepository(std::move(addonRepository))
+    , m_tmdbDataService(std::move(tmdbDataService))
+    , m_libraryService(libraryService)
     , m_completedRequests(0)
     , m_totalRequests(0)
     , m_waitingForImdbId(false)
 {
     // Connect to TMDB service signals
     if (m_tmdbDataService) {
-        connect(m_tmdbDataService, &TmdbDataService::movieMetadataFetched,
+        connect(m_tmdbDataService.get(), &TmdbDataService::movieMetadataFetched,
                 this, &StreamService::onTmdbMovieMetadataFetched);
-        connect(m_tmdbDataService, &TmdbDataService::tvMetadataFetched,
+        connect(m_tmdbDataService.get(), &TmdbDataService::tvMetadataFetched,
                 this, &StreamService::onTmdbTvMetadataFetched);
     }
-}
-
-StreamService::~StreamService()
-{
-}
-
-void StreamService::setAddonRepository(AddonRepository* addonRepository)
-{
-    if (m_addonRepository && m_addonRepository->parent() == this) {
-        m_addonRepository->deleteLater();
-    }
-    m_addonRepository = addonRepository;
-}
-
-void StreamService::setTmdbDataService(TmdbDataService* tmdbDataService)
-{
-    if (m_tmdbDataService && m_tmdbDataService->parent() == this) {
-        disconnect(m_tmdbDataService, nullptr, this, nullptr);
-        m_tmdbDataService->deleteLater();
-    }
-    m_tmdbDataService = tmdbDataService;
-    if (m_tmdbDataService) {
-        connect(m_tmdbDataService, &TmdbDataService::movieMetadataFetched,
-                this, &StreamService::onTmdbMovieMetadataFetched);
-        connect(m_tmdbDataService, &TmdbDataService::tvMetadataFetched,
-                this, &StreamService::onTmdbTvMetadataFetched);
-    }
-}
-
-void StreamService::setLibraryService(LibraryService* libraryService)
-{
-    m_libraryService = libraryService;
 }
 
 QString StreamService::extractImdbId(const QVariantMap& itemData)

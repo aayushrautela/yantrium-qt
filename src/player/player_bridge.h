@@ -2,6 +2,10 @@
 #define PLAYER_BRIDGE_H
 
 #include <QQuickFramebufferObject>
+#include <QQuickWindow>
+#include <QTimer>
+#include <memory>
+#include <QtQmlIntegration/qqmlintegration.h>
 #include "mdk_player.h"
 
 class PlayerRenderer;
@@ -9,6 +13,7 @@ class PlayerRenderer;
 class PlayerBridge : public QQuickFramebufferObject
 {
     Q_OBJECT
+    QML_ELEMENT
     Q_PROPERTY(QString source READ source WRITE setSource NOTIFY sourceChanged)
     Q_PROPERTY(bool isPlaying READ isPlaying NOTIFY isPlayingChanged)
     Q_PROPERTY(int64_t duration READ duration NOTIFY durationChanged)
@@ -46,7 +51,8 @@ private slots:
     void handleWindowChanged(QQuickWindow *win);
     
 private:
-    MDKPlayer *m_player;
+    std::unique_ptr<MDKPlayer> m_player;
+    std::unique_ptr<QTimer> m_updateTimer;
     QString m_source;
     bool m_isPlaying;
 };

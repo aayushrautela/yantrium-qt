@@ -9,7 +9,7 @@
 
 TmdbSearchService::TmdbSearchService(QObject* parent)
     : QObject(parent)
-    , m_networkManager(new QNetworkAccessManager(this))
+    , m_networkManager(std::make_unique<QNetworkAccessManager>(this))
     , m_currentReply(nullptr)
 {
 }

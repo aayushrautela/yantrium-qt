@@ -28,7 +28,7 @@ public:
     static QVariantMap mapContinueWatchingItem(const QVariantMap& traktItem, const QJsonObject& tmdbData = QJsonObject());
     
     // Search Results to VariantList - for search results
-    static QVariantList mapSearchResultsToVariantList(const QJsonArray& results, const QString& mediaType);
+    static QVariantList mapSearchResultsToVariantList(const QJsonArray& results, [[maybe_unused]] const QString& mediaType);
     
     // Similar Items to VariantList - for similar content
     static QVariantList mapSimilarItemsToVariantList(const QJsonArray& results, const QString& type);

@@ -81,7 +81,7 @@ private:
 
 PlayerBridge::PlayerBridge(QQuickItem *parent)
     : QQuickFramebufferObject(parent)
-    , m_player(new MDKPlayer(this))
+    , m_player(std::make_unique<MDKPlayer>(this))
     , m_source()
     , m_isPlaying(false)
 {
@@ -93,17 +93,18 @@ PlayerBridge::PlayerBridge(QQuickItem *parent)
     connect(this, &QQuickItem::windowChanged, this, &PlayerBridge::handleWindowChanged);
     
     // Setup timer to continuously update the FBO while playing
-    QTimer *updateTimer = new QTimer(this);
-    connect(updateTimer, &QTimer::timeout, this, [this]() {
+    auto updateTimer = std::make_unique<QTimer>(this);
+    connect(updateTimer.get(), &QTimer::timeout, this, [this]() {
         if (m_isPlaying) {
             update(); // Trigger FBO update
         }
     });
     updateTimer->start(33); // ~30 FPS
+    m_updateTimer = std::move(updateTimer); // Store as member
     qDebug() << "[PlayerBridge] Update timer started for continuous rendering";
     
     // Connect to MDKPlayer state changes
-    connect(m_player, &MDKPlayer::stateChanged, this, [this](int state) {
+    connect(m_player.get(), &MDKPlayer::stateChanged, this, [this](int state) {
         // State enum: 0=Stopped/NotRunning, 1=Playing/Running, 2=Paused
         qDebug() << "[PlayerBridge] State changed to:" << state;
         bool playing = (state == 1); // mdk::State::Playing
@@ -125,7 +126,7 @@ PlayerBridge::PlayerBridge(QQuickItem *parent)
     });
     
     // Connect to MDKPlayer position changes
-    connect(m_player, &MDKPlayer::positionChanged, this, &PlayerBridge::positionChanged);
+    connect(m_player.get(), &MDKPlayer::positionChanged, this, &PlayerBridge::positionChanged);
     qDebug() << "[PlayerBridge] Connected to MDKPlayer signals";
 }
 
@@ -226,7 +227,7 @@ QQuickFramebufferObject::Renderer *PlayerBridge::createRenderer() const
 {
     std::cout << "[PlayerBridge] createRenderer() called - creating PlayerRenderer" << std::endl;
     std::cout.flush();
-    return new PlayerRenderer(m_player);
+    return new PlayerRenderer(m_player.get());
 }
 
 void PlayerBridge::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)

@@ -7,6 +7,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QUrlQuery>
+#include <memory>
 
 class OmdbService : public QObject
 {
@@ -25,7 +26,7 @@ private slots:
     void onRatingsReplyFinished();
 
 private:
-    QNetworkAccessManager* m_networkManager;
+    std::unique_ptr<QNetworkAccessManager> m_networkManager;
     
     QUrl buildUrl(const QString& imdbId);
     void handleError(QNetworkReply* reply, const QString& context, const QString& imdbId = QString());

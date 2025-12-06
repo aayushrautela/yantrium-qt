@@ -9,27 +9,41 @@ Item {
     id: root
     
     property var itemData: ({})  // QVariantMap from parent
-    property LibraryService libraryService: LibraryService {
-        id: libraryService
-    }
     
-    // TraktAuthService is a singleton, accessed directly
+    // All services are singletons, accessed directly
+    property LibraryService libraryService: LibraryService
     property TraktAuthService traktAuthService: TraktAuthService
+    property LocalLibraryService localLibrary: LocalLibraryService
     
+    // TraktWatchlistService is registered as a type, can be instantiated
     property TraktWatchlistService traktWatchlist: TraktWatchlistService {
         id: traktWatchlistService
     }
     
-    property LocalLibraryService localLibrary: LocalLibraryService {
-        id: localLibraryService
-    }
-    
     property bool isInLibrary: false
     property var smartPlayState: ({})
+    property string currentRequestContentId: ""  // Track current request to ignore stale responses
 
     Connections {
         target: libraryService
         function onItemDetailsLoaded(details) {
+            // Check if this response matches the current request (ignore stale responses)
+            // Compare both id and imdbId fields since contentId could be either format
+            var responseId = details.id || ""
+            var responseImdbId = details.imdbId || ""
+            
+            if (root.currentRequestContentId) {
+                // Match if response id or imdbId matches the request
+                var matches = (responseId === root.currentRequestContentId) || 
+                             (responseImdbId === root.currentRequestContentId)
+                
+                if (!matches) {
+                    console.log("[DetailScreen] Ignoring stale response - expected:", root.currentRequestContentId, 
+                               "got id:", responseId, "imdbId:", responseImdbId)
+                    return
+                }
+            }
+            
             root.itemData = details
             root.isLoading = false
 
@@ -79,6 +93,8 @@ Item {
         function onError(message) {
             console.error("[DetailScreen] Error:", message)
             root.isLoading = false
+            // Clear request tracking on error so we can retry
+            root.currentRequestContentId = ""
         }
     }
 
@@ -257,7 +273,22 @@ Item {
     signal playRequested(string streamUrl, var contentData)
     
     function loadDetails(contentId, type, addonId) {
-        if (!contentId || !type) return
+        console.log("[DetailScreen] loadDetails called - contentId:", contentId, "type:", type, "addonId:", addonId)
+        if (!contentId || !type) {
+            console.error("[DetailScreen] Missing contentId or type - contentId:", contentId, "type:", type)
+            return
+        }
+        
+        // Track this request to ignore stale responses
+        root.currentRequestContentId = contentId
+        
+        // Clear old data to prevent showing stale content
+        root.itemData = {}
+        root.similarItems = []
+        root.smartPlayState = {}
+        root.currentSeasonEpisodes = []
+        root.isInLibrary = false
+        
         isLoading = true
         libraryService.loadItemDetails(contentId, type, addonId || "")
     }
@@ -449,7 +480,8 @@ Item {
                                 font.pixelSize: 80
                                 font.bold: true
                                 color: "#ff0000"
-                                visible: !logoImage.visible || logoImage.status === Image.Error
+                                // Only show text if logo is missing (no URL) or failed to load
+                                visible: (root.itemData.logoUrl || root.itemData.logo) === "" || logoImage.status === Image.Error
                             }
                         }
                         

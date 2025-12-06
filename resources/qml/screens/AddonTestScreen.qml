@@ -61,34 +61,36 @@ Item {
                             color: "#FFFFFF"
                         }
 
-                        AddonRepository {
-                            id: addonRepo
-                            
-                            onAddonInstalled: {
+                        property AddonRepository addonRepo: AddonRepository
+                        
+                        Connections {
+                            target: addonRepo
+                            function onAddonInstalled() {
                                 statusText.text = "✓ Addon installed successfully!"
                                 statusText.color = "#4CAF50"
                                 addonCount.text = "Total Addons: " + addonRepo.listAddonsCount()
                                 enabledCount.text = "Enabled: " + addonRepo.getEnabledAddonsCount()
                             }
                             
-                            onAddonUpdated: {
+                            function onAddonUpdated() {
                                 statusText.text = "✓ Addon updated successfully!"
                                 statusText.color = "#2196F3"
                                 addonCount.text = "Total Addons: " + addonRepo.listAddonsCount()
                                 enabledCount.text = "Enabled: " + addonRepo.getEnabledAddonsCount()
                             }
                             
-                            onAddonRemoved: function(addonId) {
+                            function onAddonRemoved(addonId) {
                                 statusText.text = "✓ Removed addon: " + addonId
                                 statusText.color = "#FF9800"
                                 addonCount.text = "Total Addons: " + addonRepo.listAddonsCount()
                                 enabledCount.text = "Enabled: " + addonRepo.getEnabledAddonsCount()
                             }
                             
-                            onError: function(errorMessage) {
+                            function onError(errorMessage) {
                                 statusText.text = "✗ Error: " + errorMessage
                                 statusText.color = "#F44336"
                             }
+                        }
                         }
 
                         // Status display

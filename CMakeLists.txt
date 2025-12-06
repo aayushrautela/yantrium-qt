@@ -5,6 +5,16 @@ project(Yantrium VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Modern CMake: use target-based approach
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Compiler warnings
+if(MSVC)
+    add_compile_options(/W4 /WX-)
+else()
+    add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+endif()
+
 # 1. ENABLE QT AUTOMATION
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -20,6 +30,18 @@ set(PROJECT_SOURCES
     src/main.cpp
     src/app_controller.cpp
     src/app_controller.h
+    # Core DI
+    src/core/di/service_registry.cpp
+    src/core/di/service_registry.h
+    # Core service interfaces
+    src/core/services/interfaces/itmdb_data_service.h
+    src/core/services/interfaces/imedia_metadata_service.h
+    src/core/services/interfaces/istream_service.h
+    src/core/services/interfaces/ilibrary_service.h
+    # Core concepts and errors
+    src/core/concepts.h
+    src/core/errors/result.h
+    src/core/errors/error_types.h
     src/player/player_bridge.cpp
     src/player/player_bridge.h
     src/player/mdk_player.cpp

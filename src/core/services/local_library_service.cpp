@@ -8,12 +8,10 @@ LocalLibraryService::LocalLibraryService(QObject* parent)
     , m_dbManager(&DatabaseManager::instance())
 {
     if (m_dbManager->isInitialized()) {
-        m_libraryDao = new LocalLibraryDao();
-        m_historyDao = new WatchHistoryDao();
+        m_libraryDao = std::make_unique<LocalLibraryDao>();
+        m_historyDao = std::make_unique<WatchHistoryDao>();
     } else {
         qWarning() << "[LocalLibraryService] Database not initialized";
-        m_libraryDao = nullptr;
-        m_historyDao = nullptr;
     }
 }
 

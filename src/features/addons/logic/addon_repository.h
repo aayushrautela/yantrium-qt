@@ -8,6 +8,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <memory> // Required for std::unique_ptr
+#include <QtQmlIntegration/qqmlintegration.h>
 
 #include "../models/addon_config.h"
 #include "../models/addon_manifest.h"
@@ -21,6 +22,7 @@ class AddonClient;
 class AddonRepository : public QObject
 {
     Q_OBJECT
+    QML_ELEMENT
 
 public:
     explicit AddonRepository(QObject* parent = nullptr);
