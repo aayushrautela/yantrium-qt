@@ -99,7 +99,7 @@ Item {
     }
 
     Connections {
-        target: localLibraryService
+        target: localLibrary
         function onLibraryItemAdded(success) {
             if (success) {
                 console.log("[DetailScreen] Item added to local library successfully")
@@ -129,7 +129,7 @@ Item {
     }
 
     Connections {
-        target: traktWatchlistService
+        target: traktWatchlist
         function onWatchlistItemAdded(success) {
             if (success) {
                 console.log("[DetailScreen] Item added to Trakt watchlist successfully")
@@ -194,11 +194,11 @@ Item {
                 type = "movie"
             }
             console.log("[DetailScreen] Checking Trakt watchlist - contentId:", contentId, "type:", type)
-            traktWatchlistService.isInWatchlist(contentId, type)
+            traktWatchlist.isInWatchlist(contentId, type)
         } else {
             // Check local library
             console.log("[DetailScreen] Checking local library - contentId:", contentId)
-            localLibraryService.isInLibrary(contentId)
+            localLibrary.isInLibrary(contentId)
         }
     }
     
@@ -813,17 +813,17 @@ Item {
                                         console.log("[DetailScreen] Removing from library - contentId:", contentId, "type:", type, "isInLibrary:", root.isInLibrary)
 
                                         if (traktAuthService.isAuthenticated) {
-                                            traktWatchlistService.removeFromWatchlist(type, contentId)
+                                            traktWatchlist.removeFromWatchlist(type, contentId)
                                         } else {
                                             console.log("[DetailScreen] Calling removeFromLibrary with contentId:", contentId)
-                                            localLibraryService.removeFromLibrary(contentId)
+                                            localLibrary.removeFromLibrary(contentId)
                                         }
                                     } else {
                                         // Add to library
                                         console.log("[DetailScreen] Adding to library - contentId:", contentId, "type:", type)
 
                                         if (traktAuthService.isAuthenticated) {
-                                            traktWatchlistService.addToWatchlist(type, contentId)
+                                            traktWatchlist.addToWatchlist(type, contentId)
                                         } else {
                                             var libraryItem = {
                                                 contentId: contentId,
@@ -840,7 +840,7 @@ Item {
                                             }
 
                                             console.log("[DetailScreen] Calling addToLibrary with item - contentId:", libraryItem.contentId)
-                                            localLibraryService.addToLibrary(libraryItem)
+                                            localLibrary.addToLibrary(libraryItem)
                                         }
                                     }
                                 }
