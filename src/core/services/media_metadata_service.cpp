@@ -68,6 +68,11 @@ void MediaMetadataService::getCompleteMetadata(const QString& contentId, const Q
     
     // If IMDB ID, search for TMDB ID first
     if (tmdbId == 0 && contentId.startsWith("tt")) {
+        if (!m_tmdbService) {
+            qWarning() << "[MediaMetadataService] TMDB service not available, cannot fetch metadata";
+            emit error("TMDB service not available");
+            return;
+        }
         qDebug() << "[MediaMetadataService] IMDB ID detected, fetching TMDB ID first";
         m_tmdbService->getTmdbIdFromImdb(contentId);
         
@@ -104,6 +109,12 @@ void MediaMetadataService::getCompleteMetadataFromTmdbId(int tmdbId, const QStri
 {
     qDebug() << "[MediaMetadataService] getCompleteMetadataFromTmdbId called - tmdbId:" << tmdbId << "type:" << type;
     
+    if (!m_tmdbService) {
+        qWarning() << "[MediaMetadataService] TMDB service not available, cannot fetch metadata";
+        emit error("TMDB service not available");
+        return;
+    }
+    
     // Fetch metadata based on type
     if (type == "movie") {
         m_tmdbService->getMovieMetadata(tmdbId);
@@ -126,6 +137,12 @@ void MediaMetadataService::onTmdbIdFound(const QString& imdbId, int tmdbId)
     PendingRequest& request = m_pendingDetailsByImdbId[imdbId];
     request.tmdbId = tmdbId;
     m_tmdbIdToImdbId[tmdbId] = imdbId;
+    
+    if (!m_tmdbService) {
+        qWarning() << "[MediaMetadataService] TMDB service not available, cannot fetch metadata";
+        emit error("TMDB service not available");
+        return;
+    }
     
     // Fetch metadata based on type
     if (request.type == "movie") {
@@ -187,6 +204,17 @@ void MediaMetadataService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObj
     // Fetch OMDB ratings if we have an IMDB ID and API key is configured
     Configuration& config = Configuration::instance();
     if (!imdbId.isEmpty() && imdbId.startsWith("tt") && !config.omdbApiKey().isEmpty()) {
+        if (!m_omdbService) {
+            qWarning() << "[MediaMetadataService] OMDB service not available, emitting metadata without ratings";
+            // Cache and emit metadata without OMDB ratings
+            QString cacheKey = contentId + "|" + type;
+            CachedMetadata cached;
+            cached.data = details;
+            cached.timestamp = QDateTime::currentDateTime();
+            m_metadataCache[cacheKey] = cached;
+            emit metadataLoaded(details);
+            return;
+        }
         // Store details keyed by IMDB ID for matching when OMDB response arrives
         m_pendingDetailsByImdbId[imdbId] = {contentId, type, tmdbId, details};
         qDebug() << "[MediaMetadataService] Stored pending details for IMDB ID:" << imdbId << "contentId:" << contentId;
@@ -264,6 +292,11 @@ void MediaMetadataService::onTmdbTvMetadataFetched(int tmdbId, const QJsonObject
     // Fetch OMDB ratings if we have an IMDB ID and API key is configured
     Configuration& config = Configuration::instance();
     if (!imdbId.isEmpty() && imdbId.startsWith("tt") && !config.omdbApiKey().isEmpty()) {
+        if (!m_omdbService) {
+            qWarning() << "[MediaMetadataService] OMDB service not available, emitting metadata without ratings";
+            emit metadataLoaded(details);
+            return;
+        }
         // Store details keyed by IMDB ID for matching when OMDB response arrives
         m_pendingDetailsByImdbId[imdbId] = {contentId, type, tmdbId, details};
         qDebug() << "[MediaMetadataService] Stored pending details for IMDB ID:" << imdbId << "contentId:" << contentId;

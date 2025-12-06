@@ -710,11 +710,13 @@ Item {
                             spacing: 12
                             
                             Button {
-                                width: 140
-                                height: 44
+                                width: 160
+                                height: 52
+                                scale: hovered ? 1.05 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
                                 background: Rectangle {
                                     color: "#ffffff"
-                                    radius: 22  // Pill shape (half of height)
+                                    radius: 26  // Pill shape (half of height)
                                 }
                                 contentItem: Item {
                                     Row {
@@ -763,32 +765,22 @@ Item {
                             }
                             
                             Button {
-                                width: 140
-                                height: 44
+                                width: 160
+                                height: 52
+                                scale: hovered ? 1.05 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
                                 background: Rectangle {
                                     color: "#40000000"
                                     border.width: 1
                                     border.color: "#ffffff"
-                                    radius: 4
+                                    radius: 26
                                 }
-                                contentItem: Item {
-                                    Row {
-                                    spacing: 4
-                                    anchors.centerIn: parent
-                                    
-                                    Text {
-                                        text: root.isInLibrary ? "✓" : "+"
-                                        font.pixelSize: 20
-                                        color: "#ffffff"
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-                                    Text {
-                                        text: root.isInLibrary ? "In Library" : "Add to Library"
-                                        font.pixelSize: 18
-                                        color: "#ffffff"
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-                                    }
+                                contentItem: Text {
+                                    text: root.isInLibrary ? "✓ Library" : "+ Library"
+                                    font.pixelSize: 16
+                                    color: "#ffffff"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
                                 }
                                 onClicked: {
                                     // Always prefer imdbId for consistency - this is what's stored in the database

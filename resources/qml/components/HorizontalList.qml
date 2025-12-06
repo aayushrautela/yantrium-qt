@@ -93,11 +93,20 @@ Rectangle {
                             
                             
                             item.clicked.connect(function() {
-                                // Get content ID (prefer imdbId, same as hero section)
-                                var contentId = model.imdbId || model.id || ""
-                                // Ensure we're using imdbId format if available
-                                if (model.imdbId && model.imdbId.startsWith("tt")) {
+                                // Get content ID - prefer TMDB ID if available (1 API call), otherwise IMDB ID (2 API calls)
+                                var contentId = ""
+                                if (model.tmdbId && model.tmdbId !== "") {
+                                    contentId = model.tmdbId
+                                } else if (model.imdbId && model.imdbId.startsWith("tt")) {
                                     contentId = model.imdbId
+                                } else if (model.id && model.id !== "") {
+                                    if (model.id.startsWith("tt")) {
+                                        contentId = model.id
+                                    } else if (model.id.startsWith("tmdb:")) {
+                                        contentId = model.id.substring(5)
+                                    } else if (!isNaN(model.id) && parseInt(model.id) > 0) {
+                                        contentId = model.id
+                                    }
                                 }
                                 root.itemClicked(contentId, model.type || "", model.addonId || root.addonId || "")
                             })
@@ -110,11 +119,20 @@ Rectangle {
                             item.badgeText = Qt.binding(function() { return model.badgeText || "" })
                             item.isHighlighted = Qt.binding(function() { return model.isHighlighted || false })
                             item.clicked.connect(function() {
-                                // Get content ID (prefer imdbId, same as hero section)
-                                var contentId = model.imdbId || model.id || ""
-                                // Ensure we're using imdbId format if available
-                                if (model.imdbId && model.imdbId.startsWith("tt")) {
+                                // Get content ID - prefer TMDB ID if available (1 API call), otherwise IMDB ID (2 API calls)
+                                var contentId = ""
+                                if (model.tmdbId && model.tmdbId !== "") {
+                                    contentId = model.tmdbId
+                                } else if (model.imdbId && model.imdbId.startsWith("tt")) {
                                     contentId = model.imdbId
+                                } else if (model.id && model.id !== "") {
+                                    if (model.id.startsWith("tt")) {
+                                        contentId = model.id
+                                    } else if (model.id.startsWith("tmdb:")) {
+                                        contentId = model.id.substring(5)
+                                    } else if (!isNaN(model.id) && parseInt(model.id) > 0) {
+                                        contentId = model.id
+                                    }
                                 }
                                 root.itemClicked(contentId, model.type || "", model.addonId || root.addonId || "")
                             })

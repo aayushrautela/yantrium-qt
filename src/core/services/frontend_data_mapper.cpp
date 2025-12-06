@@ -114,6 +114,19 @@ QJsonObject FrontendDataMapper::mapTmdbToCatalogItem(const QJsonObject& tmdbData
         result["castFull"] = cast;
         result["crewFull"] = crew;
         result["videos"] = trailers;
+        
+        // Extract both IDs from TMDB data
+        int tmdbIdInt = tmdbData["id"].toInt();
+        if (tmdbIdInt > 0) {
+            result["tmdbId"] = QString::number(tmdbIdInt);
+        }
+        
+        QJsonObject externalIds = tmdbData["external_ids"].toObject();
+        QString imdbId = externalIds["imdb_id"].toString();
+        if (!imdbId.isEmpty()) {
+            result["imdbId"] = imdbId;
+            result["imdb_id"] = imdbId; // Also set as imdb_id for compatibility
+        }
     } catch (...) {
         qDebug() << "Error converting TMDB data to catalog item";
         return QJsonObject();
@@ -349,6 +362,17 @@ QVariantMap FrontendDataMapper::mapCatalogItemToVariantMap(const QJsonObject& it
         }
     }
     
+    // Extract TMDB ID from separate field if available
+    if (item.contains("tmdb_id") || item.contains("tmdbId")) {
+        QString tmdbId = item["tmdb_id"].toString();
+        if (tmdbId.isEmpty()) {
+            tmdbId = item["tmdbId"].toString();
+        }
+        if (!tmdbId.isEmpty()) {
+            map["tmdbId"] = tmdbId;
+        }
+    }
+    
     // Extract year - check multiple sources
     bool yearFound = false;
     if (item.contains("year")) {
@@ -491,22 +515,33 @@ QVariantMap FrontendDataMapper::mapContinueWatchingItem(const QVariantMap& trakt
         }
     }
     
-    // Extract IMDB ID from Trakt (needed for identification, but display data comes from TMDB)
+    // Extract both IMDB and TMDB IDs from Trakt (needed for identification, but display data comes from TMDB)
     QString imdbId;
+    QString tmdbId;
     if (type == "movie") {
         QVariantMap movie = traktItem["movie"].toMap();
         QVariantMap ids = movie["ids"].toMap();
         imdbId = ids["imdb"].toString();
+        tmdbId = ids["tmdb"].toString();
     } else if (type == "episode") {
         QVariantMap show = traktItem["show"].toMap();
         QVariantMap showIds = show["ids"].toMap();
         imdbId = showIds["imdb"].toString();
+        tmdbId = showIds["tmdb"].toString();
     }
     map["imdbId"] = imdbId;
+    map["tmdbId"] = tmdbId;
+    // Use IMDB ID as primary identifier (canonical, stable)
     map["id"] = imdbId;
     
     // ALL display data comes from TMDB
     if (!tmdbData.isEmpty()) {
+        // Extract TMDB ID from TMDB data if not already set from Trakt
+        if (tmdbId.isEmpty()) {
+            tmdbId = QString::number(tmdbData["id"].toInt());
+            map["tmdbId"] = tmdbId;
+        }
+        
         if (type == "movie") {
             // Movie display data from TMDB
             map["title"] = tmdbData["title"].toString();
@@ -754,6 +789,22 @@ QVariantMap FrontendDataMapper::enrichItemWithTmdbData(const QVariantMap& item, 
 
     // Add TMDB-specific fields
     enrichedItem["tmdbDataAvailable"] = true;
+    
+    // Ensure both IDs are preserved/extracted
+    // Extract TMDB ID from TMDB data
+    int tmdbIdInt = tmdbData["id"].toInt();
+    if (tmdbIdInt > 0) {
+        enrichedItem["tmdbId"] = QString::number(tmdbIdInt);
+    }
+    
+    // Extract IMDB ID from TMDB external_ids if not already set
+    if (enrichedItem["imdbId"].toString().isEmpty()) {
+        QJsonObject externalIds = tmdbData["external_ids"].toObject();
+        QString imdbId = externalIds["imdb_id"].toString();
+        if (!imdbId.isEmpty()) {
+            enrichedItem["imdbId"] = imdbId;
+        }
+    }
 
     // Extract runtime
     if (type == "movie") {

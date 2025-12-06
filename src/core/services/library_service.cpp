@@ -710,8 +710,17 @@ void LibraryService::onPlaybackProgressFetched(const QVariantList& progress)
         QVariantMap movie = item["movie"].toMap();
         QVariantMap ids = movie["ids"].toMap();
         QString imdbId = ids["imdb"].toString();
+        int tmdbId = ids["tmdb"].toInt();
         
-        if (!imdbId.isEmpty()) {
+        // Prefer TMDB ID if available (1 API call instead of 2)
+        if (tmdbId > 0) {
+            QString key = QString("tmdb:%1").arg(tmdbId);
+            m_pendingContinueWatchingItems[key] = item;
+            m_tmdbIdToImdbId[tmdbId] = imdbId;
+            m_pendingTmdbRequests++;
+            m_tmdbService->getMovieMetadata(tmdbId);
+        } else if (!imdbId.isEmpty()) {
+            // Fallback to IMDB ID (requires conversion call)
             m_pendingContinueWatchingItems[imdbId] = item;
             m_pendingTmdbRequests++;
             m_tmdbService->getTmdbIdFromImdb(imdbId);
@@ -724,18 +733,28 @@ void LibraryService::onPlaybackProgressFetched(const QVariantList& progress)
         QVariantMap show = item["show"].toMap();
         QVariantMap showIds = show["ids"].toMap();
         QString imdbId = showIds["imdb"].toString();
+        int tmdbId = showIds["tmdb"].toInt();
         
-        if (!imdbId.isEmpty()) {
-            // Debug: Verify episode data is in the item before storing
-            if (item.contains("episode")) {
-                QVariantMap episode = item["episode"].toMap();
-                qDebug() << "[LibraryService] Storing episode item - IMDB:" << imdbId
-                         << "S" << episode["season"].toInt() << "E" << episode["number"].toInt()
-                         << "Title:" << episode["title"].toString();
-            } else {
-                qWarning() << "[LibraryService] Episode item missing episode data before storing!";
-            }
-            
+        // Debug: Verify episode data is in the item before storing
+        if (item.contains("episode")) {
+            QVariantMap episode = item["episode"].toMap();
+            qDebug() << "[LibraryService] Storing episode item - IMDB:" << imdbId
+                     << "TMDB:" << tmdbId
+                     << "S" << episode["season"].toInt() << "E" << episode["number"].toInt()
+                     << "Title:" << episode["title"].toString();
+        } else {
+            qWarning() << "[LibraryService] Episode item missing episode data before storing!";
+        }
+        
+        // Prefer TMDB ID if available (1 API call instead of 2)
+        if (tmdbId > 0) {
+            QString key = QString("tmdb:%1").arg(tmdbId);
+            m_pendingContinueWatchingItems[key] = item;
+            m_tmdbIdToImdbId[tmdbId] = imdbId;
+            m_pendingTmdbRequests++;
+            m_tmdbService->getTvMetadata(tmdbId);
+        } else if (!imdbId.isEmpty()) {
+            // Fallback to IMDB ID (requires conversion call)
             m_pendingContinueWatchingItems[imdbId] = item;
             m_pendingTmdbRequests++;
             m_tmdbService->getTmdbIdFromImdb(imdbId);
@@ -1322,17 +1341,25 @@ void LibraryService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& d
         return;
     }
     
-    QString imdbId = m_tmdbIdToImdbId[tmdbId];
-    if (!m_pendingContinueWatchingItems.contains(imdbId)) {
-        qWarning() << "[LibraryService] Movie metadata for unknown IMDB ID:" << imdbId;
-        m_pendingTmdbRequests--;
-        if (m_pendingTmdbRequests == 0) {
-            finishContinueWatchingLoading();
-        }
-        return;
-    }
+    // Try to find the item by TMDB ID key first, then by IMDB ID
+    QString key = QString("tmdb:%1").arg(tmdbId);
+    QVariantMap traktItem;
     
-    QVariantMap traktItem = m_pendingContinueWatchingItems[imdbId];
+    if (m_pendingContinueWatchingItems.contains(key)) {
+        traktItem = m_pendingContinueWatchingItems[key];
+    } else {
+        QString imdbId = m_tmdbIdToImdbId.value(tmdbId);
+        if (!imdbId.isEmpty() && m_pendingContinueWatchingItems.contains(imdbId)) {
+            traktItem = m_pendingContinueWatchingItems[imdbId];
+        } else {
+            qWarning() << "[LibraryService] Movie metadata for unknown TMDB ID:" << tmdbId;
+            m_pendingTmdbRequests--;
+            if (m_pendingTmdbRequests == 0) {
+                finishContinueWatchingLoading();
+            }
+            return;
+        }
+    }
     QVariantMap continueItem = FrontendDataMapper::mapContinueWatchingItem(traktItem, data);
     
     if (!continueItem.isEmpty()) {
@@ -1363,26 +1390,25 @@ void LibraryService::onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data
 
     qCritical() << "[LibraryService] This was NOT a hero item, processing as regular request";
 
-    if (!m_tmdbIdToImdbId.contains(tmdbId)) {
-        qWarning() << "[LibraryService] Received TV metadata for unknown TMDB ID:" << tmdbId;
-        m_pendingTmdbRequests--;
-        if (m_pendingTmdbRequests == 0) {
-            finishContinueWatchingLoading();
-        }
-        return;
-    }
+    // Try to find the item by TMDB ID key first, then by IMDB ID
+    QString key = QString("tmdb:%1").arg(tmdbId);
+    QVariantMap traktItem;
     
-    QString imdbId = m_tmdbIdToImdbId[tmdbId];
-    if (!m_pendingContinueWatchingItems.contains(imdbId)) {
-        qWarning() << "[LibraryService] TV metadata for unknown IMDB ID:" << imdbId;
-        m_pendingTmdbRequests--;
-        if (m_pendingTmdbRequests == 0) {
-            finishContinueWatchingLoading();
+    if (m_pendingContinueWatchingItems.contains(key)) {
+        traktItem = m_pendingContinueWatchingItems[key];
+    } else {
+        QString imdbId = m_tmdbIdToImdbId.value(tmdbId);
+        if (!imdbId.isEmpty() && m_pendingContinueWatchingItems.contains(imdbId)) {
+            traktItem = m_pendingContinueWatchingItems[imdbId];
+        } else {
+            qWarning() << "[LibraryService] TV metadata for unknown TMDB ID:" << tmdbId;
+            m_pendingTmdbRequests--;
+            if (m_pendingTmdbRequests == 0) {
+                finishContinueWatchingLoading();
+            }
+            return;
         }
-        return;
     }
-    
-    QVariantMap traktItem = m_pendingContinueWatchingItems[imdbId];
     
     // Debug: Log episode data from Trakt
     if (traktItem.contains("episode")) {

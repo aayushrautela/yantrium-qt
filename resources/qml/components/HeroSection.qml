@@ -244,6 +244,8 @@ Item {
                     width: 160
                     height: 52
                     text: "More Info"
+                    scale: hovered ? 1.05 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
                     background: Rectangle {
                         color: "#40000000"
                         border.width: 1

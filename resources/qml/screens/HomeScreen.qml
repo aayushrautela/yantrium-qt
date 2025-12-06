@@ -568,21 +568,30 @@ Item {
                                             console.log("[HomeScreen] Catalog item clicked - Title:", model.title)
                                             console.log("[HomeScreen] Model ID:", model.id, "IMDB ID:", model.imdbId, "TMDB ID:", model.tmdbId, "Type:", model.type)
                                             
-                                            // Get content ID - IMDB ID only (for testing)
-                                            // Note: MediaMetadataService converts IMDB to TMDB internally for metadata fetching
+                                            // Get content ID - prefer TMDB ID if available (1 API call), otherwise IMDB ID (2 API calls)
+                                            // Note: MediaMetadataService handles both formats
                                             var contentId = ""
                                             
-                                            // First try IMDB ID (preferred - addons use IMDB, more stable identifier)
-                                            if (model.imdbId && model.imdbId.startsWith("tt")) {
+                                            // First try TMDB ID if available (performance optimization - 1 call instead of 2)
+                                            if (model.tmdbId && model.tmdbId !== "") {
+                                                contentId = model.tmdbId
+                                            }
+                                            // Then try IMDB ID (preferred for canonical identification)
+                                            else if (model.imdbId && model.imdbId.startsWith("tt")) {
                                                 contentId = model.imdbId
                                             }
-                                            // Then try ID field - only if it's IMDB format
+                                            // Then try ID field
                                             else if (model.id && model.id !== "") {
                                                 if (model.id.startsWith("tt")) {
                                                     // IMDB format
                                                     contentId = model.id
+                                                } else if (model.id.startsWith("tmdb:")) {
+                                                    // Extract numeric part from tmdb:123
+                                                    contentId = model.id.substring(5)
+                                                } else if (!isNaN(model.id) && parseInt(model.id) > 0) {
+                                                    // Numeric ID - assume TMDB
+                                                    contentId = model.id
                                                 }
-                                                // Skip TMDB formats (tmdb:123 or numeric IDs)
                                             }
                                             
                                             if (!contentId) {
