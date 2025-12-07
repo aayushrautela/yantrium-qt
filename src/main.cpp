@@ -7,6 +7,7 @@
 #include <QDebug>
 #include <QLoggingCategory>
 #include <QTimer>
+#include <QImageReader>
 #include <iostream>
 #include <QtQml>
 #include <QQuickFramebufferObject>
@@ -59,6 +60,17 @@ int main(int argc, char *argv[])
 #endif
 
     qDebug() << "=== Yantrium Player Starting ===";
+    
+    // Check for SVG support (critical for rating logos, especially in Flatpak)
+    QList<QByteArray> supportedFormats = QImageReader::supportedImageFormats();
+    bool hasSvg = supportedFormats.contains("svg") || supportedFormats.contains("svgz");
+    if (!hasSvg) {
+        qWarning() << "[MAIN] WARNING: SVG format not supported! Rating logos may not display.";
+        qWarning() << "[MAIN] Available formats:" << supportedFormats;
+        qWarning() << "[MAIN] This is often a Flatpak/plugin issue. Ensure Qt SVG plugin is available.";
+    } else {
+        qDebug() << "[MAIN] SVG format is supported";
+    }
     
     // Force Qt to use OpenGL (Required for MDK video)
     qputenv("QSG_RHI_BACKEND", "opengl");

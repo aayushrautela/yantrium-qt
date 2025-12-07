@@ -8,20 +8,16 @@ import "../components"
 Item {
     id: root
 
-    // --- Services ---
-    // All services are singletons, accessed directly
     property LibraryService libraryService: LibraryService
     property CatalogPreferencesService catalogPrefsService: CatalogPreferencesService
     property LocalLibraryService localLibraryService: LocalLibraryService
     property TraktAuthService traktAuthService: TraktAuthService
     property StreamService streamService: StreamService
     
-    // TraktWatchlistService is registered as a type, can be instantiated
     property TraktWatchlistService traktWatchlistService: TraktWatchlistService {
         id: traktWatchlistService
     }
 
-    // --- Connections ---
     Connections {
         target: libraryService
         function onCatalogsLoaded(sections) { root.onCatalogsLoaded(sections) }
@@ -29,19 +25,16 @@ Item {
         function onError(message) { root.onError(message) }
     }
 
-    // --- Models ---
     ListModel { id: continueWatchingModel }
     ListModel { id: catalogSectionsModel }
 
-    // --- State ---
     property bool isLoading: false
     property var heroItems: []
     property int currentHeroIndex: 0
     
-    // --- Signals ---
     signal itemClicked(string contentId, string type, string addonId)
 
-    // --- Hero Logic ---
+    // Cycle hero carousel, wrapping around at ends
     function cycleHero(direction) {
         if (heroItems.length <= 1) return
         let newIndex = currentHeroIndex + direction
@@ -58,91 +51,65 @@ Item {
         onTriggered: root.cycleHero(1)
     }
 
-    // --- Initialization ---
     Component.onCompleted: {
         console.log("[HomeScreen] Component.onCompleted")
-        console.log("[HomeScreen] LibraryService ready:", libraryService)
-        console.log("[HomeScreen] libraryService:", libraryService)
-        // Only load on first creation - MainApp will handle refreshes after watching content
+        // Load only on first creation; MainApp handles refreshes after playback
         if (libraryService && catalogSectionsModel.count === 0) {
-            console.log("[HomeScreen] Calling loadCatalogs from Component.onCompleted (first load)")
             loadCatalogs()
-        } else {
-            console.log("[HomeScreen] Skipping initial load - data already exists or service unavailable")
         }
     }
 
     function loadCatalogs() {
-        console.log("[HomeScreen] Requesting catalogs...")
-        console.log("[HomeScreen] libraryService exists:", !!libraryService)
-        console.log("[HomeScreen] libraryService.isValid:", libraryService ? libraryService.isValid : "N/A")
         isLoading = true
         catalogSectionsModel.clear()
         libraryService.loadCatalogs()
     }
 
     function onCatalogsLoaded(sections) {
-        console.log("[HomeScreen] onCatalogsLoaded called with sections:", sections ? sections.length : "null")
         isLoading = false
         if (!sections || sections.length === 0) {
-            console.log("[HomeScreen] No sections received, clearing models")
             catalogSectionsModel.clear()
             return
         }
-        console.log("[HomeScreen] Processing", sections.length, "sections")
         catalogSectionsModel.clear()
 
-        // Hero Logic
+        // Setup Hero section from the first catalog item
         heroItems = []
         if (sections[0].items && sections[0].items.length > 0) {
             heroItems = sections[0].items
-            console.log("[HomeScreen] Loaded", heroItems.length, "hero items")
-            for (let i = 0; i < heroItems.length; i++) {
-                console.log("[HomeScreen] Hero item", i, ":", heroItems[i].title, "- TMDB enriched:", heroItems[i].tmdbDataAvailable || false)
-            }
             currentHeroIndex = 0
             updateHeroSection(heroItems[0], false, 0)
             heroRotationTimer.restart()
-        } else {
-            console.log("[HomeScreen] No hero items found in first section")
         }
 
-        // Populate Models
+        // Populate catalog rows
         for (let i = 0; i < sections.length; i++) {
             let section = sections[i]
             let items = section.items || []
             let cardModel = Qt.createQmlObject('import QtQuick; ListModel {}', catalogSectionsModel)
             
-            if (items && items.length > 0) {
-                let itemsArray = Array.isArray(items) ? items : []
-                if (!Array.isArray(items)) {
-                     try { for(let k=0; k<items.length; k++) itemsArray.push(items[k]) } catch(e){}
-                }
+            // Handle both array and array-like objects from C++
+            let itemsArray = Array.isArray(items) ? items : []
+            if (!Array.isArray(items)) {
+                 try { for(let k=0; k<items.length; k++) itemsArray.push(items[k]) } catch(e){}
+            }
 
-                for (let j = 0; j < itemsArray.length; j++) {
-                    let item = itemsArray[j]
-                    // Debug first few items to see what IDs we're getting
-                    if (j < 3) {
-                        console.log("[HomeScreen] Item", j, "- Title:", item.title || item.name, "ID:", item.id, "IMDB:", item.imdbId, "TMDB:", item.tmdbId)
-                    }
-                    cardModel.append({
-                        posterUrl: item.posterUrl || item.poster || "",
-                        title: item.title || item.name || "Unknown",
-                        year: item.year || 0,
-                        rating: item.rating || "",
-                        progress: item.progress || 0,
-                        badgeText: item.badgeText || "",
-                        isHighlighted: item.isHighlighted || false,
-                        id: item.id || "",
-                        imdbId: item.imdbId || "",
-                        tmdbId: item.tmdbId || "",
-                        type: item.type || section.type || "",
-                        addonId: section.addonId || ""
-                    })
-                }
-                console.log("[HomeScreen] Added section:", section.name, "with", cardModel.count, "items")
-            } else {
-                console.log("[HomeScreen] Section", section.name, "has no items")
+            for (let j = 0; j < itemsArray.length; j++) {
+                let item = itemsArray[j]
+                cardModel.append({
+                    posterUrl: item.posterUrl || item.poster || "",
+                    title: item.title || item.name || "Unknown",
+                    year: item.year || 0,
+                    rating: item.rating || "",
+                    progress: item.progress || 0,
+                    badgeText: item.badgeText || "",
+                    isHighlighted: item.isHighlighted || false,
+                    id: item.id || "",
+                    imdbId: item.imdbId || "",
+                    tmdbId: item.tmdbId || "",
+                    type: item.type || section.type || "",
+                    addonId: section.addonId || ""
+                })
             }
 
             catalogSectionsModel.append({
@@ -151,71 +118,41 @@ Item {
                 itemsModel: cardModel 
             })
         }
-        console.log("[HomeScreen] Total sections in model:", catalogSectionsModel.count)
     }
 
     function updateHeroSection(data, animate, direction) {
-        console.log("[HomeScreen] Updating hero section for:", data.title || "Unknown")
-        console.log("[HomeScreen] Hero data keys:", Object.keys(data))
-        console.log("[HomeScreen] TMDB enriched:", data.tmdbDataAvailable || false)
-        console.log("[HomeScreen] Badge:", data.badgeText || "none")
-        console.log("[HomeScreen] Runtime:", data.runtimeFormatted || "none")
-        console.log("[HomeScreen] Genres:", data.genres || "none")
-        console.log("[HomeScreen] Rating:", data.rating || "none", "Year:", data.year || "none")
-
-        if (!heroLoader.item) {
-            console.log("[HomeScreen] Hero loader item not ready")
-            return
-        }
+        if (!heroLoader.item) return
 
         heroLoader.item.title = data.title || ""
         heroLoader.item.logoUrl = data.logoUrl || data.logo || ""
         heroLoader.item.description = data.description || "No description available."
 
-        // Build metadata array with runtime, genres, and badges
         let meta = []
-
-        // Add rating first
         if (data.rating) meta.push(data.rating.toString())
-
-        // Add year
         if (data.year) meta.push(data.year.toString())
+        if (data.runtimeFormatted) meta.push(data.runtimeFormatted)
 
-        // Add runtime (formatted as hours/minutes)
-        if (data.runtimeFormatted) {
-            meta.push(data.runtimeFormatted)
-        }
-
-        // Add genres (up to 2, space-separated)
-        // Handle different data types from C++ (QVariantList, QStringList, etc.)
+        // Robust genre handling for different data types (Array, QVariantList, String)
         let genreList = []
         if (data.genres) {
-            // Try different ways to access the genres
             if (Array.isArray(data.genres)) {
                 genreList = data.genres
             } else if (typeof data.genres === 'object' && data.genres.length !== undefined) {
-                // Handle array-like objects (QStringList, QVariantList)
-                for (let i = 0; i < data.genres.length; i++) {
-                    genreList.push(data.genres[i])
-                }
+                for (let i = 0; i < data.genres.length; i++) genreList.push(data.genres[i])
             } else if (typeof data.genres === 'string' && data.genres.includes(',')) {
-                // Handle comma-separated string
                 genreList = data.genres.split(',')
             }
         }
 
         if (genreList.length > 0) {
-            let displayGenres = genreList.slice(0, 2).map(g => g.toString().trim()) // Max 2 genres, ensure strings
+            let displayGenres = genreList.slice(0, 2).map(g => g.toString().trim())
             meta.push(displayGenres.join(" "))
         }
 
-        console.log("[HomeScreen] Final metadata array:", meta)
         heroLoader.item.metadata = meta
 
         let bg = data.background || data.backdrop || ""
         heroLoader.item.updateBackdrop(bg, animate ? (direction || 1) : 0)
-
-        console.log("[HomeScreen] Hero section updated successfully")
     }
 
     function onContinueWatchingLoaded(items) {
@@ -243,59 +180,37 @@ Item {
     function onError(message) {
         console.error("[HomeScreen] Error:", message)
         isLoading = false
-        console.log("[HomeScreen] Error state - isLoading:", isLoading, "catalogSectionsModel.count:", catalogSectionsModel.count)
     }
     
     function onHeroPlayClicked() {
-        if (heroItems.length === 0 || currentHeroIndex < 0 || currentHeroIndex >= heroItems.length) {
-            console.warn("[HomeScreen] No hero item available for play")
-            return
-        }
+        if (heroItems.length === 0 || currentHeroIndex < 0) return
         
         var heroItem = heroItems[currentHeroIndex]
-        console.log("[HomeScreen] Hero play clicked for:", heroItem.title || heroItem.name)
-        
-        // Open stream selection dialog
         streamDialog.loadStreams(heroItem, "")
         streamDialog.open()
     }
     
     function onHeroAddToLibraryClicked() {
-        if (heroItems.length === 0 || currentHeroIndex < 0 || currentHeroIndex >= heroItems.length) {
-            console.warn("[HomeScreen] No hero item available for library")
-            return
-        }
+        if (heroItems.length === 0 || currentHeroIndex < 0) return
 
         var heroItem = heroItems[currentHeroIndex]
-        console.log("[HomeScreen] Hero add to library clicked for:", heroItem.title || heroItem.name)
-
-        // Get content ID (prefer imdbId)
         var contentId = heroItem.imdbId || heroItem.id || ""
         var type = heroItem.type || "movie"
 
-        if (!contentId) {
-            console.error("[HomeScreen] Cannot add to library: no contentId")
-            return
-        }
+        if (!contentId) return
 
-        // Ensure we're using imdbId format if available
+        // Prefer IMDB format
         if (heroItem.imdbId && heroItem.imdbId.startsWith("tt")) {
             contentId = heroItem.imdbId
         }
 
-        // Normalize type
-        if (type === "tv" || type === "series") {
-            type = "show"
-        } else {
-            type = "movie"
-        }
+        // Normalize type for internal services
+        if (type === "tv" || type === "series") type = "show"
+        else type = "movie"
 
-        // Add to library
         if (traktAuthService.isAuthenticated) {
-            // Add to Trakt watchlist
             traktWatchlistService.addToWatchlist(type, contentId)
         } else {
-            // Add to local library
             var libraryItem = {
                 contentId: contentId,
                 type: type,
@@ -313,41 +228,25 @@ Item {
     }
 
     function onHeroMoreInfoClicked() {
-        if (heroItems.length === 0 || currentHeroIndex < 0 || currentHeroIndex >= heroItems.length) {
-            console.warn("[HomeScreen] No hero item available for more info")
-            return
-        }
+        if (heroItems.length === 0 || currentHeroIndex < 0) return
 
         var heroItem = heroItems[currentHeroIndex]
-        console.log("[HomeScreen] Hero more info clicked for:", heroItem.title || heroItem.name)
-
-        // Get content ID (prefer imdbId)
         var contentId = heroItem.imdbId || heroItem.id || ""
         var type = heroItem.type || "movie"
         var addonId = heroItem.addonId || ""
 
-        if (!contentId) {
-            console.error("[HomeScreen] Cannot show more info: no contentId")
-            return
-        }
+        if (!contentId) return
 
-        // Ensure we're using imdbId format if available
         if (heroItem.imdbId && heroItem.imdbId.startsWith("tt")) {
             contentId = heroItem.imdbId
         }
 
-        // Normalize type
-        if (type === "tv" || type === "series") {
-            type = "show"
-        } else {
-            type = "movie"
-        }
+        if (type === "tv" || type === "series") type = "show"
+        else type = "movie"
 
-        // Navigate to detail screen
         root.itemClicked(contentId, type, addonId)
     }
 
-    // --- UI Layout ---
     Rectangle {
         anchors.fill: parent
         color: "#09090b"
@@ -355,19 +254,11 @@ Item {
         Keys.onRightPressed: cycleHero(1)
         Keys.onLeftPressed: cycleHero(-1)
 
-        Component.onCompleted: {
-            console.log("[HomeScreen] UI Rectangle completed, size:", width, "x", height)
-        }
-
         ScrollView {
             anchors.fill: parent
             contentWidth: width
             contentHeight: contentColumn.height
             clip: true
-
-            Component.onCompleted: {
-                console.log("[HomeScreen] ScrollView completed, contentHeight:", contentColumn.height)
-            }
 
             Column {
                 id: contentColumn
@@ -375,11 +266,6 @@ Item {
                 spacing: 40
                 bottomPadding: 80
                 
-                Component.onCompleted: {
-                    console.log("[HomeScreen] ContentColumn completed, width:", width)
-                }
-
-                // 1. Hero Section (Full width, no margin)
                 Loader {
                     id: heroLoader
                     width: parent.width
@@ -388,16 +274,12 @@ Item {
                     
                     onLoaded: {
                         if (item) {
-                            item.playClicked.connect(function() {
-                                root.onHeroPlayClicked()
-                            })
-                            item.moreInfoClicked.connect(function() {
-                                root.onHeroMoreInfoClicked()
-                            })
+                            item.playClicked.connect(() => root.onHeroPlayClicked())
+                            item.moreInfoClicked.connect(() => root.onHeroMoreInfoClicked())
                         }
                     }
                     
-                    // Left arrow button
+                    // Left navigation arrow
                     Item {
                         anchors.left: parent.left
                         anchors.top: parent.top
@@ -408,14 +290,39 @@ Item {
 
                         property bool isHovered: false
 
-                        Image {
+                        Item {
                             anchors.centerIn: parent
                             width: 48
                             height: 48
-                            source: "qrc:/assets/icons/arrow-left.svg"
-                            fillMode: Image.PreserveAspectFit
                             opacity: parent.isHovered ? 1.0 : 0.4
                             Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                            Image {
+                                id: leftArrowIcon1
+                                anchors.centerIn: parent
+                                
+                                source: "qrc:/assets/icons/left_catalog.svg"
+
+                                // Large source + mipmap ensures smooth downscaling
+                                sourceSize.width: 128
+                                sourceSize.height: 128
+                                mipmap: true
+                                smooth: true
+                                antialiasing: true
+
+                                width: 48
+                                height: 48
+                                fillMode: Image.PreserveAspectFit
+                                visible: false
+                            }
+
+                            ColorOverlay {
+                                anchors.fill: leftArrowIcon1
+                                source: leftArrowIcon1
+                                color: "#ffffff"
+                                cached: true
+                                antialiasing: true
+                            }
                         }
 
                         MouseArea {
@@ -427,7 +334,7 @@ Item {
                         }
                     }
 
-                    // Right arrow button
+                    // Right navigation arrow
                     Item {
                         anchors.right: parent.right
                         anchors.top: parent.top
@@ -438,14 +345,39 @@ Item {
 
                         property bool isHovered: false
 
-                        Image {
+                        Item {
                             anchors.centerIn: parent
                             width: 48
                             height: 48
-                            source: "qrc:/assets/icons/arrow-right.svg"
-                            fillMode: Image.PreserveAspectFit
                             opacity: parent.isHovered ? 1.0 : 0.4
                             Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                            Image {
+                                id: rightArrowIcon1
+                                anchors.centerIn: parent
+                                
+                                source: "qrc:/assets/icons/right_catalog.svg"
+
+                                // Large source + mipmap ensures smooth downscaling
+                                sourceSize.width: 128
+                                sourceSize.height: 128
+                                mipmap: true
+                                smooth: true
+                                antialiasing: true
+
+                                width: 48
+                                height: 48
+                                fillMode: Image.PreserveAspectFit
+                                visible: false
+                            }
+
+                            ColorOverlay {
+                                anchors.fill: rightArrowIcon1
+                                source: rightArrowIcon1
+                                color: "#ffffff"
+                                cached: true
+                                antialiasing: true
+                            }
                         }
 
                         MouseArea {
@@ -458,7 +390,6 @@ Item {
                     }
                 }
                 
-                // 2. Continue Watching
                 Loader {
                     id: cwLoader
                     
@@ -475,22 +406,15 @@ Item {
                         item.itemWidth = 480 
                         item.itemHeight = 270 
                         item.model = continueWatchingModel
-                        // Connect itemClicked signal (for continue watching, we might handle differently)
                         item.itemClicked.connect(function(contentId, type, addonId) {
-                            // For continue watching, we can also open detail screen
                             root.itemClicked(contentId, type, addonId)
                         })
                     }
                 }
 
-                // 3. Catalog Sections
                 Repeater {
                     id: catalogRepeater
                     model: catalogSectionsModel
-
-                    onItemAdded: {
-                        console.log("[HomeScreen] Repeater item added, index:", index, "total:", catalogRepeater.count)
-                    }
 
                     Column {
                         id: sectionColumn
@@ -500,11 +424,6 @@ Item {
                         readonly property string sectionTitle: model.sectionTitle
                         readonly property var sectionItemsModel: model.itemsModel
                         
-                        Component.onCompleted: {
-                            console.log("[HomeScreen] Section column created:", sectionTitle, "itemsModel:", sectionItemsModel, "items count:", sectionItemsModel ? sectionItemsModel.count : 0)
-                        }
-
-                        // Section Title
                         Text {
                             width: parent.width
                             height: 30
@@ -512,14 +431,13 @@ Item {
                             color: "white"
                             font.pixelSize: 18
                             font.bold: true
-                            // Simple Left Padding
                             leftPadding: 50
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        // Inner ListView container
+                        // Constrain width to apply margins
                         Item {
-                            width: parent.width - 100  // Reduce width to leave 50px on each side
+                            width: parent.width - 100
                             height: 420 
                             anchors.horizontalCenter: parent.horizontalCenter
                             
@@ -528,18 +446,8 @@ Item {
                                 anchors.fill: parent
                                 orientation: ListView.Horizontal
                                 spacing: 24 
-                                leftMargin: 0
-                                rightMargin: 0
                                 clip: true 
                                 model: sectionColumn.sectionItemsModel
-                                
-                                Component.onCompleted: {
-                                    console.log("[HomeScreen] ListView created, model:", sectionColumn.sectionItemsModel, "count:", sectionColumn.sectionItemsModel ? sectionColumn.sectionItemsModel.count : 0)
-                                }
-                                
-                                onCountChanged: {
-                                    console.log("[HomeScreen] ListView count changed:", count, "for section:", sectionColumn.sectionTitle)
-                                }
                                 
                                 PropertyAnimation {
                                     id: sectionScrollAnimation
@@ -563,35 +471,19 @@ Item {
                                         onExited: isHovered = false
                                         onClicked: {
                                             var addonId = model.addonId || sectionColumn.sectionAddonId || ""
-                                            
-                                            // Debug logging
-                                            console.log("[HomeScreen] Catalog item clicked - Title:", model.title)
-                                            console.log("[HomeScreen] Model ID:", model.id, "IMDB ID:", model.imdbId, "TMDB ID:", model.tmdbId, "Type:", model.type)
-                                            
-                                            // Get content ID - prefer TMDB ID if available (1 API call), otherwise IMDB ID (2 API calls)
-                                            // Note: MediaMetadataService handles both formats
                                             var contentId = ""
                                             
-                                            // First try TMDB ID if available (performance optimization - 1 call instead of 2)
+                                            // Prefer TMDB ID (1 API call) -> IMDB ID (Canonical) -> Generic ID
                                             if (model.tmdbId && model.tmdbId !== "") {
                                                 contentId = model.tmdbId
                                             }
-                                            // Then try IMDB ID (preferred for canonical identification)
                                             else if (model.imdbId && model.imdbId.startsWith("tt")) {
                                                 contentId = model.imdbId
                                             }
-                                            // Then try ID field
                                             else if (model.id && model.id !== "") {
-                                                if (model.id.startsWith("tt")) {
-                                                    // IMDB format
-                                                    contentId = model.id
-                                                } else if (model.id.startsWith("tmdb:")) {
-                                                    // Extract numeric part from tmdb:123
-                                                    contentId = model.id.substring(5)
-                                                } else if (!isNaN(model.id) && parseInt(model.id) > 0) {
-                                                    // Numeric ID - assume TMDB
-                                                    contentId = model.id
-                                                }
+                                                if (model.id.startsWith("tt")) contentId = model.id
+                                                else if (model.id.startsWith("tmdb:")) contentId = model.id.substring(5)
+                                                else if (!isNaN(model.id) && parseInt(model.id) > 0) contentId = model.id
                                             }
                                             
                                             if (!contentId) {
@@ -599,7 +491,6 @@ Item {
                                                 return
                                             }
                                             
-                                            console.log("[HomeScreen] Final contentId:", contentId, "addonId:", addonId, "type:", model.type)
                                             root.itemClicked(contentId, model.type || "", addonId)
                                         }
                                     }
@@ -608,7 +499,6 @@ Item {
                                         anchors.fill: parent
                                         spacing: 12
 
-                                        // Poster
                                         Item {
                                             id: imageContainer
                                             width: parent.width
@@ -631,7 +521,6 @@ Item {
                                                 Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
                                             }
 
-                                            // Rating
                                             Rectangle {
                                                 anchors.bottom: parent.bottom; anchors.right: parent.right; anchors.margins: 8
                                                 visible: model.rating !== ""; color: "black"; opacity: 0.8; radius: 4
@@ -643,7 +532,6 @@ Item {
                                                 }
                                             }
 
-                                            // Border
                                             Rectangle {
                                                 anchors.fill: parent; color: "transparent"; radius: 8; z: 10
                                                 border.width: 3; border.color: isHovered ? "#ffffff" : "transparent"
@@ -651,7 +539,6 @@ Item {
                                             }
                                         }
 
-                                        // Title
                                         Text {
                                             width: parent.width
                                             text: model.title
@@ -665,7 +552,7 @@ Item {
                                 }
                             }
                             
-                            // Left arrow
+                            // Left scroll arrow
                             Item {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
@@ -675,14 +562,38 @@ Item {
                                 
                                 property bool isHovered: false
                                 
-                                Image {
+                                Item {
                                     anchors.centerIn: parent
                                     width: 48
                                     height: 48
-                                    source: "qrc:/assets/icons/arrow-left.svg"
-                                    fillMode: Image.PreserveAspectFit
                                     opacity: parent.isHovered ? 1.0 : 0.4
                                     Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                                    Image {
+                                        id: leftArrowIcon2
+                                        anchors.centerIn: parent
+                                        
+                                        source: "qrc:/assets/icons/left_catalog.svg"
+                                        
+                                        // Large source + mipmap ensures smooth downscaling
+                                        sourceSize.width: 128
+                                        sourceSize.height: 128
+                                        mipmap: true 
+                                        smooth: true
+                                        antialiasing: true
+                                        width: 48
+                                        height: 48
+                                        fillMode: Image.PreserveAspectFit
+                                        visible: false
+                                    }
+
+                                    ColorOverlay {
+                                        anchors.fill: leftArrowIcon2
+                                        source: leftArrowIcon2
+                                        color: "#ffffff"
+                                        cached: true
+                                        antialiasing: true
+                                    }
                                 }
                                 
                                 MouseArea {
@@ -698,7 +609,7 @@ Item {
                                 }
                             }
                             
-                            // Right arrow
+                            // Right scroll arrow
                             Item {
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
@@ -708,14 +619,38 @@ Item {
                                 
                                 property bool isHovered: false
                                 
-                                Image {
+                                Item {
                                     anchors.centerIn: parent
                                     width: 48
                                     height: 48
-                                    source: "qrc:/assets/icons/arrow-right.svg"
-                                    fillMode: Image.PreserveAspectFit
                                     opacity: parent.isHovered ? 1.0 : 0.4
                                     Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                                    Image {
+                                        id: rightArrowIcon2
+                                        anchors.centerIn: parent
+                                        
+                                        source: "qrc:/assets/icons/right_catalog.svg"
+                                        
+                                        // Large source + mipmap ensures smooth downscaling
+                                        sourceSize.width: 128
+                                        sourceSize.height: 128
+                                        mipmap: true 
+                                        smooth: true
+                                        antialiasing: true
+                                        width: 48
+                                        height: 48
+                                        fillMode: Image.PreserveAspectFit
+                                        visible: false
+                                    }
+
+                                    ColorOverlay {
+                                        anchors.fill: rightArrowIcon2
+                                        source: rightArrowIcon2
+                                        color: "#ffffff"
+                                        cached: true
+                                        antialiasing: true
+                                    }
                                 }
                                 
                                 MouseArea {
@@ -733,13 +668,10 @@ Item {
                                     }
                                 }
                             }
-                            
-                            // Close ListView after arrows
                         }
                     }
                 }
 
-                // 4. Loading & Empty States
                 Rectangle {
                     width: parent.width; height: 200
                     visible: isLoading
@@ -761,22 +693,17 @@ Item {
         }
     }
     
-    // Stream Selection Dialog
     StreamSelectionDialog {
         id: streamDialog
         parent: root.parent
         
         onStreamSelected: function(stream) {
             console.log("[HomeScreen] Stream selected:", JSON.stringify(stream))
-            console.log("[HomeScreen] Stream URL:", stream.url)
-            
-            // Emit signal to request playback (will be handled by MainApp)
             if (stream.url) {
                 root.playRequested(stream.url)
             }
         }
     }
     
-    // Signal for playback request
     signal playRequested(string streamUrl)
 }

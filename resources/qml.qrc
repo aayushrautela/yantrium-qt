@@ -24,14 +24,22 @@
         <file>qml/screens/SettingsScreen.qml</file>
         <file>qml/MainApp.qml</file>
         <file>qml/TestLauncher.qml</file>
-        <file>assets/icons/arrow-left.svg</file>
-        <file>assets/icons/arrow-right.svg</file>
+        <file>assets/icons/left_catalog.svg</file>
+        <file>assets/icons/right_catalog.svg</file>
+        <file>assets/icons/add.svg</file>
+        <file>assets/icons/close.svg</file>
+        <file>assets/icons/delete.svg</file>
+        <file>assets/icons/error.svg</file>
+        <file>assets/icons/home.svg</file>
+        <file>assets/icons/library.svg</file>
+        <file>assets/icons/play_button.svg</file>
+        <file>assets/icons/refresh.svg</file>
+        <file>assets/icons/search.svg</file>
+        <file>assets/icons/settings.svg</file>
         <file>assets/icons/tmdb.svg</file>
         <file>assets/icons/imdb.svg</file>
         <file>assets/icons/metacritic.svg</file>
         <file>assets/icons/rotten_tomatoes.svg</file>
-        <file>assets/icons/play_button.svg</file>
-        <file>assets/icons/search.svg</file>
     </qresource>
 </RCC>
 

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 
 Rectangle {
     id: root
@@ -139,73 +140,123 @@ Rectangle {
                         }
                     }
                 }
+            }
+            
+            // Left arrow
+            Item {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: 48
+                height: 48
+                visible: listView.contentX > 0
                 
-                // Left arrow
+                property bool isHovered: false
+                
                 Item {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.centerIn: parent
                     width: 48
                     height: 48
-                    visible: listView.contentX > 0
-                    
-                    property bool isHovered: false
+                    opacity: parent.isHovered ? 1.0 : 0.4
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
                     
                     Image {
+                        id: leftArrowIcon
                         anchors.centerIn: parent
+                        
+                        source: "qrc:/assets/icons/left_catalog.svg"
+                        
+                        // Large source + mipmap ensures smooth downscaling
+                        sourceSize.width: 128
+                        sourceSize.height: 128
+                        mipmap: true
+                        smooth: true
+                        antialiasing: true
+                        
                         width: 48
                         height: 48
-                        source: "qrc:/assets/icons/arrow-left.svg"
                         fillMode: Image.PreserveAspectFit
-                        opacity: parent.isHovered ? 1.0 : 0.4
-                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                        visible: false
                     }
                     
-                    MouseArea {
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onEntered: parent.isHovered = true
-                        onExited: parent.isHovered = false
-                        onClicked: {
-                            var targetX = Math.max(0, listView.contentX - listView.width * 0.8)
-                            scrollAnimation.to = targetX
-                            scrollAnimation.start()
-                        }
+                    ColorOverlay {
+                        anchors.fill: leftArrowIcon
+                        source: leftArrowIcon
+                        color: "#ffffff"
+                        cached: true
+                        antialiasing: true
                     }
                 }
                 
-                // Right arrow
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onEntered: parent.isHovered = true
+                    onExited: parent.isHovered = false
+                    onClicked: {
+                        var targetX = Math.max(0, listView.contentX - listView.width * 0.8)
+                        scrollAnimation.to = targetX
+                        scrollAnimation.start()
+                    }
+                }
+            }
+            
+            // Right arrow
+            Item {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: 48
+                height: 48
+                visible: listView.contentX < listView.contentWidth - listView.width
+                
+                property bool isHovered: false
+                
                 Item {
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.centerIn: parent
                     width: 48
                     height: 48
-                    visible: listView.contentX < listView.contentWidth - listView.width
-                    
-                    property bool isHovered: false
+                    opacity: parent.isHovered ? 1.0 : 0.4
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
                     
                     Image {
+                        id: rightArrowIcon
                         anchors.centerIn: parent
+                        
+                        source: "qrc:/assets/icons/right_catalog.svg"
+                        
+                        // Large source + mipmap ensures smooth downscaling
+                        sourceSize.width: 128
+                        sourceSize.height: 128
+                        mipmap: true
+                        smooth: true
+                        antialiasing: true
+                        
                         width: 48
                         height: 48
-                        source: "qrc:/assets/icons/arrow-right.svg"
                         fillMode: Image.PreserveAspectFit
-                        opacity: parent.isHovered ? 1.0 : 0.4
-                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                        visible: false
                     }
                     
-                    MouseArea {
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onEntered: parent.isHovered = true
-                        onExited: parent.isHovered = false
-                        onClicked: {
-                            var targetX = Math.min(
-                                listView.contentWidth - listView.width,
-                                listView.contentX + listView.width * 0.8
-                            )
-                            scrollAnimation.to = targetX
-                            scrollAnimation.start()
-                        }
+                    ColorOverlay {
+                        anchors.fill: rightArrowIcon
+                        source: rightArrowIcon
+                        color: "#ffffff"
+                        cached: true
+                        antialiasing: true
+                    }
+                }
+                
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onEntered: parent.isHovered = true
+                    onExited: parent.isHovered = false
+                    onClicked: {
+                        var targetX = Math.min(
+                            listView.contentWidth - listView.width,
+                            listView.contentX + listView.width * 0.8
+                        )
+                        scrollAnimation.to = targetX
+                        scrollAnimation.start()
                     }
                 }
             }

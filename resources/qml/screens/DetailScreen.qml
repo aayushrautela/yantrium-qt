@@ -446,7 +446,7 @@ Item {
                             anchors.centerIn: parent
                             width: 24
                             height: 24
-                            source: "qrc:/assets/icons/arrow-left.svg"
+                            source: "qrc:/assets/icons/left_catalog.svg"
                             sourceSize.width: 48
                             sourceSize.height: 48
                             fillMode: Image.PreserveAspectFit
@@ -652,15 +652,26 @@ Item {
                                 visible: !!(root.itemData.tmdbRating || root.itemData.imdbRating)
                                 
                                 Image {
+                                    id: tmdbImage
                                     width: 50
                                     height: 22
                                     source: "qrc:/assets/icons/tmdb.svg"
                                     sourceSize.width: 100
                                     sourceSize.height: 44
+                                    mipmap: true
+                                    asynchronous: true
                                     fillMode: Image.PreserveAspectFit
                                     anchors.verticalCenter: parent.verticalCenter
                                     smooth: true
                                     antialiasing: true
+                                    
+                                    onStatusChanged: {
+                                        if (status === Image.Error) {
+                                            console.error("[DetailScreen] Failed to load TMDB logo:", source)
+                                        } else if (status === Image.Ready) {
+                                            console.log("[DetailScreen] TMDB logo loaded successfully")
+                                        }
+                                    }
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -680,15 +691,26 @@ Item {
                                 }
                                 
                                 Image {
+                                    id: imdbImage
                                     width: 40
                                     height: 20
                                     source: "qrc:/assets/icons/imdb.svg"
                                     sourceSize.width: 80
                                     sourceSize.height: 40
+                                    mipmap: true
+                                    asynchronous: true
                                     fillMode: Image.PreserveAspectFit
                                     anchors.verticalCenter: parent.verticalCenter
                                     smooth: true
                                     antialiasing: true
+                                    
+                                    onStatusChanged: {
+                                        if (status === Image.Error) {
+                                            console.error("[DetailScreen] Failed to load IMDb logo:", source)
+                                        } else if (status === Image.Ready) {
+                                            console.log("[DetailScreen] IMDb logo loaded successfully")
+                                        }
+                                    }
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -706,20 +728,36 @@ Item {
                             Row {
                                 spacing: 6
                                 visible: {
+                                    // Only show when OMDB data is available
+                                    var omdbRatings = root.itemData.omdbRatings
+                                    if (!omdbRatings || !Array.isArray(omdbRatings) || omdbRatings.length === 0) {
+                                        return false
+                                    }
                                     var score = root.itemData.metascore
                                     return score !== undefined && score !== null && score !== ""
                                 }
                                 
                                 Image {
+                                    id: metacriticImage
                                     width: 20
                                     height: 20
                                     source: "qrc:/assets/icons/metacritic.svg"
                                     sourceSize.width: 40
                                     sourceSize.height: 40
+                                    mipmap: true
+                                    asynchronous: true
                                     fillMode: Image.PreserveAspectFit
                                     anchors.verticalCenter: parent.verticalCenter
                                     smooth: true
                                     antialiasing: true
+                                    
+                                    onStatusChanged: {
+                                        if (status === Image.Error) {
+                                            console.error("[DetailScreen] Failed to load Metacritic logo:", source)
+                                        } else if (status === Image.Ready) {
+                                            console.log("[DetailScreen] Metacritic logo loaded successfully")
+                                        }
+                                    }
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -757,15 +795,26 @@ Item {
                                     spacing: 6
                                     
                                     Image {
+                                        id: rtImage
                                         width: 20
                                         height: 20
                                         source: "qrc:/assets/icons/rotten_tomatoes.svg"
                                         sourceSize.width: 40
                                         sourceSize.height: 40
+                                        mipmap: true
+                                        asynchronous: true
                                         fillMode: Image.PreserveAspectFit
                                         anchors.verticalCenter: parent.verticalCenter
                                         smooth: true
                                         antialiasing: true
+                                        
+                                        onStatusChanged: {
+                                            if (status === Image.Error) {
+                                                console.error("[DetailScreen] Failed to load Rotten Tomatoes logo:", source)
+                                            } else if (status === Image.Ready) {
+                                                console.log("[DetailScreen] Rotten Tomatoes logo loaded successfully")
+                                            }
+                                        }
                                     }
                                     Text {
                                         anchors.verticalCenter: parent.verticalCenter
@@ -865,12 +914,27 @@ Item {
                                     border.color: "#ffffff"
                                     radius: 26
                                 }
-                                contentItem: Text {
-                                    text: root.isEpisodeMode ? "← Back to Series" : (root.isInLibrary ? "✓ Library" : "+ Library")
-                                    font.pixelSize: 16
-                                    color: "#ffffff"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
+                                contentItem: Item {
+                                    Row {
+                                        anchors.centerIn: parent
+                                        spacing: 8
+
+                                        Image {
+                                            visible: root.isEpisodeMode
+                                            source: "qrc:/assets/icons/left_catalog.svg"
+                                            width: 16
+                                            height: 16
+                                            fillMode: Image.PreserveAspectFit
+                                        }
+
+                                        Text {
+                                            text: root.isEpisodeMode ? "Back to Series" : (root.isInLibrary ? "✓ Library" : "+ Library")
+                                            font.pixelSize: 16
+                                            color: "#ffffff"
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                    }
                                 }
                                 onClicked: {
                                     if (root.isEpisodeMode) {
@@ -1383,14 +1447,39 @@ Item {
 
                                             property bool isHovered: false
 
-                                            Image {
+                                            Item {
                                                 anchors.centerIn: parent
                                                 width: 48
                                                 height: 48
-                                                source: "qrc:/assets/icons/arrow-left.svg"
-                                                fillMode: Image.PreserveAspectFit
                                                 opacity: parent.isHovered ? 1.0 : 0.4
                                                 Behavior on opacity { NumberAnimation { duration: 200 } }
+                                                
+                                                Image {
+                                                    id: episodesLeftArrowIcon
+                                                    anchors.centerIn: parent
+                                                    
+                                                    source: "qrc:/assets/icons/left_catalog.svg"
+                                                    
+                                                    // Large source + mipmap ensures smooth downscaling
+                                                    sourceSize.width: 128
+                                                    sourceSize.height: 128
+                                                    mipmap: true
+                                                    smooth: true
+                                                    antialiasing: true
+                                                    
+                                                    width: 48
+                                                    height: 48
+                                                    fillMode: Image.PreserveAspectFit
+                                                    visible: false
+                                                }
+                                                
+                                                ColorOverlay {
+                                                    anchors.fill: episodesLeftArrowIcon
+                                                    source: episodesLeftArrowIcon
+                                                    color: "#ffffff"
+                                                    cached: true
+                                                    antialiasing: true
+                                                }
                                             }
 
                                             MouseArea {
@@ -1418,14 +1507,39 @@ Item {
 
                                             property bool isHovered: false
 
-                                            Image {
+                                            Item {
                                                 anchors.centerIn: parent
                                                 width: 48
                                                 height: 48
-                                                source: "qrc:/assets/icons/arrow-right.svg"
-                                                fillMode: Image.PreserveAspectFit
                                                 opacity: parent.isHovered ? 1.0 : 0.4
                                                 Behavior on opacity { NumberAnimation { duration: 200 } }
+                                                
+                                                Image {
+                                                    id: episodesRightArrowIcon
+                                                    anchors.centerIn: parent
+                                                    
+                                                    source: "qrc:/assets/icons/right_catalog.svg"
+                                                    
+                                                    // Large source + mipmap ensures smooth downscaling
+                                                    sourceSize.width: 128
+                                                    sourceSize.height: 128
+                                                    mipmap: true
+                                                    smooth: true
+                                                    antialiasing: true
+                                                    
+                                                    width: 48
+                                                    height: 48
+                                                    fillMode: Image.PreserveAspectFit
+                                                    visible: false
+                                                }
+                                                
+                                                ColorOverlay {
+                                                    anchors.fill: episodesRightArrowIcon
+                                                    source: episodesRightArrowIcon
+                                                    color: "#ffffff"
+                                                    cached: true
+                                                    antialiasing: true
+                                                }
                                             }
 
                                             MouseArea {
@@ -1477,6 +1591,14 @@ Item {
                                     clip: true
                                     model: castModel
                                     
+                                    PropertyAnimation {
+                                        id: castScrollAnimation
+                                        target: castListView
+                                        property: "contentX"
+                                        duration: 300
+                                        easing.type: Easing.OutCubic
+                                    }
+                                    
                                     delegate: Loader {
                                         width: 240
                                         height: 360
@@ -1490,6 +1612,128 @@ Item {
                                         }
                                     }
                                 }
+                                
+                                // Left arrow
+                                Item {
+                                    anchors.left: parent.left
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 48
+                                    height: 48
+                                    visible: castListView.contentX > 0
+                                    z: 10
+                                    
+                                    property bool isHovered: false
+                                    
+                                    Item {
+                                        anchors.centerIn: parent
+                                        width: 48
+                                        height: 48
+                                        opacity: parent.isHovered ? 1.0 : 0.4
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                        
+                                        Image {
+                                            id: castLeftArrowIcon
+                                            anchors.centerIn: parent
+                                            
+                                            source: "qrc:/assets/icons/left_catalog.svg"
+                                            
+                                            // Large source + mipmap ensures smooth downscaling
+                                            sourceSize.width: 128
+                                            sourceSize.height: 128
+                                            mipmap: true
+                                            smooth: true
+                                            antialiasing: true
+                                            
+                                            width: 48
+                                            height: 48
+                                            fillMode: Image.PreserveAspectFit
+                                            visible: false
+                                        }
+                                        
+                                        ColorOverlay {
+                                            anchors.fill: castLeftArrowIcon
+                                            source: castLeftArrowIcon
+                                            color: "#ffffff"
+                                            cached: true
+                                            antialiasing: true
+                                        }
+                                    }
+                                    
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onEntered: parent.isHovered = true
+                                        onExited: parent.isHovered = false
+                                        onClicked: {
+                                            var targetX = Math.max(0, castListView.contentX - castListView.width * 0.8)
+                                            castScrollAnimation.to = targetX
+                                            castScrollAnimation.start()
+                                        }
+                                    }
+                                }
+                                
+                                // Right arrow
+                                Item {
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 48
+                                    height: 48
+                                    visible: castListView.contentX < castListView.contentWidth - castListView.width
+                                    z: 10
+                                    
+                                    property bool isHovered: false
+                                    
+                                    Item {
+                                        anchors.centerIn: parent
+                                        width: 48
+                                        height: 48
+                                        opacity: parent.isHovered ? 1.0 : 0.4
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                        
+                                        Image {
+                                            id: castRightArrowIcon
+                                            anchors.centerIn: parent
+                                            
+                                            source: "qrc:/assets/icons/right_catalog.svg"
+                                            
+                                            // Large source + mipmap ensures smooth downscaling
+                                            sourceSize.width: 128
+                                            sourceSize.height: 128
+                                            mipmap: true
+                                            smooth: true
+                                            antialiasing: true
+                                            
+                                            width: 48
+                                            height: 48
+                                            fillMode: Image.PreserveAspectFit
+                                            visible: false
+                                        }
+                                        
+                                        ColorOverlay {
+                                            anchors.fill: castRightArrowIcon
+                                            source: castRightArrowIcon
+                                            color: "#ffffff"
+                                            cached: true
+                                            antialiasing: true
+                                        }
+                                    }
+                                    
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onEntered: parent.isHovered = true
+                                        onExited: parent.isHovered = false
+                                        onClicked: {
+                                            var targetX = Math.min(
+                                                castListView.contentWidth - castListView.width,
+                                                castListView.contentX + castListView.width * 0.8
+                                            )
+                                            castScrollAnimation.to = targetX
+                                            castScrollAnimation.start()
+                                        }
+                                    }
+                                }
+                                
                                 Text {
                                     anchors.centerIn: parent
                                     text: "No cast information available"
@@ -1518,6 +1762,14 @@ Item {
                                     spacing: 24
                                     clip: true
                                     model: root.similarItems || []
+                                    
+                                    PropertyAnimation {
+                                        id: similarScrollAnimation
+                                        target: similarListView
+                                        property: "contentX"
+                                        duration: 300
+                                        easing.type: Easing.OutCubic
+                                    }
                                     
                                     delegate: Item {
                                         width: 240  // Match LibraryScreen catalog card width
@@ -1600,6 +1852,127 @@ Item {
                                                 elide: Text.ElideRight
                                                 horizontalAlignment: Text.AlignHCenter
                                             }
+                                        }
+                                    }
+                                }
+                                
+                                // Left arrow
+                                Item {
+                                    anchors.left: parent.left
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 48
+                                    height: 48
+                                    visible: similarListView.contentX > 0
+                                    z: 10
+                                    
+                                    property bool isHovered: false
+                                    
+                                    Item {
+                                        anchors.centerIn: parent
+                                        width: 48
+                                        height: 48
+                                        opacity: parent.isHovered ? 1.0 : 0.4
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                        
+                                        Image {
+                                            id: similarLeftArrowIcon
+                                            anchors.centerIn: parent
+                                            
+                                            source: "qrc:/assets/icons/left_catalog.svg"
+                                            
+                                            // Large source + mipmap ensures smooth downscaling
+                                            sourceSize.width: 128
+                                            sourceSize.height: 128
+                                            mipmap: true
+                                            smooth: true
+                                            antialiasing: true
+                                            
+                                            width: 48
+                                            height: 48
+                                            fillMode: Image.PreserveAspectFit
+                                            visible: false
+                                        }
+                                        
+                                        ColorOverlay {
+                                            anchors.fill: similarLeftArrowIcon
+                                            source: similarLeftArrowIcon
+                                            color: "#ffffff"
+                                            cached: true
+                                            antialiasing: true
+                                        }
+                                    }
+                                    
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onEntered: parent.isHovered = true
+                                        onExited: parent.isHovered = false
+                                        onClicked: {
+                                            var targetX = Math.max(0, similarListView.contentX - similarListView.width * 0.8)
+                                            similarScrollAnimation.to = targetX
+                                            similarScrollAnimation.start()
+                                        }
+                                    }
+                                }
+                                
+                                // Right arrow
+                                Item {
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 48
+                                    height: 48
+                                    visible: similarListView.contentX < similarListView.contentWidth - similarListView.width
+                                    z: 10
+                                    
+                                    property bool isHovered: false
+                                    
+                                    Item {
+                                        anchors.centerIn: parent
+                                        width: 48
+                                        height: 48
+                                        opacity: parent.isHovered ? 1.0 : 0.4
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                        
+                                        Image {
+                                            id: similarRightArrowIcon
+                                            anchors.centerIn: parent
+                                            
+                                            source: "qrc:/assets/icons/right_catalog.svg"
+                                            
+                                            // Large source + mipmap ensures smooth downscaling
+                                            sourceSize.width: 128
+                                            sourceSize.height: 128
+                                            mipmap: true
+                                            smooth: true
+                                            antialiasing: true
+                                            
+                                            width: 48
+                                            height: 48
+                                            fillMode: Image.PreserveAspectFit
+                                            visible: false
+                                        }
+                                        
+                                        ColorOverlay {
+                                            anchors.fill: similarRightArrowIcon
+                                            source: similarRightArrowIcon
+                                            color: "#ffffff"
+                                            cached: true
+                                            antialiasing: true
+                                        }
+                                    }
+                                    
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onEntered: parent.isHovered = true
+                                        onExited: parent.isHovered = false
+                                        onClicked: {
+                                            var targetX = Math.min(
+                                                similarListView.contentWidth - similarListView.width,
+                                                similarListView.contentX + similarListView.width * 0.8
+                                            )
+                                            similarScrollAnimation.to = targetX
+                                            similarScrollAnimation.start()
                                         }
                                     }
                                 }

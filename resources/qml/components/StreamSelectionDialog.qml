@@ -48,17 +48,16 @@ Dialog {
             anchors.verticalCenter: parent.verticalCenter
             width: 30
             height: 30
-            text: "×"
             background: Rectangle {
                 color: parent.hovered ? "#333333" : "transparent"
                 radius: 4
             }
-            contentItem: Text {
-                text: parent.text
-                color: "#ffffff"
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            contentItem: Image {
+                source: "qrc:/assets/icons/close.svg"
+                fillMode: Image.PreserveAspectFit
+                width: 16
+                height: 16
+                anchors.centerIn: parent
             }
             onClicked: root.close()
         }
