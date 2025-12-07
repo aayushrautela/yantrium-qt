@@ -845,7 +845,7 @@ Item {
 
                                                     onPressed: (mouse) => {
                                                         // 1. Calculate global position
-                                                        var pos = mapToItem(root, visualCard.x, visualCard.y)
+                                                        var pos = visualCard.mapToItem(root, 0, 0)
                                                         
                                                         // 2. CRITICAL FIX: Lock dimensions to exact pixels before reparenting
                                                         // Prevents inheriting root's full height
