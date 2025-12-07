@@ -216,6 +216,13 @@ Item {
     property var currentSeasonEpisodes: []
     property int selectedSeasonNumber: 1
     
+    // Episode mode properties
+    property bool isEpisodeMode: {
+        var episodeNum = root.itemData.episodeNumber || root.itemData.episode || 0
+        return episodeNum > 0
+    }
+    property var showData: ({})  // Store show information for "Back to Series" navigation
+    
     ListModel {
         id: castModel
     }
@@ -252,6 +259,11 @@ Item {
     }
     
     function getTabList() {
+        // For episode mode, only show EPISODES tab
+        if (root.isEpisodeMode) {
+            return ["EPISODES"]
+        }
+        // For regular shows/movies
         var tabs = ["CAST & CREW", "MORE LIKE THIS", "DETAILS"]
         if (root.itemData.type === "tv") {
             tabs.unshift("EPISODES")
@@ -271,6 +283,7 @@ Item {
     signal closeRequested()
     signal libraryChanged()
     signal playRequested(string streamUrl, var contentData)
+    signal showRequested(string contentId, string type, string addonId)  // For navigating back to show from episode
     
     function loadDetails(contentId, type, addonId) {
         console.log("[DetailScreen] loadDetails called - contentId:", contentId, "type:", type, "addonId:", addonId)
@@ -288,6 +301,7 @@ Item {
         root.smartPlayState = {}
         root.currentSeasonEpisodes = []
         root.isInLibrary = false
+        root.showData = {}  // Clear preserved show data when loading new content
         
         isLoading = true
         libraryService.loadItemDetails(contentId, type, addonId || "")
@@ -316,7 +330,13 @@ Item {
             // Height is full screen to ensure vertical coverage
             height: parent.height
             
-            source: root.itemData.backdropUrl || root.itemData.background || ""
+            source: {
+                // For episodes, prefer show backdrop first, then episode thumbnail as fallback
+                if (root.isEpisodeMode) {
+                    return root.itemData.backdropUrl || root.itemData.thumbnailUrl || root.itemData.background || root.itemData.showBackdropUrl || root.itemData.showPosterUrl || ""
+                }
+                return root.itemData.backdropUrl || root.itemData.background || ""
+            }
             
             // Use PreserveAspectCrop to ensure the image fills the 70% area completely
             // without leaving empty space (black bars), while keeping aspect ratio.
@@ -468,15 +488,32 @@ Item {
                                 width: Math.min(parent.width, 600)
                                 fillMode: Image.PreserveAspectFit
                                 horizontalAlignment: Image.AlignLeft
-                                source: root.itemData.logoUrl || root.itemData.logo || ""
-                                visible: (root.itemData.logoUrl || root.itemData.logo) !== "" && logoImage.status === Image.Ready
+                                source: {
+                                    // For episodes, prefer show logo, fallback to episode logo
+                                    if (root.isEpisodeMode) {
+                                        return root.itemData.showLogoUrl || root.itemData.logoUrl || root.itemData.logo || ""
+                                    }
+                                    return root.itemData.logoUrl || root.itemData.logo || ""
+                                }
+                                visible: {
+                                    var logoUrl = root.isEpisodeMode ? 
+                                        (root.itemData.showLogoUrl || root.itemData.logoUrl || root.itemData.logo || "") :
+                                        (root.itemData.logoUrl || root.itemData.logo || "")
+                                    return logoUrl !== "" && logoImage.status === Image.Ready
+                                }
                                 asynchronous: true
                             }
                             
                             Text {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
-                                text: root.itemData.title || root.itemData.name || ""
+                                text: {
+                                    // For episodes, show the show title, otherwise show the item title
+                                    if (root.isEpisodeMode) {
+                                        return root.itemData.showTitle || root.itemData.title || root.itemData.name || ""
+                                    }
+                                    return root.itemData.title || root.itemData.name || ""
+                                }
                                 font.pixelSize: 80
                                 font.bold: true
                                 color: "#ff0000"
@@ -485,51 +522,103 @@ Item {
                             }
                         }
                         
-                        // Row 1: Release Date • Content Rating • Genres
+                        // Episode Title (for episode mode)
+                        Text {
+                            width: Math.min(parent.width, 800)
+                            text: {
+                                if (root.isEpisodeMode) {
+                                    var epNum = root.itemData.episodeNumber || root.itemData.episode || 0
+                                    var epTitle = root.itemData.episodeTitle || root.itemData.title || ""
+                                    return "Episode " + epNum + (epTitle ? ": " + epTitle : "")
+                                }
+                                return ""
+                            }
+                            color: "#ffffff"
+                            font.pixelSize: 32
+                            font.bold: true
+                            visible: root.isEpisodeMode && text !== ""
+                            wrapMode: Text.WordWrap
+                        }
+                        
+                        // Row 1: For episodes: Air Date • Runtime | For movies/shows: Release Date • Content Rating • Genres
                         Row {
                             spacing: 8
-                            
+
+                            // Episode mode: Air Date • Runtime
+                            Text {
+                                text: root.itemData.airDate || ""
+                                color: "#ffffff"
+                                font.pixelSize: 18
+                                visible: root.isEpisodeMode && text !== ""
+                            }
+
+                            Text {
+                                text: "•"
+                                color: "#ffffff"
+                                font.pixelSize: 18
+                                visible: root.isEpisodeMode && root.itemData.airDate !== "" && root.itemData.duration > 0
+                            }
+
+                            Text {
+                                text: {
+                                    if (root.isEpisodeMode && root.itemData.duration > 0) {
+                                        var minutes = root.itemData.duration;
+                                        var hours = Math.floor(minutes / 60);
+                                        var mins = minutes % 60;
+                                        return hours > 0 ? hours + "h " + mins + "m" : mins + "m";
+                                    }
+                                    return "";
+                                }
+                                color: "#ffffff"
+                                font.pixelSize: 18
+                                visible: root.isEpisodeMode && root.itemData.duration > 0
+                            }
+
+                            // Movie/Show mode: Release Date • Content Rating • Genres
                             Text {
                                 text: root.itemData.releaseDate || root.itemData.firstAirDate || ""
                                 color: "#ffffff"
                                 font.pixelSize: 18
-                                visible: text !== ""
+                                visible: !root.isEpisodeMode && text !== ""
                             }
-                            
+
                             Text {
                                 text: "•"
                                 color: "#ffffff"
                                 font.pixelSize: 18
-                                visible: (root.itemData.releaseDate || root.itemData.firstAirDate) !== "" && 
+                                visible: !root.isEpisodeMode && (root.itemData.releaseDate || root.itemData.firstAirDate) !== "" &&
                                          (root.itemData.contentRating !== "" || (root.itemData.genres || []).length > 0)
                             }
-                            
+
                             Text {
                                 text: root.itemData.contentRating || ""
                                 color: "#ffffff"
                                 font.pixelSize: 18
-                                visible: text !== ""
+                                visible: !root.isEpisodeMode && text !== ""
                             }
-                            
+
                             Text {
                                 text: "•"
                                 color: "#ffffff"
                                 font.pixelSize: 18
-                                visible: root.itemData.contentRating !== "" && (root.itemData.genres || []).length > 0
+                                visible: !root.isEpisodeMode && root.itemData.contentRating !== "" && (root.itemData.genres || []).length > 0
                             }
-                            
+
                             Repeater {
                                 id: genresRepeater
                                 model: {
-                                    var genres = root.itemData.genres || []
-                                    var limitedGenres = []
-                                    var maxGenres = Math.min(3, genres.length)
-                                    for (var i = 0; i < maxGenres; i++) {
-                                        if (genres[i]) {
-                                            limitedGenres.push(genres[i])
+                                    if (!root.isEpisodeMode) {
+                                        var genres = root.itemData.genres || []
+                                        var limitedGenres = []
+                                        var maxGenres = Math.min(3, genres.length)
+                                        for (var i = 0; i < maxGenres; i++) {
+                                            if (genres[i]) {
+                                                limitedGenres.push(genres[i])
+                                            }
                                         }
+                                        return limitedGenres
                                     }
-                                    return limitedGenres
+                                    return []
                                 }
                                 Text {
                                     text: modelData + (index < genresRepeater.count - 1 ? " " : "")
@@ -552,9 +641,10 @@ Item {
                             }
                         }
                         
-                        // Row 3: Rating Scores
+                        // Row 3: Rating Scores (hidden for episodes)
                         Row {
                             spacing: 20
+                            visible: !root.isEpisodeMode
                             
                             // TMDB Score
                             Row {
@@ -776,13 +866,30 @@ Item {
                                     radius: 26
                                 }
                                 contentItem: Text {
-                                    text: root.isInLibrary ? "✓ Library" : "+ Library"
+                                    text: root.isEpisodeMode ? "← Back to Series" : (root.isInLibrary ? "✓ Library" : "+ Library")
                                     font.pixelSize: 16
                                     color: "#ffffff"
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
                                 onClicked: {
+                                    if (root.isEpisodeMode) {
+                                        // Navigate back to show
+                                        var showId = root.itemData.showImdbId || root.itemData.showId || root.itemData.imdbId || ""
+                                        var showType = "tv"
+                                        var addonId = root.itemData.addonId || ""
+                                        
+                                        console.log("[DetailScreen] Back to Series clicked - showId:", showId)
+                                        
+                                        if (showId) {
+                                            root.showRequested(showId, showType, addonId)
+                                        } else {
+                                            console.error("[DetailScreen] Cannot navigate to show: no showId available")
+                                        }
+                                        return
+                                    }
+                                    
+                                    // Original library toggle logic for non-episodes
                                     // Always prefer imdbId for consistency - this is what's stored in the database
                                     var contentId = root.itemData.imdbId || root.itemData.id || ""
                                     var type = root.itemData.type || "movie"
@@ -849,10 +956,11 @@ Item {
                     }
                 }
                 
-                // Tabs Section
+                // Tabs Section (show for episodes too, but only EPISODES tab)
                 Column {
                     width: parent.width
                     spacing: 0
+                    visible: true
                     
                     // Tab Bar
                     Rectangle {
@@ -911,8 +1019,8 @@ Item {
                         width: parent.width
                         height: {
                             switch (currentIndex) {
-                                case 0: // EPISODES (for TV shows)
-                                    return root.isSeries() ? Math.max(400, episodesListView.contentHeight + 80) : 0
+                                case 0: // EPISODES (for TV shows or episodes)
+                                    return (root.isSeries() || root.isEpisodeMode) ? Math.max(400, episodesListView.contentHeight + 80) : 0
                                 case 1: // CAST & CREW
                                     return 420
                                 case 2: // MORE LIKE THIS
@@ -927,7 +1035,7 @@ Item {
                         
                         // EPISODES Tab
                         Rectangle {
-                            visible: root.isSeries()
+                            visible: root.isSeries() || root.isEpisodeMode
                             color: "#09090b"
                             
                             Item {
@@ -1118,6 +1226,103 @@ Item {
                                                         hoverEnabled: true
                                                         onEntered: parent.isHovered = true
                                                         onExited: parent.isHovered = false
+                                                        onClicked: {
+                                                            // Load episode details
+                                                            var episodeData = modelData
+                                                            // Use preserved showData if in episode mode, otherwise use current itemData
+                                                            var showData = root.isEpisodeMode && Object.keys(root.showData).length > 0 ? 
+                                                                           root.showData : root.itemData
+                                                            
+                                                            // Create episode item data with show information
+                                                            var episodeItemData = {
+                                                                // Episode info
+                                                                episodeNumber: episodeData.episodeNumber || 0,
+                                                                episode: episodeData.episodeNumber || 0,
+                                                                episodeTitle: episodeData.title || "",
+                                                                title: episodeData.title || "",
+                                                                description: episodeData.description || episodeData.overview || "",
+                                                                airDate: episodeData.airDate || "",
+                                                                duration: episodeData.duration || 0,
+                                                                thumbnailUrl: episodeData.thumbnailUrl || "",
+                                                                
+                                                                // Show info (for backdrop and navigation)
+                                                                showId: showData.id || "",
+                                                                showImdbId: showData.imdbId || "",
+                                                                showTitle: showData.title || showData.name || "",
+                                                                showPosterUrl: showData.posterUrl || "",
+                                                                showBackdropUrl: showData.backdropUrl || showData.background || "",
+                                                                showLogoUrl: showData.logoUrl || showData.logo || "",
+                                                                showTmdbId: showData.tmdbId || "",
+                                                                showNumberOfSeasons: showData.numberOfSeasons || 1,
+                                                                
+                                                                // Season info
+                                                                season: root.selectedSeasonNumber || 1,
+                                                                seasonNumber: root.selectedSeasonNumber || 1,
+                                                                
+                                                                // Type and metadata
+                                                                type: "tv",
+                                                                addonId: showData.addonId || "",
+                                                                
+                                                                // For smart play state
+                                                                tmdbId: showData.tmdbId || "",
+                                                                id: showData.id || "",
+                                                                imdbId: showData.imdbId || ""
+                                                            }
+                                                            
+                                                            // Preserve availableSeasons if not already set
+                                                            if (root.availableSeasons.length === 0 && episodeItemData.showNumberOfSeasons > 0) {
+                                                                var seasons = []
+                                                                for (var i = 1; i <= episodeItemData.showNumberOfSeasons; i++) {
+                                                                    seasons.push(i)
+                                                                }
+                                                                root.availableSeasons = seasons
+                                                            }
+                                                            
+                                                            // Set smart play state for episode
+                                                            episodeItemData.smartPlayState = {
+                                                                action: "play",
+                                                                season: root.selectedSeasonNumber || 1,
+                                                                episode: episodeData.episodeNumber || 0,
+                                                                buttonText: "Play"
+                                                            }
+                                                            
+                                                            console.log("[DetailScreen] Loading episode details:", episodeItemData.episodeNumber, episodeItemData.episodeTitle)
+                                                            
+                                                            // Preserve show data if not already preserved (first time entering episode mode)
+                                                            if (Object.keys(root.showData).length === 0) {
+                                                                root.showData = showData
+                                                            }
+                                                            
+                                                            // Set itemData directly for episode mode
+                                                            root.itemData = episodeItemData
+                                                            root.isLoading = false
+                                                            
+                                                            // Set smart play state
+                                                            root.smartPlayState = episodeItemData.smartPlayState || {
+                                                                action: "play",
+                                                                season: root.selectedSeasonNumber || 1,
+                                                                episode: episodeData.episodeNumber || 0,
+                                                                buttonText: "Play"
+                                                            }
+                                                            
+                                                            // Set current tab to EPISODES (index 0) for episode mode
+                                                            root.currentTabIndex = 0
+                                                            
+                                                            // Don't check library for episodes
+                                                            root.isInLibrary = false
+                                                            
+                                                            // Clear cast and similar items for episodes
+                                                            root.similarItems = []
+                                                            castModel.clear()
+                                                            
+                                                            // Ensure episodes are loaded for the current season
+                                                            if (root.itemData.showTmdbId) {
+                                                                var tmdbId = parseInt(root.itemData.showTmdbId) || root.itemData.showTmdbId
+                                                                var seasonNum = root.selectedSeasonNumber || 1
+                                                                libraryService.loadSeasonEpisodes(tmdbId, seasonNum)
+                                                            }
+                                                        }
+                                                        cursorShape: Qt.PointingHandCursor
                                                     }
                                                     
                                                     // Duration badge

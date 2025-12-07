@@ -1744,7 +1744,7 @@ void LibraryService::onTvSeasonDetailsFetched(int tmdbId, int seasonNumber, cons
         QString stillPath = episodeObj["still_path"].toString();
         QString thumbnailUrl = "";
         if (!stillPath.isEmpty()) {
-            thumbnailUrl = QString("https://image.tmdb.org/t/p/w500%1").arg(stillPath);
+            thumbnailUrl = QString("https://image.tmdb.org/t/p/w780%1").arg(stillPath);
         }
         episode["thumbnailUrl"] = thumbnailUrl;
         

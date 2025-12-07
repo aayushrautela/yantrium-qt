@@ -301,7 +301,7 @@ QString TmdbDataMapper::extractBackdropUrl(const QJsonObject& tmdbData, const QS
     if (backdropPath.startsWith("http")) {
         return backdropPath;
     }
-    return TmdbImageUrlBuilder::buildUrl(backdropPath, "w1280");
+    return TmdbImageUrlBuilder::buildUrl(backdropPath, "original");
 }
 
 QString TmdbDataMapper::extractLogoUrl(const QJsonObject& tmdbData, const QString& imageBaseUrl)

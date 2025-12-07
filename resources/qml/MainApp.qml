@@ -342,6 +342,15 @@ ApplicationWindow {
                                 })
                             })
 
+                            // Connect showRequested to navigate back to show from episode
+                            item.showRequested.connect(function(contentId, type, addonId) {
+                                console.log("[MainApp] Show requested from episode - contentId:", contentId, "type:", type)
+                                if (contentId && type) {
+                                    // Load show details
+                                    item.loadDetails(contentId, type, addonId || "")
+                                }
+                            })
+
                             // Load details if we have pending data
                             if (detailLoader.pendingContentId && detailLoader.pendingType) {
                                 console.log("[MainApp] DetailScreen loaded with pending data - contentId:", detailLoader.pendingContentId)
