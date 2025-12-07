@@ -8,7 +8,7 @@
         <file>qml/components/VideoOverlay.qml</file>
         <file>qml/modules/player/VideoScreen.qml</file>
         <file>qml/screens/VideoPlayerScreen.qml</file>
-        <file>qml/screens/AddonTestScreen.qml</file>
+        <file>qml/screens/AddonScreen.qml</file>
         <file>qml/screens/HomeScreen.qml</file>
         <file>qml/screens/LibraryScreen.qml</file>
         <file>qml/screens/SearchScreen.qml</file>

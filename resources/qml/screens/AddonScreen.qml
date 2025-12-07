@@ -42,7 +42,7 @@ Item {
             anchors.bottom: parent.bottom
             anchors.margins: 20
 
-            // Addon Test Tab
+            // Addons Tab
             ScrollView {
                 id: addonTab
                 anchors.fill: parent
@@ -55,7 +55,7 @@ Item {
                     spacing: 15
 
                         Text {
-                            text: "Addon System Test"
+                            text: "Addon Management"
                             font.pixelSize: 28
                             font.bold: true
                             color: "#FFFFFF"
@@ -91,7 +91,6 @@ Item {
                                 statusText.color = "#F44336"
                             }
                         }
-                        }
 
                         // Status display
                         Rectangle {
@@ -111,7 +110,7 @@ Item {
 
                         Text {
                             id: statusText
-                            text: "Ready to test"
+                            text: "Ready"
                             color: "#FFFFFF"
                             font.pixelSize: 14
                         }
@@ -201,7 +200,7 @@ Item {
                     }
                 }
 
-                        // Test operations
+                        // Addon Operations
                         Rectangle {
                             width: parent.width
                     height: 100
@@ -223,7 +222,7 @@ Item {
                         }
 
                         Button {
-                            text: "Test Get Addon"
+                            text: "View Addon Details"
                             onClicked: {
                                 var json = addonRepo.getAddonJson("com.cinemeta.movie")
                                 if (json) {
@@ -240,7 +239,7 @@ Item {
                 }
             }
 
-            // TMDB Test Tab
+            // TMDB Tab
             ScrollView {
                 id: tmdbTab
                 anchors.fill: parent
@@ -253,7 +252,7 @@ Item {
                     spacing: 15
 
                         Text {
-                            text: "TMDB Integration Test"
+                            text: "TMDB Integration"
                             font.pixelSize: 28
                             font.bold: true
                             color: "#FFFFFF"
@@ -346,7 +345,7 @@ Item {
 
                         Text {
                             id: tmdbStatusText
-                            text: "Ready to test TMDB"
+                            text: "Ready"
                             color: "#FFFFFF"
                             font.pixelSize: 14
                         }
@@ -627,7 +626,7 @@ Item {
                 }
             }
 
-            // Trakt Test Tab
+            // Trakt Tab
             ScrollView {
                 id: traktTab
                 anchors.fill: parent
@@ -640,7 +639,7 @@ Item {
                     spacing: 15
 
                     Text {
-                        text: "Trakt Integration Test"
+                        text: "Trakt Integration"
                         font.pixelSize: 28
                         font.bold: true
                         color: "#FFFFFF"
@@ -752,7 +751,7 @@ Item {
 
                             Text {
                                 id: traktStatusText
-                                text: "Ready to test Trakt"
+                                text: "Ready"
                                 color: "#FFFFFF"
                                 font.pixelSize: 14
                                 wrapMode: Text.Wrap
@@ -1135,3 +1134,5 @@ Item {
         enabledCount.text = "Enabled: " + addonRepo.getEnabledAddonsCount()
     }
 }
+
+

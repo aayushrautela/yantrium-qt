@@ -37,7 +37,9 @@ Item {
                     color: "#ffffff"
                 }
                 
-                // Addons Section
+                // ==========================================
+                // ADDONS SECTION
+                // ==========================================
                 Rectangle {
                     width: parent.width
                     height: addonsSection.height + 40
@@ -52,29 +54,69 @@ Item {
                         anchors.margins: 20
                         spacing: 20
                         
-                        Text {
-                            text: "Addons"
-                            font.pixelSize: 24
-                            font.bold: true
-                            color: "#ffffff"
+                        // Header with title, description, and badge
+                        Item {
+                            width: parent.width
+                            height: Math.max(headerColumn.height, badge.height)
+                            
+                            Column {
+                                id: headerColumn
+                                width: parent.width - (badge.visible ? badge.width + 20 : 0)
+                                
+                                Text {
+                                    text: "Addons"
+                                    font.pixelSize: 28
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+                                
+                                Text {
+                                    text: "Manage your installed extensions and sources."
+                                    font.pixelSize: 14
+                                    color: "#aaaaaa"
+                                    wrapMode: Text.WordWrap
+                                    width: parent.width
+                                }
+                            }
+                            
+                            Rectangle {
+                                id: badge
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.topMargin: 4
+                                width: badgeText.width + 16
+                                height: 24
+                                radius: 12
+                                color: "#2d2d2d"
+                                visible: addonListModel.count > 0
+                                
+                                Text {
+                                    id: badgeText
+                                    anchors.centerIn: parent
+                                    text: addonListModel.count + " Installed"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: "#aaaaaa"
+                                }
+                            }
                         }
                         
                         Connections {
                             target: addonRepo
                             function onAddonInstalled(addon) {
-                                addonStatusText.text = "✓ Addon installed: " + addon.name
+                                addonStatusText.text = "\u2713 Addon installed: " + addon.name
                                 addonStatusText.color = "#4CAF50"
                                 refreshAddonList()
                             }
                             
                             function onAddonRemoved(addonId) {
-                                addonStatusText.text = "✓ Removed addon: " + addonId
+                                addonStatusText.text = "\u2713 Removed addon: " + addonId
                                 addonStatusText.color = "#FF9800"
                                 refreshAddonList()
                             }
                             
                             function onError(errorMessage) {
-                                addonStatusText.text = "✗ Error: " + errorMessage
+                                addonStatusText.text = "\u2717 Error: " + errorMessage
                                 addonStatusText.color = "#F44336"
                             }
                         }
@@ -95,31 +137,50 @@ Item {
                                 width: parent.width
                                 spacing: 10
                                 
-                                TextField {
-                                    id: manifestUrlField
+                                Rectangle {
                                     width: parent.width - installButton.width - 10
-                                    height: 40
-                                    placeholderText: "Enter addon manifest URL (e.g., https://...)"
-
-                                    background: Rectangle {
-                                        color: "#2d2d2d"
-                                        border.width: 1
-                                        border.color: "#3d3d3d"
-                                        radius: 4
-                                    }
+                                    height: 44
+                                    color: "#2d2d2d"
+                                    border.width: 1
+                                    border.color: manifestUrlField.activeFocus ? "#ffffff" : "#3d3d3d"
+                                    radius: 4
                                     
-                                    color: "#ffffff"
-                                    placeholderTextColor: "#666666"
+                                    Row {
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.leftMargin: 12
+                                        anchors.rightMargin: 12
+                                        spacing: 8
+                                        
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: "\U0001f517"
+                                            font.pixelSize: 16
+                                            color: "#666666"
+                                        }
+                                        
+                                        TextField {
+                                            id: manifestUrlField
+                                            width: parent.parent.width - 40
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            placeholderText: "Enter addon manifest URL (e.g., https://...)"
+                                            color: "#ffffff"
+                                            placeholderTextColor: "#666666"
+                                            background: Rectangle {
+                                                color: "transparent"
+                                            }
+                                        }
+                                    }
                                 }
                                 
                                 Button {
                                     id: installButton
                                     width: 120
-                                    height: 40
+                                    height: 44
                                     text: "Install"
                                     
                                     background: Rectangle {
-                                        color: parent.pressed ? "#ffffff" : "#ffffff"
+                                        color: parent.pressed ? "#e0e0e0" : "#ffffff"
                                         radius: 4
                                     }
                                     
@@ -127,6 +188,7 @@ Item {
                                         text: parent.text
                                         color: "#000000"
                                         font.bold: true
+                                        font.pixelSize: 14
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
                                     }
@@ -157,32 +219,39 @@ Item {
                             spacing: 10
                             
                             Text {
-                                text: "Installed Addons (" + addonListModel.count + ")"
-                                font.pixelSize: 16
+                                text: "INSTALLED ADDONS"
+                                font.pixelSize: 14
                                 font.bold: true
-                                color: "#ffffff"
+                                font.letterSpacing: 0.5
+                                color: "#aaaaaa"
+                                visible: addonListModel.count > 0
                             }
                             
                             ListView {
                                 width: parent.width
-                                height: Math.min(addonListModel.count * 80, 400)
+                                height: Math.min(addonListModel.count * 90, 500)
                                 model: addonListModel
                                 clip: true
+                                spacing: 12
+                                visible: addonListModel.count > 0
                                 
                                 delegate: Rectangle {
                                     width: ListView.view.width
-                                    height: 70
-                                    color: "#2d2d2d"
-                                    radius: 4
+                                    height: 85
+                                    color: "#1a1a1a"
+                                    radius: 8
+                                    border.width: 1
+                                    border.color: "#2d2d2d"
                                     
                                     Row {
                                         anchors.fill: parent
-                                        anchors.margins: 10
-                                        spacing: 15
+                                        anchors.margins: 16
+                                        spacing: 16
                                         
                                         Column {
-                                            width: parent.width - toggleSwitch.width - removeButton.width - 30
+                                            width: parent.width - toggleSwitch.width - deleteButton.width - 40
                                             anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 8
                                             
                                             Text {
                                                 width: parent.width
@@ -193,12 +262,35 @@ Item {
                                                 elide: Text.ElideRight
                                             }
                                             
-                                            Text {
-                                                width: parent.width
-                                                text: "Version: " + (model.version || "N/A")
-                                                font.pixelSize: 12
-                                                color: "#aaaaaa"
-                                                elide: Text.ElideRight
+                                            Row {
+                                                spacing: 12
+                                                
+                                                Text {
+                                                    text: "v" + (model.version || "N/A")
+                                                    font.pixelSize: 12
+                                                    color: "#aaaaaa"
+                                                }
+                                                
+                                                // Status indicator
+                                                Row {
+                                                    spacing: 6
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    
+                                                    Rectangle {
+                                                        width: 8
+                                                        height: 8
+                                                        radius: 4
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        color: (model.enabled || false) ? "#4CAF50" : "#666666"
+                                                    }
+                                                    
+                                                    Text {
+                                                        text: (model.enabled || false) ? "Active" : "Inactive"
+                                                        font.pixelSize: 12
+                                                        color: (model.enabled || false) ? "#4CAF50" : "#666666"
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                    }
+                                                }
                                             }
                                         }
                                         
@@ -218,28 +310,60 @@ Item {
                                         }
                                         
                                         Button {
-                                            id: removeButton
-                                            width: 80
-                                            height: 36
-                                            text: "Remove"
+                                            id: deleteButton
+                                            width: 40
+                                            height: 40
+                                            anchors.verticalCenter: parent.verticalCenter
                                             
                                             background: Rectangle {
-                                                color: parent.pressed ? "#d32f2f" : "#f44336"
+                                                color: parent.pressed ? "#d32f2f" : "transparent"
                                                 radius: 4
                                             }
                                             
                                             contentItem: Text {
-                                                text: parent.text
-                                                color: "#ffffff"
-                                                font.bold: true
+                                                text: "\U0001f5d1\ufe0f"
+                                                font.pixelSize: 18
                                                 horizontalAlignment: Text.AlignHCenter
                                                 verticalAlignment: Text.AlignVCenter
                                             }
                                             
                                             onClicked: {
-                                                addonRepo.removeAddon(model.id)
+                                                deleteConfirmDialog.addonName = model.name || model.id || "Unknown"
+                                                deleteConfirmDialog.addonId = model.id
+                                                deleteConfirmDialog.open()
                                             }
                                         }
+                                    }
+                                }
+                            }
+                            
+                            // Empty state
+                            Rectangle {
+                                width: parent.width
+                                height: 200
+                                color: "transparent"
+                                visible: addonListModel.count === 0
+                                
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 12
+                                    
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: "No addons installed"
+                                        font.pixelSize: 18
+                                        font.bold: true
+                                        color: "#ffffff"
+                                    }
+                                    
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: "Install addons to extend functionality and add content sources."
+                                        font.pixelSize: 14
+                                        color: "#aaaaaa"
+                                        horizontalAlignment: Text.AlignHCenter
+                                        width: 400
+                                        wrapMode: Text.WordWrap
                                     }
                                 }
                             }
@@ -247,7 +371,9 @@ Item {
                     }
                 }
                 
-                // Trakt Authentication Section
+                // ==========================================
+                // TRAKT AUTHENTICATION SECTION
+                // ==========================================
                 Rectangle {
                     width: parent.width
                     height: traktSection.height + 40
@@ -272,11 +398,24 @@ Item {
                             TraktCoreService.resyncWatchedHistory()
                         }
                         
-                        Text {
-                            text: "Trakt Authentication"
-                            font.pixelSize: 24
-                            font.bold: true
-                            color: "#ffffff"
+                        Column {
+                            width: parent.width
+                            spacing: 4
+                            
+                            Text {
+                                text: "Trakt Authentication"
+                                font.pixelSize: 24
+                                font.bold: true
+                                color: "#ffffff"
+                            }
+                            
+                            Text {
+                                text: "Sync your watch history and manage your Trakt account."
+                                font.pixelSize: 14
+                                color: "#aaaaaa"
+                                wrapMode: Text.WordWrap
+                                width: parent.width
+                            }
                         }
                         
                         // TraktAuthService is a singleton, accessed directly
@@ -308,7 +447,7 @@ Item {
                             }
                             
                             function onError(message) {
-                                traktStatusText.text = "✗ Error: " + message
+                                traktStatusText.text = "\u2717 Error: " + message
                                 traktStatusText.color = "#F44336"
                                 deviceCodeText.visible = false
                                 pollingTimer.stop()
@@ -338,7 +477,7 @@ Item {
                             enabled: TraktAuthService.isConfigured
                             
                             background: Rectangle {
-                                color: parent.pressed ? "#ffffff" : "#ffffff"
+                                color: parent.pressed ? "#e0e0e0" : "#ffffff"
                                 radius: 4
                             }
                             
@@ -346,6 +485,7 @@ Item {
                                 text: parent.text
                                 color: "#000000"
                                 font.bold: true
+                                font.pixelSize: 14
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
@@ -389,7 +529,7 @@ Item {
                             enabled: TraktAuthService.isAuthenticated
                             
                             background: Rectangle {
-                                color: parent.pressed ? "#ff9800" : "#ff9800"
+                                color: parent.pressed ? "#e68900" : "#ff9800"
                                 radius: 4
                             }
                             
@@ -397,6 +537,7 @@ Item {
                                 text: parent.text
                                 color: "#000000"
                                 font.bold: true
+                                font.pixelSize: 14
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
@@ -432,7 +573,7 @@ Item {
                             }
                             
                             function onSyncError(syncType, message) {
-                                traktStatusText.text = "✗ Sync error (" + syncType + "): " + message
+                                traktStatusText.text = "\u2717 Sync error (" + syncType + "): " + message
                                 traktStatusText.color = "#F44336"
                                 traktSection.pendingSyncs = Math.max(0, traktSection.pendingSyncs - 1)
                                 
@@ -462,7 +603,9 @@ Item {
                     }
                 }
                 
-                // Catalog Management Section
+                // ==========================================
+                // CATALOG MANAGEMENT SECTION
+                // ==========================================
                 Rectangle {
                     width: parent.width
                     height: catalogSection.height + 40
@@ -477,11 +620,24 @@ Item {
                         anchors.margins: 20
                         spacing: 20
                         
-                        Text {
-                            text: "Catalog Management"
-                            font.pixelSize: 24
-                            font.bold: true
-                            color: "#ffffff"
+                        Column {
+                            width: parent.width
+                            spacing: 4
+                            
+                            Text {
+                                text: "Catalog Management"
+                                font.pixelSize: 24
+                                font.bold: true
+                                color: "#ffffff"
+                            }
+                            
+                            Text {
+                                text: "Manage content catalogs from your installed addons."
+                                font.pixelSize: 14
+                                color: "#aaaaaa"
+                                wrapMode: Text.WordWrap
+                                width: parent.width
+                            }
                         }
                         
                         Connections {
@@ -491,7 +647,7 @@ Item {
                             }
                             
                             function onError(message) {
-                                catalogStatusText.text = "✗ Error: " + message
+                                catalogStatusText.text = "\u2717 Error: " + message
                                 catalogStatusText.color = "#F44336"
                             }
                         }
@@ -542,18 +698,13 @@ Item {
                                 }
                                 
                                 onClicked: {
-                                    console.log("[Settings] ===== Export (Processed) button clicked =====")
-                                    
                                     // Try to get existing catalog sections first
-                                    let existingSections = exportLibraryService.getCatalogSections()
-                                    console.log("[Settings] Existing catalog sections:", existingSections ? existingSections.length : 0)
+                                    let existingSections = libraryService.getCatalogSections()
                                     
                                     if (existingSections && existingSections.length > 0) {
-                                        console.log("[Settings] Using existing catalog data")
                                         exportCatalogDataToFile(existingSections, false)
                                     } else {
-                                        console.log("[Settings] No existing data, loading catalogs...")
-                                        catalogStatusText.text = "Loading catalogs... (check console for progress)"
+                                        catalogStatusText.text = "Loading catalogs..."
                                         catalogStatusText.color = "#2196F3"
                                         exportCatalogData()
                                     }
@@ -580,11 +731,10 @@ Item {
                                 }
                                 
                                 onClicked: {
-                                    console.log("[Settings] ===== Export (Raw) button clicked =====")
-                                    catalogStatusText.text = "Loading raw catalog data... (check console for progress)"
+                                    catalogStatusText.text = "Loading raw catalog data..."
                                     catalogStatusText.color = "#2196F3"
                                     exportTimeout.start()
-                                    exportLibraryService.loadCatalogsRaw()
+                                    libraryService.loadCatalogsRaw()
                                 }
                             }
                         }
@@ -604,116 +754,237 @@ Item {
                             visible: catalogListModel.count > 0
                             
                             Text {
-                                text: "Available Catalogs (" + catalogListModel.count + ")"
-                                font.pixelSize: 16
+                                text: "AVAILABLE CATALOGS"
+                                font.pixelSize: 14
                                 font.bold: true
-                                color: "#ffffff"
+                                font.letterSpacing: 0.5
+                                color: "#aaaaaa"
                             }
                             
+                            // Updated ListView with "Ghost" Reparenting Strategy + Fixed Sizing
                             ListView {
+                                id: catalogListView
                                 width: parent.width
                                 height: Math.min(catalogListModel.count * 100, 500)
                                 model: catalogListModel
                                 clip: true
+                                spacing: 12
                                 
-                                delegate: Rectangle {
+                                // Smooth animation for items moving OUT of the way
+                                move: Transition {
+                                    NumberAnimation { properties: "x,y"; duration: 300; easing.type: Easing.OutCubic }
+                                }
+
+                                delegate: Item {
+                                    id: delegateWrapper
                                     width: ListView.view.width
-                                    height: 90
-                                    color: "#2d2d2d"
-                                    radius: 4
+                                    height: 95
+                                    z: dragArea.pressed ? 100 : 1 
                                     
-                                    Row {
-                                        anchors.fill: parent
-                                        anchors.margins: 10
-                                        spacing: 15
+                                    // The actual visible card
+                                    Rectangle {
+                                        id: visualCard
+                                        // These bindings are fine normally, but we break them during drag
+                                        width: parent.width
+                                        height: parent.height
                                         
-                                        Column {
-                                            width: parent.width - heroToggle.width - enableSwitch.width - 30
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            
-                                            Text {
-                                                width: parent.width
-                                                text: model.catalogName || "Unknown Catalog"
-                                                font.pixelSize: 16
-                                                font.bold: true
-                                                color: "#ffffff"
-                                                elide: Text.ElideRight
-                                            }
-                                            
-                                            Text {
-                                                width: parent.width
-                                                text: model.addonName + " • " + (model.catalogType || "")
-                                                font.pixelSize: 12
-                                                color: "#aaaaaa"
-                                                elide: Text.ElideRight
-                                            }
-                                            
-                                            Text {
-                                                width: parent.width
-                                                text: "ID: " + model.catalogId
-                                                font.pixelSize: 11
-                                                color: "#666666"
-                                                elide: Text.ElideRight
-                                                visible: model.catalogId && model.catalogId !== ""
-                                            }
-                                        }
+                                        color: dragArea.pressed ? "#252525" : "#1a1a1a"
+                                        radius: 8
+                                        border.width: 1
+                                        border.color: dragArea.pressed ? "#4d4d4d" : "#2d2d2d"
+                                        scale: dragArea.pressed ? 1.02 : 1.0
                                         
-                                        // Hero toggle button
-                                        Button {
-                                            id: heroToggle
-                                            width: 80
-                                            height: 36
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: model.isHeroSource ? "Hero ✓" : "Hero"
-                                            
-                                            background: Rectangle {
-                                                color: model.isHeroSource 
-                                                    ? (parent.pressed ? "#ffffff" : "#ffffff")
-                                                    : (parent.pressed ? "#3d3d3d" : "#2d2d2d")
-                                                radius: 4
-                                                border.width: 1
-                                                border.color: model.isHeroSource ? "#ffffff" : "#3d3d3d"
-                                            }
-                                            
-                                            contentItem: Text {
-                                                text: parent.text
-                                                color: model.isHeroSource ? "#000000" : "#ffffff"
-                                                font.bold: true
-                                                font.pixelSize: 12
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            
-                                            onClicked: {
-                                                if (model.isHeroSource) {
-                                                    catalogPrefsService.unsetHeroCatalog(
-                                                        model.addonId, 
-                                                        model.catalogType, 
-                                                        model.catalogId || ""
-                                                    )
-                                                } else {
-                                                    catalogPrefsService.setHeroCatalog(
-                                                        model.addonId, 
-                                                        model.catalogType, 
-                                                        model.catalogId || ""
-                                                    )
+                                        // Anchors normally fill wrapper, but we break this when dragging
+                                        anchors.fill: dragArea.pressed ? undefined : parent
+
+                                        Behavior on scale { NumberAnimation { duration: 150 } }
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                                        Row {
+                                            anchors.fill: parent
+                                            anchors.margins: 16
+                                            spacing: 12
+
+                                            // --- DRAG HANDLE ---
+                                            Item {
+                                                width: 30
+                                                height: parent.height
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "\u2630"
+                                                    color: dragArea.pressed ? "#ffffff" : "#666666"
+                                                    font.pixelSize: 24
+                                                    font.bold: true
+                                                }
+
+                                                MouseArea {
+                                                    id: dragArea
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.OpenHandCursor
+                                                    
+                                                    drag.target: visualCard
+                                                    drag.axis: Drag.YAxis
+                                                    drag.smoothed: true
+                                                    
+                                                    property int pendingIndex: -1
+
+                                                    // Debounce Timer
+                                                    Timer {
+                                                        id: reorderTimer
+                                                        interval: 150 
+                                                        repeat: false
+                                                        onTriggered: {
+                                                            if (dragArea.pendingIndex !== -1 && dragArea.pendingIndex !== index) {
+                                                                catalogListModel.move(index, dragArea.pendingIndex, 1)
+                                                                dragArea.pendingIndex = -1
+                                                            }
+                                                        }
+                                                    }
+
+                                                    onPressed: (mouse) => {
+                                                        // 1. Calculate global position
+                                                        var pos = mapToItem(root, visualCard.x, visualCard.y)
+                                                        
+                                                        // 2. CRITICAL FIX: Lock dimensions to exact pixels before reparenting
+                                                        // Prevents inheriting root's full height
+                                                        visualCard.width = delegateWrapper.width
+                                                        visualCard.height = delegateWrapper.height
+                                                        
+                                                        // 3. Detach from list: Reparent to root so it floats freely
+                                                        visualCard.parent = root
+                                                        visualCard.x = pos.x
+                                                        visualCard.y = pos.y
+                                                        visualCard.z = 1000 // Force to very top
+                                                        
+                                                        // Stop list interaction
+                                                        catalogListView.interactive = false
+                                                    }
+
+                                                    onReleased: (mouse) => {
+                                                        // 1. Re-attach to the list wrapper
+                                                        visualCard.parent = delegateWrapper
+                                                        visualCard.x = 0
+                                                        visualCard.y = 0
+                                                        visualCard.z = 1
+                                                        
+                                                        // 2. Restore anchors (implicitly restores size bindings too)
+                                                        visualCard.anchors.fill = delegateWrapper
+
+                                                        catalogListView.interactive = true
+                                                        reorderTimer.stop()
+                                                        dragArea.pendingIndex = -1
+                                                    }
+
+                                                    onPositionChanged: (mouse) => {
+                                                        // Calculate center of the dragging card in CONTENT coordinates
+                                                        var rootCenter = Qt.point(visualCard.x + visualCard.width/2, visualCard.y + visualCard.height/2)
+                                                        var contentPos = catalogListView.contentItem.mapFromItem(root, rootCenter.x, rootCenter.y)
+                                                        
+                                                        // Find index under that center
+                                                        var indexUnderMouse = catalogListView.indexAt(contentPos.x, contentPos.y)
+                                                        
+                                                        if (indexUnderMouse !== -1 && indexUnderMouse !== index) {
+                                                            if (dragArea.pendingIndex !== indexUnderMouse) {
+                                                                dragArea.pendingIndex = indexUnderMouse
+                                                                reorderTimer.restart()
+                                                            }
+                                                        } else {
+                                                            reorderTimer.stop()
+                                                            dragArea.pendingIndex = -1
+                                                        }
+                                                    }
                                                 }
                                             }
-                                        }
-                                        
-                                        // Enable/disable switch
-                                        Switch {
-                                            id: enableSwitch
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            checked: model.enabled || false
+                                            // -------------------
+
+                                            Column {
+                                                width: parent.width - 30 - enableSwitch.width - 40 - 30 
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                
+                                                Text {
+                                                    width: parent.width
+                                                    text: model.catalogName || "Unknown Catalog"
+                                                    font.pixelSize: 16
+                                                    font.bold: true
+                                                    color: "#ffffff"
+                                                    elide: Text.ElideRight
+                                                }
+                                                
+                                                Text {
+                                                    width: parent.width
+                                                    text: model.addonName + " \u2022 " + (model.catalogType || "")
+                                                    font.pixelSize: 12
+                                                    color: "#aaaaaa"
+                                                    elide: Text.ElideRight
+                                                }
+                                                
+                                                Text {
+                                                    width: parent.width
+                                                    text: "ID: " + model.catalogId
+                                                    font.pixelSize: 11
+                                                    color: "#666666"
+                                                    elide: Text.ElideRight
+                                                    visible: model.catalogId && model.catalogId !== ""
+                                                }
+                                            }
                                             
-                                            onToggled: {
-                                                catalogPrefsService.toggleCatalogEnabled(
-                                                    model.addonId,
-                                                    model.catalogType,
-                                                    model.catalogId || "",
-                                                    checked
-                                                )
+                                            Button {
+                                                id: heroToggle
+                                                width: 80
+                                                height: 36
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: model.isHeroSource ? "Hero \u2713" : "Hero"
+                                                
+                                                background: Rectangle {
+                                                    color: model.isHeroSource 
+                                                        ? (parent.pressed ? "#ffffff" : "#ffffff")
+                                                        : (parent.pressed ? "#3d3d3d" : "#2d2d2d")
+                                                    radius: 4
+                                                    border.width: 1
+                                                    border.color: model.isHeroSource ? "#ffffff" : "#3d3d3d"
+                                                }
+                                                
+                                                contentItem: Text {
+                                                    text: parent.text
+                                                    color: model.isHeroSource ? "#000000" : "#ffffff"
+                                                    font.bold: true
+                                                    font.pixelSize: 12
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+                                                
+                                                onClicked: {
+                                                    if (model.isHeroSource) {
+                                                        catalogPrefsService.unsetHeroCatalog(
+                                                            model.addonId, 
+                                                            model.catalogType, 
+                                                            model.catalogId || ""
+                                                        )
+                                                    } else {
+                                                        catalogPrefsService.setHeroCatalog(
+                                                            model.addonId, 
+                                                            model.catalogType, 
+                                                            model.catalogId || ""
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            
+                                            Switch {
+                                                id: enableSwitch
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                checked: model.enabled || false
+                                                
+                                                onToggled: {
+                                                    catalogPrefsService.toggleCatalogEnabled(
+                                                        model.addonId,
+                                                        model.catalogType,
+                                                        model.catalogId || "",
+                                                        checked
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -724,26 +995,30 @@ Item {
                         // Empty state
                         Rectangle {
                             width: parent.width
-                            height: 100
+                            height: 200
                             color: "transparent"
                             visible: catalogListModel.count === 0
                             
                             Column {
                                 anchors.centerIn: parent
-                                spacing: 8
+                                spacing: 12
                                 
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: "No catalogs available"
-                                    font.pixelSize: 16
-                                    color: "#aaaaaa"
+                                    font.pixelSize: 18
+                                    font.bold: true
+                                    color: "#ffffff"
                                 }
                                 
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: "Enable addons with catalog support to see catalogs here."
-                                    font.pixelSize: 12
-                                    color: "#666666"
+                                    font.pixelSize: 14
+                                    color: "#aaaaaa"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    width: 400
+                                    wrapMode: Text.WordWrap
                                 }
                             }
                         }
@@ -813,14 +1088,12 @@ Item {
         id: fileExportService
         
         onFileWritten: function(filePath) {
-            console.log("[Settings] File written successfully:", filePath)
-            catalogStatusText.text = "✓ File saved to: " + filePath
+            catalogStatusText.text = "\u2713 File saved to: " + filePath
             catalogStatusText.color = "#4CAF50"
         }
         
         onError: function(message) {
-            console.error("[Settings] File export error:", message)
-            catalogStatusText.text = "✗ Error saving file: " + message
+            catalogStatusText.text = "\u2717 Error saving file: " + message
             catalogStatusText.color = "#F44336"
         }
     }
@@ -831,20 +1104,17 @@ Item {
     Connections {
         target: libraryService
         function onCatalogsLoaded(sections) {
-            console.log("[Settings] Export: catalogsLoaded signal received, sections:", sections ? sections.length : 0)
             exportTimeout.stop()
             exportCatalogDataToFile(sections, false) // false = processed data
         }
         
         function onRawCatalogsLoaded(rawData) {
-            console.log("[Settings] Export: rawCatalogsLoaded signal received, sections:", rawData ? rawData.length : 0)
             exportTimeout.stop()
             exportCatalogDataToFile(rawData, true) // true = raw data
         }
         
         function onError(message) {
-            console.error("[Settings] Export error:", message)
-            catalogStatusText.text = "✗ Export error: " + message
+            catalogStatusText.text = "\u2717 Export error: " + message
             catalogStatusText.color = "#F44336"
         }
     }
@@ -853,19 +1123,18 @@ Item {
         id: exportTimeout
         interval: 30000 // 30 seconds timeout
         onTriggered: {
-            console.error("[Settings] Export timeout - catalogs did not load within 30 seconds")
-            catalogStatusText.text = "✗ Export timeout: Catalogs did not load. Check console for errors."
+            catalogStatusText.text = "\u2717 Export timeout: Catalogs did not load within 30 seconds."
             catalogStatusText.color = "#F44336"
         }
     }
     
     function exportCatalogData() {
         console.log("[Settings] ===== exportCatalogData() called =====")
-        console.log("[Settings] exportLibraryService:", exportLibraryService)
+        console.log("[Settings] libraryService:", libraryService)
         
-        if (!exportLibraryService) {
-            console.error("[Settings] ERROR: exportLibraryService is null!")
-            catalogStatusText.text = "✗ Error: LibraryService not available"
+        if (!libraryService) {
+            console.error("[Settings] ERROR: libraryService is null!")
+            catalogStatusText.text = "\u2717 Error: LibraryService not available"
             catalogStatusText.color = "#F44336"
             return
         }
@@ -874,17 +1143,13 @@ Item {
         catalogStatusText.color = "#2196F3"
         exportTimeout.start()
         console.log("[Settings] Started export timeout timer (30s)")
-        console.log("[Settings] Calling exportLibraryService.loadCatalogs()")
-        exportLibraryService.loadCatalogs()
+        console.log("[Settings] Calling libraryService.loadCatalogs()")
+        libraryService.loadCatalogs()
     }
     
     function exportCatalogDataToFile(sections, isRaw) {
-        console.log("[Settings] ===== exportCatalogDataToFile() called =====")
-        console.log("[Settings] Exporting", sections ? sections.length : 0, "sections to file (raw:", isRaw, ")")
-        
         if (!sections || sections.length === 0) {
-            console.warn("[Settings] No sections to export!")
-            catalogStatusText.text = "✗ No catalog data to export. Make sure addons are enabled and catalogs are loaded."
+            catalogStatusText.text = "\u2717 No catalog data to export. Make sure addons are enabled and catalogs are loaded."
             catalogStatusText.color = "#FF9800"
             return
         }
@@ -949,26 +1214,35 @@ Item {
         let downloadsPath = fileExportService.getDownloadsPath()
         let filePath = downloadsPath + "/" + fileName
         
-        console.log("[Settings] Writing file to:", filePath)
-        console.log("[Settings] JSON length:", jsonString.length, "characters")
-        
         // Write to file
         let success = fileExportService.writeTextFile(filePath, jsonString)
         
         if (success) {
             let totalItems = jsonData.sections.reduce((sum, s) => sum + s.itemsCount, 0)
-            catalogStatusText.text = "✓ Exported " + sections.length + " sections with " + totalItems + 
+            catalogStatusText.text = "\u2713 Exported " + sections.length + " sections with " + totalItems + 
                                      " items to:\n" + filePath
             catalogStatusText.color = "#4CAF50"
-            
-            // Also output to console for backup
-            console.log("=== CATALOG DATA EXPORT ===")
-            console.log("File saved to:", filePath)
-            console.log("Total sections:", sections.length)
-            console.log("Total items:", totalItems)
         } else {
-            catalogStatusText.text = "✗ Failed to write file. Check console for details."
+            catalogStatusText.text = "\u2717 Failed to write file."
             catalogStatusText.color = "#F44336"
+        }
+    }
+    
+    // Delete confirmation dialog
+    MessageDialog {
+        id: deleteConfirmDialog
+        property string addonName: ""
+        property string addonId: ""
+        
+        title: "Remove Addon"
+        text: "Are you sure you want to remove \"" + addonName + "\"?\n\nThis action cannot be undone."
+        buttons: MessageDialog.Ok | MessageDialog.Cancel
+        modality: Qt.WindowModal
+        
+        onAccepted: {
+            if (addonId !== "") {
+                addonRepo.removeAddon(addonId)
+            }
         }
     }
     
@@ -977,4 +1251,3 @@ Item {
         refreshCatalogList()
     }
 }
-
