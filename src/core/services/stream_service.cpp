@@ -1,40 +1,29 @@
 #include "stream_service.h"
-#include "error_service.h"
+#include "logging_service.h"
+#include "logging_service.h"
 #include "features/addons/logic/addon_repository.h"
 #include "features/addons/logic/addon_client.h"
 #include "features/addons/models/addon_config.h"
 #include "features/addons/models/addon_manifest.h"
-#include "core/services/tmdb_data_service.h"
 #include "core/services/library_service.h"
 #include "core/services/id_parser.h"
 #include "core/models/stream_info.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
-#include <QDebug>
 #include <QUrl>
 #include <QList>
 
 StreamService::StreamService(
     std::shared_ptr<AddonRepository> addonRepository,
-    std::shared_ptr<TmdbDataService> tmdbDataService,
     LibraryService* libraryService,
     QObject* parent)
     : QObject(parent)
     , m_addonRepository(std::move(addonRepository))
-    , m_tmdbDataService(std::move(tmdbDataService))
     , m_libraryService(libraryService)
     , m_completedRequests(0)
     , m_totalRequests(0)
-    , m_waitingForImdbId(false)
 {
-    // Connect to TMDB service signals
-    if (m_tmdbDataService) {
-        connect(m_tmdbDataService.get(), &TmdbDataService::movieMetadataFetched,
-                this, &StreamService::onTmdbMovieMetadataFetched);
-        connect(m_tmdbDataService.get(), &TmdbDataService::tvMetadataFetched,
-                this, &StreamService::onTmdbTvMetadataFetched);
-    }
 }
 
 QString StreamService::extractImdbId(const QVariantMap& itemData)
@@ -42,32 +31,19 @@ QString StreamService::extractImdbId(const QVariantMap& itemData)
     // Check if already an IMDB ID
     QString id = itemData["id"].toString();
     if (IdParser::isImdbId(id)) {
-        qDebug() << "[StreamService] Item already has IMDB ID:" << id;
+        LoggingService::logDebug("StreamService", QString("Item already has IMDB ID: %1").arg(id));
         return id;
     }
     
     // Try to extract from imdbId field
     QString imdbId = itemData["imdbId"].toString();
     if (!imdbId.isEmpty()) {
-        qDebug() << "[StreamService] Found IMDB ID in itemData:" << imdbId;
+        LoggingService::logDebug("StreamService", QString("Found IMDB ID in itemData: %1").arg(imdbId));
         return imdbId;
     }
     
-    // Try to extract TMDB ID and fetch IMDB from TMDB
-    int tmdbId = IdParser::extractTmdbId(id);
-    if (tmdbId > 0) {
-        qDebug() << "[StreamService] Extracted TMDB ID:" << tmdbId << "from ID:" << id;
-        QString type = itemData["type"].toString();
-        if (type == "movie") {
-            m_tmdbDataService->getMovieMetadata(tmdbId);
-        } else if (type == "series") {
-            m_tmdbDataService->getTvMetadata(tmdbId);
-        }
-        m_waitingForImdbId = true;
-        return QString(); // Will be set when TMDB response arrives
-    }
-    
-    qWarning() << "[StreamService] Could not extract IMDB ID from itemData";
+    // If we can't find IMDB ID, return empty (addons should provide IMDB IDs)
+    LoggingService::logWarning("StreamService", "Could not extract IMDB ID from itemData");
     return QString();
 }
 
@@ -78,7 +54,7 @@ QString StreamService::formatEpisodeId(int season, int episode)
 
 void StreamService::getStreamsForItem(const QVariantMap& itemData, const QString& episodeId)
 {
-    qDebug() << "[StreamService] Getting streams for item:" << itemData["name"].toString() << "type:" << itemData["type"].toString();
+    LoggingService::logDebug("StreamService", QString("Getting streams for item: %1 type: %2").arg(itemData["name"].toString(), itemData["type"].toString()));
     
     m_currentItemData = itemData;
     m_currentEpisodeId = episodeId;
@@ -86,24 +62,18 @@ void StreamService::getStreamsForItem(const QVariantMap& itemData, const QString
     m_pendingRequests.clear();
     m_completedRequests = 0;
     m_totalRequests = 0;
-    m_waitingForImdbId = false;
     
-    if (!m_addonRepository || !m_tmdbDataService) {
-        ErrorService::report("Services not initialized", "SERVICE_UNAVAILABLE", "StreamService");
-        emit error("Services not initialized");
+    if (!m_addonRepository) {
+        LoggingService::report("Addon repository not initialized", "SERVICE_UNAVAILABLE", "StreamService");
+        emit error("Addon repository not initialized");
         return;
     }
     
     // Get IMDB ID
     QString imdbId = extractImdbId(itemData);
-    if (imdbId.isEmpty() && !m_waitingForImdbId) {
-        ErrorService::report("Could not get IMDB ID for item", "ID_EXTRACTION_ERROR", "StreamService");
+    if (imdbId.isEmpty()) {
+        LoggingService::report("Could not get IMDB ID for item", "ID_EXTRACTION_ERROR", "StreamService");
         emit error("Could not get IMDB ID for item");
-        return;
-    }
-    
-    if (m_waitingForImdbId) {
-        // Will continue when TMDB response arrives
         return;
     }
     
@@ -113,9 +83,9 @@ void StreamService::getStreamsForItem(const QVariantMap& itemData, const QString
 
 void StreamService::fetchStreamsFromAddons()
 {
-    if (!m_addonRepository || !m_tmdbDataService) {
-        ErrorService::report("Services not initialized", "SERVICE_UNAVAILABLE", "StreamService");
-        emit error("Services not initialized");
+    if (!m_addonRepository) {
+        LoggingService::report("Addon repository not initialized", "SERVICE_UNAVAILABLE", "StreamService");
+        emit error("Addon repository not initialized");
         return;
     }
     
@@ -298,53 +268,4 @@ void StreamService::onAddonError(const QString& errorMessage)
     checkAllRequestsComplete();
 }
 
-void StreamService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& data)
-{
-    Q_UNUSED(tmdbId);
-    
-    if (!m_waitingForImdbId) {
-        return;
-    }
-    
-    m_waitingForImdbId = false;
-    
-    // Extract IMDB ID from external_ids
-    if (data.contains("external_ids") && data["external_ids"].isObject()) {
-        QJsonObject externalIds = data["external_ids"].toObject();
-        QString imdbId = externalIds["imdb_id"].toString();
-        if (!imdbId.isEmpty()) {
-            m_currentImdbId = imdbId;
-            qDebug() << "[StreamService] Extracted IMDB ID from TMDB:" << imdbId;
-            fetchStreamsFromAddons();
-            return;
-        }
-    }
-    
-    emit error("Could not extract IMDB ID from TMDB metadata");
-}
-
-void StreamService::onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data)
-{
-    Q_UNUSED(tmdbId);
-    
-    if (!m_waitingForImdbId) {
-        return;
-    }
-    
-    m_waitingForImdbId = false;
-    
-    // Extract IMDB ID from external_ids
-    if (data.contains("external_ids") && data["external_ids"].isObject()) {
-        QJsonObject externalIds = data["external_ids"].toObject();
-        QString imdbId = externalIds["imdb_id"].toString();
-        if (!imdbId.isEmpty()) {
-            m_currentImdbId = imdbId;
-            qDebug() << "[StreamService] Extracted IMDB ID from TMDB:" << imdbId;
-            fetchStreamsFromAddons();
-            return;
-        }
-    }
-    
-    emit error("Could not extract IMDB ID from TMDB metadata");
-}
 

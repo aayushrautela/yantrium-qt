@@ -1,21 +1,23 @@
 #include "addon_repository.h"
 #include "addon_installer.h"
+#include "core/di/service_registry.h"
+#include "core/database/database_manager.h"
 // Note: We don't need "addon_client.h" here anymore because the Installer encapsulates it.
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QVariantMap>
-#include <QDebug>
 
 AddonRepository::AddonRepository(QObject* parent)
     : QObject(parent)
 {
-    DatabaseManager& dbManager = DatabaseManager::instance();
-    if (!dbManager.isInitialized()) {
-        dbManager.initialize();
+    auto dbManager = ServiceRegistry::instance().resolve<DatabaseManager>();
+    if (dbManager) {
+        if (!dbManager->isInitialized()) {
+            dbManager->initialize();
+        }
+        // Modern: use make_unique
+        m_dao = std::make_unique<AddonDao>();
     }
-    
-    // Modern: use make_unique
-    m_dao = std::make_unique<AddonDao>();
 }
 
 AddonRepository::~AddonRepository()

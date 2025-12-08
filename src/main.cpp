@@ -13,11 +13,10 @@
 #include <QQuickFramebufferObject>
 #include "player/player_bridge.h"
 #include "core/database/database_manager.h"
+#include "core/services/configuration.h"
 #include "core/di/service_registry.h"
 #include "app_controller.h"
 #include "features/addons/logic/addon_repository.h"
-#include "core/services/tmdb_api_client.h"
-#include "core/services/tmdb_data_service.h"
 #include "core/services/media_metadata_service.h"
 #include "core/services/trakt_auth_service.h"
 #include "core/services/trakt_core_service.h"
@@ -27,12 +26,9 @@
 #include "core/services/catalog_preferences_service.h"
 #include "core/services/file_export_service.h"
 #include "core/services/local_library_service.h"
-#include "core/services/tmdb_search_service.h"
 #include "core/services/stream_service.h"
 #include "core/services/omdb_service.h"
 #include "core/services/navigation_service.h"
-#include "core/services/screen_manager.h"
-#include "core/services/error_service.h"
 #include "core/services/logging_service.h"
 #include "core/services/cache_service.h"
 #include <memory>
@@ -83,31 +79,60 @@ int main(int argc, char *argv[])
     
     QGuiApplication app(argc, argv);
 
-    // Initialize AppController
+    // Register services in service registry for dependency injection FIRST
+    // This must happen before AppController::initialize() which needs DatabaseManager
+    ServiceRegistry& registry = ServiceRegistry::instance();
+    
+    // Register infrastructure services first (before other services that depend on them)
+    qDebug() << "[MAIN] Registering Configuration factory...";
+    registry.registerSingleton<Configuration>([]() {
+        qDebug() << "[MAIN] Configuration factory called";
+        return std::make_shared<Configuration>();
+    });
+    qDebug() << "[MAIN] Configuration factory registered";
+    
+    qDebug() << "[MAIN] Registering DatabaseManager factory...";
+    registry.registerSingleton<DatabaseManager>([]() {
+        qDebug() << "[MAIN] DatabaseManager factory called";
+        auto dbManager = std::make_shared<DatabaseManager>();
+        // Initialize database immediately after creation
+        if (!dbManager->initialize()) {
+            qCritical() << "[MAIN] Failed to initialize database in factory";
+        }
+        return dbManager;
+    });
+    qDebug() << "[MAIN] DatabaseManager factory registered";
+    
+    // Initialize AppController (now that DatabaseManager is registered)
     AppController appController;
     if (!appController.initialize()) {
         qCritical() << "Failed to initialize application";
         return -1;
     }
     
-    // Register services in service registry for dependency injection
-    ServiceRegistry& registry = ServiceRegistry::instance();
+    // Register core utility services (LoggingService includes error reporting, CacheService, NavigationService)
+    qDebug() << "[MAIN] Registering LoggingService factory...";
+    registry.registerSingleton<LoggingService>([]() {
+        qDebug() << "[MAIN] LoggingService factory called";
+        return std::make_shared<LoggingService>();
+    });
+    qDebug() << "[MAIN] LoggingService factory registered";
+    
+    qDebug() << "[MAIN] Registering CacheService factory...";
+    registry.registerSingleton<CacheService>([]() {
+        qDebug() << "[MAIN] CacheService factory called";
+        return std::make_shared<CacheService>();
+    });
+    qDebug() << "[MAIN] CacheService factory registered";
+    
+    qDebug() << "[MAIN] Registering NavigationService factory...";
+    registry.registerSingleton<NavigationService>([]() {
+        qDebug() << "[MAIN] NavigationService factory called";
+        return std::make_shared<NavigationService>();
+    });
+    qDebug() << "[MAIN] NavigationService factory registered";
     
     // Register core services as singletons
-    qDebug() << "[MAIN] Registering TmdbDataService factory...";
-    registry.registerSingleton<TmdbDataService>([]() {
-        qDebug() << "[MAIN] TmdbDataService factory called";
-        return std::make_shared<TmdbDataService>();
-    });
-    qDebug() << "[MAIN] TmdbDataService factory registered";
-    
-    qDebug() << "[MAIN] Registering TmdbSearchService factory...";
-    registry.registerSingleton<TmdbSearchService>([]() {
-        qDebug() << "[MAIN] TmdbSearchService factory called";
-        return std::make_shared<TmdbSearchService>();
-    });
-    qDebug() << "[MAIN] TmdbSearchService factory registered";
-    
     qDebug() << "[MAIN] Registering OmdbService factory...";
     registry.registerSingleton<OmdbService>([]() {
         qDebug() << "[MAIN] OmdbService factory called";
@@ -129,24 +154,12 @@ int main(int argc, char *argv[])
     });
     qDebug() << "[MAIN] LocalLibraryService factory registered";
     
-    // Register MediaMetadataService (depends on TmdbDataService and OmdbService)
+    // Register MediaMetadataService (depends on OmdbService and AddonRepository)
     qDebug() << "[MAIN] Registering MediaMetadataService factory...";
     registry.registerSingleton<MediaMetadataService>([&registry]() {
         qDebug() << "[MAIN] MediaMetadataService factory called";
         qDebug() << "[MAIN] Resolving dependencies in MediaMetadataService factory...";
-        qDebug() << "[MAIN] Step 1: Resolving TmdbDataService...";
-        std::shared_ptr<TmdbDataService> tmdbService;
-        try {
-            tmdbService = registry.resolve<TmdbDataService>();
-            qDebug() << "[MAIN] TmdbDataService resolved in factory:" << (tmdbService ? "yes" : "no");
-        } catch (const std::exception& e) {
-            qCritical() << "[MAIN] Exception resolving TmdbDataService in factory:" << e.what();
-            throw;
-        } catch (...) {
-            qCritical() << "[MAIN] Unknown exception resolving TmdbDataService in factory";
-            throw;
-        }
-        qDebug() << "[MAIN] Step 2: Resolving OmdbService...";
+        qDebug() << "[MAIN] Step 1: Resolving OmdbService...";
         std::shared_ptr<OmdbService> omdbService;
         try {
             omdbService = registry.resolve<OmdbService>();
@@ -158,7 +171,7 @@ int main(int argc, char *argv[])
             qCritical() << "[MAIN] Unknown exception resolving OmdbService in factory";
             throw;
         }
-        qDebug() << "[MAIN] Step 3: Resolving AddonRepository...";
+        qDebug() << "[MAIN] Step 2: Resolving AddonRepository...";
         std::shared_ptr<AddonRepository> addonRepo;
         try {
             addonRepo = registry.resolve<AddonRepository>();
@@ -170,22 +183,22 @@ int main(int argc, char *argv[])
             qCritical() << "[MAIN] Unknown exception resolving AddonRepository in factory";
             throw;
         }
-        qDebug() << "[MAIN] Step 4: Getting TraktCoreService instance...";
-        TraktCoreService* traktService = nullptr;
+        qDebug() << "[MAIN] Step 3: Resolving TraktCoreService from registry...";
+        std::shared_ptr<TraktCoreService> traktService = nullptr;
         try {
-            traktService = &TraktCoreService::instance();
-            qDebug() << "[MAIN] TraktCoreService instance obtained:" << (traktService ? "yes" : "no");
+            traktService = registry.resolve<TraktCoreService>();
+            qDebug() << "[MAIN] TraktCoreService resolved in factory:" << (traktService ? "yes" : "no");
         } catch (const std::exception& e) {
-            qCritical() << "[MAIN] Exception getting TraktCoreService instance:" << e.what();
+            qCritical() << "[MAIN] Exception resolving TraktCoreService in factory:" << e.what();
             throw;
         } catch (...) {
-            qCritical() << "[MAIN] Unknown exception getting TraktCoreService instance";
+            qCritical() << "[MAIN] Unknown exception resolving TraktCoreService in factory";
             throw;
         }
-        qDebug() << "[MAIN] Step 5: Creating MediaMetadataService instance...";
+        qDebug() << "[MAIN] Step 4: Creating MediaMetadataService instance...";
         try {
             auto service = std::make_shared<MediaMetadataService>(
-                tmdbService, omdbService, addonRepo, traktService);
+                omdbService, addonRepo, traktService ? traktService.get() : nullptr);
             qDebug() << "[MAIN] MediaMetadataService instance created successfully";
             return service;
         } catch (const std::exception& e) {
@@ -198,26 +211,24 @@ int main(int argc, char *argv[])
     });
     qDebug() << "[MAIN] MediaMetadataService factory registered";
     
-    // Register StreamService (depends on AddonRepository and TmdbDataService)
+    // Register StreamService (depends on AddonRepository)
     registry.registerSingleton<StreamService>([&registry]() {
         auto addonRepo = registry.resolve<AddonRepository>();
-        auto tmdbService = registry.resolve<TmdbDataService>();
-        return std::make_shared<StreamService>(addonRepo, tmdbService, nullptr);
+        return std::make_shared<StreamService>(addonRepo, nullptr);
     });
     
     // Register LibraryService (depends on multiple services)
     registry.registerSingleton<LibraryService>([&registry]() {
         auto addonRepo = registry.resolve<AddonRepository>();
-        auto tmdbService = registry.resolve<TmdbDataService>();
-        auto tmdbSearchService = registry.resolve<TmdbSearchService>();
         auto mediaMetadataService = registry.resolve<MediaMetadataService>();
         auto omdbService = registry.resolve<OmdbService>();
         auto localLibraryService = registry.resolve<LocalLibraryService>();
         auto catalogDao = std::make_unique<CatalogPreferencesDao>();
+        auto traktService = registry.resolve<TraktCoreService>();
         return std::make_shared<LibraryService>(
-            addonRepo, tmdbService, tmdbSearchService, mediaMetadataService,
+            addonRepo, mediaMetadataService,
             omdbService, localLibraryService, std::move(catalogDao),
-            &TraktCoreService::instance());
+            traktService ? traktService.get() : nullptr);
     });
     
     qDebug() << "[MAIN] Services registered in service registry";
@@ -244,19 +255,6 @@ int main(int argc, char *argv[])
         return -1;
     }
     
-    qDebug() << "[MAIN] Resolving TmdbDataService...";
-    std::shared_ptr<TmdbDataService> tmdbService;
-    try {
-        tmdbService = registry.resolve<TmdbDataService>();
-        qDebug() << "[MAIN] TmdbDataService resolved:" << (tmdbService ? "success" : "failed");
-    } catch (const std::exception& e) {
-        qCritical() << "[MAIN] Exception resolving TmdbDataService:" << e.what();
-        return -1;
-    } catch (...) {
-        qCritical() << "[MAIN] Unknown exception resolving TmdbDataService";
-        return -1;
-    }
-    
     qDebug() << "[MAIN] Resolving MediaMetadataService...";
     std::shared_ptr<MediaMetadataService> mediaMetadataService;
     try {
@@ -277,37 +275,72 @@ int main(int argc, char *argv[])
         qmlRegisterSingletonInstance("Yantrium.Components", 1, 0, "AddonRepository", addonRepo.get());
         qDebug() << "[MAIN] AddonRepository registered";
     }
-    if (tmdbService) {
-        qDebug() << "[MAIN] Registering TmdbDataService...";
-        qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TmdbDataService", tmdbService.get());
-        qDebug() << "[MAIN] TmdbDataService registered";
-    }
     if (mediaMetadataService) {
         qDebug() << "[MAIN] Registering MediaMetadataService...";
         qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "MediaMetadataService", mediaMetadataService.get());
         qDebug() << "[MAIN] MediaMetadataService registered";
     }
     
-    // Register Trakt services (singletons)
+    // Register Trakt services (register TraktCoreService FIRST so it's available when TraktAuthService is created)
     qDebug() << "[MAIN] Registering Trakt services...";
-    qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TraktAuthService", &TraktAuthService::instance());
-    qDebug() << "[MAIN] TraktAuthService registered";
-    qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TraktCoreService", &TraktCoreService::instance());
-    qDebug() << "[MAIN] TraktCoreService registered";
-    qmlRegisterSingletonType<TraktScrobbleService>("Yantrium.Services", 1, 0, "TraktScrobbleService", 
-        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
-            Q_UNUSED(engine)
-            Q_UNUSED(scriptEngine)
-            return new TraktScrobbleService();
-        });
-    qDebug() << "[MAIN] TraktScrobbleService registered";
-    qmlRegisterSingletonType<TraktWatchlistService>("Yantrium.Services", 1, 0, "TraktWatchlistService",
-        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
-            Q_UNUSED(engine)
-            Q_UNUSED(scriptEngine)
-            return new TraktWatchlistService();
-        });
-    qDebug() << "[MAIN] TraktWatchlistService registered";
+    
+    // Register TraktCoreService FIRST
+    qDebug() << "[MAIN] Registering TraktCoreService factory...";
+    registry.registerSingleton<TraktCoreService>([]() {
+        qDebug() << "[MAIN] TraktCoreService factory called";
+        return std::make_shared<TraktCoreService>();
+    });
+    qDebug() << "[MAIN] TraktCoreService factory registered";
+    
+    auto traktCoreService = registry.resolve<TraktCoreService>();
+    if (traktCoreService) {
+        // Initialize TraktCoreService immediately so it's ready
+        traktCoreService->initializeDatabase();
+        traktCoreService->initializeAuth();
+        qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TraktCoreService", traktCoreService.get());
+        qDebug() << "[MAIN] TraktCoreService registered for QML";
+    }
+    
+    // Now register TraktAuthService (TraktCoreService is now available)
+    registry.registerSingleton<TraktAuthService>([]() {
+        qDebug() << "[MAIN] TraktAuthService factory called";
+        return std::make_shared<TraktAuthService>();
+    });
+    qDebug() << "[MAIN] TraktAuthService factory registered";
+    
+    auto traktAuthService = registry.resolve<TraktAuthService>();
+    if (traktAuthService) {
+        // Check authentication now that both services are ready
+        traktAuthService->checkAuthentication();
+        qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TraktAuthService", traktAuthService.get());
+        qDebug() << "[MAIN] TraktAuthService registered for QML";
+    }
+    // Register TraktScrobbleService and TraktWatchlistService in registry
+    qDebug() << "[MAIN] Registering TraktScrobbleService factory...";
+    registry.registerSingleton<TraktScrobbleService>([]() {
+        qDebug() << "[MAIN] TraktScrobbleService factory called";
+        return std::make_shared<TraktScrobbleService>();
+    });
+    qDebug() << "[MAIN] TraktScrobbleService factory registered";
+    
+    qDebug() << "[MAIN] Registering TraktWatchlistService factory...";
+    registry.registerSingleton<TraktWatchlistService>([]() {
+        qDebug() << "[MAIN] TraktWatchlistService factory called";
+        return std::make_shared<TraktWatchlistService>();
+    });
+    qDebug() << "[MAIN] TraktWatchlistService factory registered";
+    
+    auto traktScrobbleService = registry.resolve<TraktScrobbleService>();
+    if (traktScrobbleService) {
+        qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TraktScrobbleService", traktScrobbleService.get());
+        qDebug() << "[MAIN] TraktScrobbleService registered for QML";
+    }
+    
+    auto traktWatchlistService = registry.resolve<TraktWatchlistService>();
+    if (traktWatchlistService) {
+        qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TraktWatchlistService", traktWatchlistService.get());
+        qDebug() << "[MAIN] TraktWatchlistService registered for QML";
+    }
     
     // Register CatalogPreferencesService (depends on AddonRepository)
     qDebug() << "[MAIN] Registering CatalogPreferencesService in registry...";
@@ -322,7 +355,6 @@ int main(int argc, char *argv[])
     qDebug() << "[MAIN] Resolving additional services from registry...";
     auto libraryService = registry.resolve<LibraryService>();
     auto catalogPrefsService = registry.resolve<CatalogPreferencesService>();
-    auto tmdbSearchService = registry.resolve<TmdbSearchService>();
     auto streamService = registry.resolve<StreamService>();
     auto localLibraryService = registry.resolve<LocalLibraryService>();
     qDebug() << "[MAIN] Additional services resolved";
@@ -337,11 +369,6 @@ int main(int argc, char *argv[])
         qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "CatalogPreferencesService", catalogPrefsService.get());
         qDebug() << "[MAIN] CatalogPreferencesService registered";
     }
-    if (tmdbSearchService) {
-        qDebug() << "[MAIN] Registering TmdbSearchService...";
-        qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TmdbSearchService", tmdbSearchService.get());
-        qDebug() << "[MAIN] TmdbSearchService registered";
-    }
     if (streamService) {
         qDebug() << "[MAIN] Registering StreamService...";
         qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "StreamService", streamService.get());
@@ -351,6 +378,26 @@ int main(int argc, char *argv[])
         qDebug() << "[MAIN] Registering LocalLibraryService...";
         qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "LocalLibraryService", localLibraryService.get());
         qDebug() << "[MAIN] LocalLibraryService registered";
+    }
+    
+    // Register core utility services for QML (they have QML_SINGLETON so they work automatically, but register from registry for consistency)
+    auto loggingService = registry.resolve<LoggingService>();
+    if (loggingService) {
+        qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "LoggingService", loggingService.get());
+        qDebug() << "[MAIN] LoggingService registered for QML";
+    }
+    
+    
+    auto cacheService = registry.resolve<CacheService>();
+    if (cacheService) {
+        qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "CacheService", cacheService.get());
+        qDebug() << "[MAIN] CacheService registered for QML";
+    }
+    
+    auto navigationService = registry.resolve<NavigationService>();
+    if (navigationService) {
+        qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "NavigationService", navigationService.get());
+        qDebug() << "[MAIN] NavigationService registered for QML";
     }
     
     // Register File Export service (no dependencies, can be instantiated directly)
@@ -363,7 +410,7 @@ int main(int argc, char *argv[])
         });
     qDebug() << "[MAIN] FileExportService registered";
     
-    // Register NavigationService and ScreenManager
+    // Register NavigationService (includes screen management)
     qDebug() << "[MAIN] Registering NavigationService...";
     qmlRegisterSingletonType<NavigationService>("Yantrium.Services", 1, 0, "NavigationService",
         [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
@@ -372,25 +419,6 @@ int main(int argc, char *argv[])
             return new NavigationService();
         });
     qDebug() << "[MAIN] NavigationService registered";
-    
-    qDebug() << "[MAIN] Registering ScreenManager...";
-    qmlRegisterSingletonType<ScreenManager>("Yantrium.Services", 1, 0, "ScreenManager",
-        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
-            Q_UNUSED(engine)
-            Q_UNUSED(scriptEngine)
-            return new ScreenManager();
-        });
-    qDebug() << "[MAIN] ScreenManager registered";
-    
-    // Register ErrorService
-    qDebug() << "[MAIN] Registering ErrorService...";
-    qmlRegisterSingletonType<ErrorService>("Yantrium.Services", 1, 0, "ErrorService",
-        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
-            Q_UNUSED(engine)
-            Q_UNUSED(scriptEngine)
-            return new ErrorService();
-        });
-    qDebug() << "[MAIN] ErrorService registered";
     
     // Register LoggingService
     qDebug() << "[MAIN] Registering LoggingService...";

@@ -23,11 +23,6 @@ DatabaseManager::~DatabaseManager()
     }
 }
 
-DatabaseManager& DatabaseManager::instance()
-{
-    static DatabaseManager instance;
-    return instance;
-}
 
 bool DatabaseManager::initialize(const QString& databasePath)
 {

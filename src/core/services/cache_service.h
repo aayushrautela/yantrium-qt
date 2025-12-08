@@ -134,7 +134,6 @@ private:
     };
 
     mutable QMap<QString, CacheEntry> m_cache;
-    static CacheService* s_instance;
 
     void cleanupExpired() const;
 };

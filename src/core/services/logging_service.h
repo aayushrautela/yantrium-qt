@@ -17,6 +17,9 @@ class LoggingService : public QObject
     QML_ELEMENT
     QML_SINGLETON
 
+    Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    Q_PROPERTY(bool hasError READ hasError NOTIFY hasErrorChanged)
+
 public:
     /**
      * @brief Log levels
@@ -82,11 +85,57 @@ public:
      */
     static QString formatMessage(const QString& format, const QStringList& args);
 
+    /**
+     * @brief Get the last error message
+     */
+    [[nodiscard]] QString lastError() const { return m_lastError; }
+
+    /**
+     * @brief Check if there is a current error
+     */
+    [[nodiscard]] bool hasError() const { return !m_lastError.isEmpty(); }
+
+    /**
+     * @brief Report an error (combines logging and error tracking)
+     * @param message Error message
+     * @param code Optional error code
+     * @param context Optional context (service name, etc.)
+     */
+    Q_INVOKABLE void reportError(const QString& message, const QString& code = "", const QString& context = "");
+
+    /**
+     * @brief C++ convenience static method for reporting errors
+     */
+    static void report(const QString& message, const QString& code = "", const QString& context = "");
+
+    /**
+     * @brief Clear the current error
+     */
+    Q_INVOKABLE void clearError();
+
 signals:
     /**
      * @brief Emitted when a log message is generated
      */
     void messageLogged(LogLevel level, const QString& category, const QString& message);
+
+    /**
+     * @brief Emitted when an error occurs
+     * @param message Error message
+     * @param code Error code (if provided)
+     * @param context Error context (if provided)
+     */
+    void errorOccurred(const QString& message, const QString& code, const QString& context);
+
+    /**
+     * @brief Emitted when the last error changes
+     */
+    void lastErrorChanged();
+
+    /**
+     * @brief Emitted when error state changes
+     */
+    void hasErrorChanged();
 
 private:
     void log(LogLevel level, const QString& category, const QString& message);
@@ -94,7 +143,11 @@ private:
     QString levelToString(LogLevel level) const;
 
     LogLevel m_minLevel = Debug;
-    static LoggingService* s_instance;
+    
+    // Error tracking
+    QString m_lastError;
+    QString m_lastErrorCode;
+    QString m_lastErrorContext;
 };
 
 #endif // LOGGING_SERVICE_H

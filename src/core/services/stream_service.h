@@ -11,7 +11,6 @@
 #include "interfaces/istream_service.h"
 
 class AddonRepository;
-class TmdbDataService;
 class LibraryService;
 
 class StreamService : public QObject, public IStreamService
@@ -22,7 +21,6 @@ class StreamService : public QObject, public IStreamService
 public:
     explicit StreamService(
         std::shared_ptr<AddonRepository> addonRepository,
-        std::shared_ptr<TmdbDataService> tmdbDataService,
         LibraryService* libraryService = nullptr,
         QObject* parent = nullptr);
     ~StreamService() override = default;
@@ -39,8 +37,6 @@ signals:
 private slots:
     void onStreamsFetched(const QString& type, const QString& id, const QJsonArray& streams);
     void onAddonError(const QString& errorMessage);
-    void onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& data);
-    void onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data);
     
 private:
     struct PendingRequest {
@@ -57,7 +53,6 @@ private:
     void checkAllRequestsComplete();
     
     std::shared_ptr<AddonRepository> m_addonRepository;
-    std::shared_ptr<TmdbDataService> m_tmdbDataService;
     LibraryService* m_libraryService;
     
     QVariantList m_allStreams;
@@ -69,7 +64,6 @@ private:
     QVariantMap m_currentItemData;
     QString m_currentEpisodeId;
     QString m_currentImdbId;
-    bool m_waitingForImdbId;
 };
 
 #endif // STREAM_SERVICE_H

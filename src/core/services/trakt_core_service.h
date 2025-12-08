@@ -25,7 +25,8 @@ class TraktCoreService : public QObject
     Q_OBJECT
 
 public:
-    static TraktCoreService& instance();
+    explicit TraktCoreService(QObject* parent = nullptr);
+    ~TraktCoreService();
     
     void initializeDatabase();
     void initializeAuth();
@@ -89,8 +90,6 @@ private slots:
     void cleanupOldData();
 
 private:
-    explicit TraktCoreService(QObject* parent = nullptr);
-    ~TraktCoreService();
     Q_DISABLE_COPY(TraktCoreService)
     
     QString getAccessTokenSync();

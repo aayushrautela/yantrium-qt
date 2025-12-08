@@ -1,5 +1,6 @@
 #include "library_service.h"
-#include "error_service.h"
+#include "logging_service.h"
+#include "logging_service.h"
 #include "core/database/database_manager.h"
 #include "core/services/id_parser.h"
 #include "core/services/configuration.h"
@@ -14,8 +15,6 @@
 
 LibraryService::LibraryService(
     std::shared_ptr<AddonRepository> addonRepository,
-    std::shared_ptr<TmdbDataService> tmdbService,
-    std::shared_ptr<TmdbSearchService> tmdbSearchService,
     std::shared_ptr<MediaMetadataService> mediaMetadataService,
     std::shared_ptr<OmdbService> omdbService,
     std::shared_ptr<LocalLibraryService> localLibraryService,
@@ -24,9 +23,7 @@ LibraryService::LibraryService(
     QObject* parent)
     : QObject(parent)
     , m_addonRepository(std::move(addonRepository))
-    , m_traktService(traktService ? traktService : &TraktCoreService::instance())
-    , m_tmdbService(std::move(tmdbService))
-    , m_tmdbSearchService(std::move(tmdbSearchService))
+    , m_traktService(traktService)
     , m_mediaMetadataService(std::move(mediaMetadataService))
     , m_omdbService(std::move(omdbService))
     , m_localLibraryService(std::move(localLibraryService))
@@ -36,29 +33,13 @@ LibraryService::LibraryService(
     , m_isRawExport(false)
     , m_pendingHeroRequests(0)
     , m_isLoadingHeroItems(false)
-    , m_pendingHeroTmdbRequests(0)
-    , m_pendingTmdbRequests(0)
+    , m_pendingContinueWatchingMetadataRequests(0)
+    , m_pendingSearchRequests(0)
 {
     // Connect to Trakt service for continue watching
-    connect(m_traktService, &TraktCoreService::playbackProgressFetched,
-            this, &LibraryService::onPlaybackProgressFetched);
-    
-    // Connect to TMDB service for continue watching images
-    if (m_tmdbService) {
-        connect(m_tmdbService.get(), &TmdbDataService::movieMetadataFetched,
-                this, &LibraryService::onTmdbMovieMetadataFetched);
-        connect(m_tmdbService.get(), &TmdbDataService::tvMetadataFetched,
-                this, &LibraryService::onTmdbTvMetadataFetched);
-        connect(m_tmdbService.get(), &TmdbDataService::tmdbIdFound,
-                this, &LibraryService::onTmdbIdFound);
-        connect(m_tmdbService.get(), &TmdbDataService::error,
-                this, &LibraryService::onTmdbError);
-        connect(m_tmdbService.get(), &TmdbDataService::similarMoviesFetched,
-                this, &LibraryService::onSimilarMoviesFetched);
-        connect(m_tmdbService.get(), &TmdbDataService::similarTvFetched,
-                this, &LibraryService::onSimilarTvFetched);
-        connect(m_tmdbService.get(), &TmdbDataService::tvSeasonDetailsFetched,
-                this, &LibraryService::onTvSeasonDetailsFetched);
+    if (m_traktService) {
+        connect(m_traktService, &TraktCoreService::playbackProgressFetched,
+                this, &LibraryService::onPlaybackProgressFetched);
     }
     
     // Connect to MediaMetadataService for item details
@@ -189,7 +170,7 @@ void LibraryService::loadCatalog(const QString& addonId, const QString& type, co
     AddonConfig addon = m_addonRepository->getAddon(addonId);
     if (addon.id.isEmpty()) {
         QString errorMsg = QString("Addon not found: %1").arg(addonId);
-        ErrorService::report(errorMsg, "ADDON_NOT_FOUND", "LibraryService");
+        LoggingService::report(errorMsg, "ADDON_NOT_FOUND", "LibraryService");
         emit error(errorMsg);
         return;
     }
@@ -256,7 +237,7 @@ void LibraryService::loadHeroItems()
             client->getCatalog(heroCatalog.catalogType, heroCatalog.catalogId);
             
         } catch (...) {
-            qWarning() << "[LibraryService] Exception loading hero catalog:" << heroCatalog.addonId;
+            LoggingService::logWarning("LibraryService", QString("Exception loading hero catalog: %1").arg(heroCatalog.addonId));
             continue;
         }
     }
@@ -275,150 +256,74 @@ void LibraryService::searchCatalogs(const QString& query)
         return;
     }
     
-    // For now, we'll search through cached catalog sections
-    // In a full implementation, we might want to search addons directly
-    QVariantList results;
-    QString queryLower = query.toLower();
+    LoggingService::logInfo("LibraryService", QString("Searching catalogs for: %1").arg(query));
     
-    for (const CatalogSection& section : m_catalogSections) {
-        for (const QVariant& itemVar : section.items) {
-            QVariantMap item = itemVar.toMap();
-            QString title = item["title"].toString().toLower();
-            QString description = item["description"].toString().toLower();
+    // Clear any existing search clients
+    for (AddonClient* client : m_activeClients) {
+        if (client->property("isSearchRequest").toBool()) {
+            client->deleteLater();
+        }
+    }
+    m_activeClients.removeAll(nullptr);
+    
+    m_pendingSearchRequests = 0;
+    
+    // Get all enabled addons
+    QList<AddonConfig> addons = m_addonRepository->listAddons();
+    
+    // Search each addon for all supported types
+    QStringList searchTypes = {"movie", "series", "anime"};
+    
+    for (const AddonConfig& addon : addons) {
+        if (!addon.enabled) {
+            continue;
+        }
+        
+        QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
+        if (baseUrl.isEmpty()) {
+            continue;
+        }
+        
+        // Search for each type this addon supports
+        for (const QString& type : searchTypes) {
+            m_pendingSearchRequests++;
             
-            if (title.contains(queryLower) || description.contains(queryLower)) {
-                results.append(item);
-            }
+            // Create a new AddonClient for each search request
+            AddonClient* client = new AddonClient(baseUrl, this);
+            m_activeClients.append(client);
+            
+            // Store search info on client
+            client->setProperty("isSearchRequest", true);
+            client->setProperty("addonId", addon.id);
+            client->setProperty("baseUrl", baseUrl);
+            client->setProperty("searchType", type);
+            client->setProperty("searchQuery", query);
+            
+            // Connect signals
+            connect(client, &AddonClient::searchResultsFetched, this, &LibraryService::onSearchResultsFetched);
+            connect(client, &AddonClient::error, this, &LibraryService::onSearchClientError);
+            
+            // Perform search
+            client->search(type, query);
         }
     }
     
-    emit searchResultsLoaded(results);
+    // If no requests were made, emit empty results
+    if (m_pendingSearchRequests == 0) {
+        LoggingService::logWarning("LibraryService", "No addons available for search");
+        emit searchResultsLoaded(QVariantList());
+    }
 }
 
 void LibraryService::searchTmdb(const QString& query)
 {
-    qDebug() << "[LibraryService] searchTmdb called with query:" << query;
-    
-    if (query.trimmed().isEmpty()) {
-        emit searchSectionsLoaded(QVariantList());
-        return;
-    }
-    
-    if (!m_addonRepository) {
-        ErrorService::report("Addon repository not available", "SERVICE_UNAVAILABLE", "LibraryService");
-        emit error("Addon repository not available");
-        return;
-    }
-    
-    // Find all addons that support search (have catalog with id "search")
-    QList<AddonConfig> enabledAddons = m_addonRepository->getEnabledAddons();
-    QList<QPair<AddonConfig, QList<CatalogDefinition>>> searchAddons;
-    
-    for (const AddonConfig& addon : enabledAddons) {
-        AddonManifest manifest = m_addonRepository->getManifest(addon);
-        if (manifest.id().isEmpty()) {
-            continue;
-        }
-        
-        // Find all search catalogs for this addon
-        QList<CatalogDefinition> searchCatalogs;
-        QList<CatalogDefinition> catalogs = manifest.catalogs();
-        for (const CatalogDefinition& catalog : catalogs) {
-            if (catalog.id() == "search") {
-                searchCatalogs.append(catalog);
-            }
-        }
-        
-        if (!searchCatalogs.isEmpty()) {
-            searchAddons.append({addon, searchCatalogs});
-            qDebug() << "[LibraryService] Found addon with search support:" << addon.name << "(" << addon.id << ") with" << searchCatalogs.size() << "search catalogs";
-        }
-    }
-    
-    if (searchAddons.isEmpty()) {
-        ErrorService::report("No addons with search support found", "ADDON_ERROR", "LibraryService");
-        emit error("No addons with search support found");
-        return;
-    }
-    
-    // Map of type -> section name for display
-    QMap<QString, QString> typeToSectionName = {
-        {"movie", "Movies"},
-        {"series", "TV Shows"},
-        {"tv", "TV Shows"},
-        {"anime.series", "Anime Series"},
-        {"anime.movie", "Anime Movies"}
-    };
-    
-    // Track which types we've already searched to avoid duplicates
-    QSet<QString> searchedTypes;
-    
-    // Search each type from each addon that supports it
-    for (const auto& pair : searchAddons) {
-        const AddonConfig& addon = pair.first;
-        const QList<CatalogDefinition>& searchCatalogs = pair.second;
-        QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
-        
-        for (const CatalogDefinition& catalog : searchCatalogs) {
-            QString catalogType = catalog.type();
-            
-            // Skip if we've already searched this type (to avoid duplicate sections)
-            QString typeKey = catalogType;
-            if (searchedTypes.contains(typeKey)) {
-                qDebug() << "[LibraryService] Skipping duplicate search for type:" << catalogType << "from addon:" << addon.name;
-                continue;
-            }
-            searchedTypes.insert(typeKey);
-            
-            // Get section name for this type
-            QString sectionName = typeToSectionName.value(catalogType, catalogType);
-            if (catalogType == "series") {
-                sectionName = "TV Shows"; // Normalize series to TV Shows
-            }
-        
-        AddonClient* client = new AddonClient(baseUrl, this);
-        
-            connect(client, &AddonClient::searchResultsFetched, this, [this, catalogType, sectionName, addon](const QString& responseType, const QJsonArray& metas) {
-            Q_UNUSED(responseType);
-            QVariantList results;
-            for (const QJsonValue& value : metas) {
-                if (value.isObject()) {
-                    QJsonObject meta = value.toObject();
-                        QVariantMap map = FrontendDataMapper::mapCatalogItemToVariantMap(meta, addon.id);
-                        // Normalize type: "series" -> "tv"
-                        QString normalizedType = (catalogType == "series") ? "tv" : catalogType;
-                    map["type"] = normalizedType;
-                    results.append(map);
-                }
-            }
-                
-                qDebug() << "[LibraryService] Search results received for" << catalogType << "from" << addon.name << ":" << results.size() << "results";
-    
-                // Emit section immediately if we have results
-            if (!results.isEmpty()) {
-                QVariantMap section;
-                section["name"] = sectionName;
-                    section["type"] = (catalogType == "series") ? "tv" : catalogType;
-                section["items"] = results;
-                    section["addonId"] = addon.id;
-                    
-                    qDebug() << "[LibraryService] Emitting searchSectionLoaded for" << sectionName << "with" << results.size() << "items from addon:" << addon.name;
-                    emit searchSectionLoaded(section);
-                }
-                
-                sender()->deleteLater();
-            });
-            
-            connect(client, &AddonClient::error, this, [this, catalogType, addon](const QString& error) {
-                qWarning() << "[LibraryService] Search error for" << catalogType << "from" << addon.name << ":" << error;
-                sender()->deleteLater();
-            });
-            
-            qDebug() << "[LibraryService] Searching" << catalogType << "for:" << query << "from addon:" << addon.name;
-            client->search(catalogType, query);
-        }
-    }
+    // This method is required by the interface but not currently implemented
+    // TMDB search would need to be implemented using TMDB API or addons
+    // For now, emit empty results
+    LoggingService::logWarning("LibraryService", QString("searchTmdb not implemented for query: %1").arg(query));
+    emit searchResultsLoaded(QVariantList());
 }
+
 
 // finishSearch() removed - we now use incremental loading with searchSectionLoaded signal
 
@@ -446,7 +351,7 @@ void LibraryService::onCatalogFetched(const QString& type, const QJsonArray& met
     m_pendingCatalogRequests--;
     
     if (metas.isEmpty()) {
-        qDebug() << "[LibraryService] Empty catalog received for type:" << type;
+        LoggingService::logDebug("LibraryService", QString("Empty catalog received for type: %1").arg(type));
         if (m_pendingCatalogRequests == 0) {
             finishLoadingCatalogs();
         }
@@ -456,7 +361,7 @@ void LibraryService::onCatalogFetched(const QString& type, const QJsonArray& met
     // Find which client sent this
     AddonClient* senderClient = qobject_cast<AddonClient*>(sender());
     if (!senderClient) {
-        qWarning() << "[LibraryService] Could not find sender client";
+        LoggingService::logWarning("LibraryService", "Could not find sender client");
         if (m_pendingCatalogRequests == 0) {
             finishLoadingCatalogs();
         }
@@ -469,11 +374,11 @@ void LibraryService::onCatalogFetched(const QString& type, const QJsonArray& met
     QString catalogId = senderClient->property("catalogId").toString();
     QString catalogName = senderClient->property("catalogName").toString();
     
-    qDebug() << "[LibraryService] Addon ID from client:" << addonId;
-    qDebug() << "[LibraryService] Catalog info - Type:" << catalogType << "ID:" << catalogId << "Name:" << catalogName;
+    LoggingService::logDebug("LibraryService", QString("Addon ID from client: %1").arg(addonId));
+    LoggingService::logDebug("LibraryService", QString("Catalog info - Type: %1 ID: %2 Name: %3").arg(catalogType, catalogId, catalogName));
     
     if (addonId.isEmpty()) {
-        qWarning() << "[LibraryService] ERROR: Could not find addon ID for catalog";
+        LoggingService::logWarning("LibraryService", "ERROR: Could not find addon ID for catalog");
         if (m_pendingCatalogRequests == 0) {
             finishLoadingCatalogs();
         }
@@ -492,7 +397,7 @@ void LibraryService::onCatalogFetched(const QString& type, const QJsonArray& met
     
     // If raw export mode, store raw data without processing
     if (m_isRawExport) {
-        qDebug() << "[LibraryService] Raw export mode - storing unprocessed data";
+        LoggingService::logDebug("LibraryService", "Raw export mode - storing unprocessed data");
         QVariantMap rawSection;
         rawSection["addonId"] = addonId;
         rawSection["catalogType"] = catalogType;
@@ -511,43 +416,121 @@ void LibraryService::onCatalogFetched(const QString& type, const QJsonArray& met
         
         m_rawCatalogData.append(rawSection);
         
-        qDebug() << "[LibraryService] Stored raw catalog data - items:" << rawItems.size();
+        LoggingService::logDebug("LibraryService", QString("Stored raw catalog data - items: %1").arg(rawItems.size()));
     } else {
-        qDebug() << "[LibraryService] Processing catalog:" << catalogName << "type:" << catalogType << "from addon:" << addonId << "items:" << metas.size();
+        LoggingService::logDebug("LibraryService", QString("Processing catalog: %1 type: %2 from addon: %3 items: %4").arg(catalogName, catalogType, addonId).arg(metas.size()));
         processCatalogData(addonId, catalogName, catalogType, metas);
-        qDebug() << "[LibraryService] Processed catalog data. Total sections now:" << m_catalogSections.size();
+        LoggingService::logDebug("LibraryService", QString("Processed catalog data. Total sections now: %1").arg(m_catalogSections.size()));
     }
     
     if (m_pendingCatalogRequests == 0) {
-        qDebug() << "[LibraryService] All catalog requests completed! Finishing loading...";
+        LoggingService::logDebug("LibraryService", "All catalog requests completed! Finishing loading...");
         finishLoadingCatalogs();
     } else {
-        qDebug() << "[LibraryService] Still waiting for" << m_pendingCatalogRequests << "more catalog responses";
+        LoggingService::logDebug("LibraryService", QString("Still waiting for %1 more catalog responses").arg(m_pendingCatalogRequests));
     }
 }
 
 void LibraryService::onClientError(const QString& errorMessage)
 {
-    qDebug() << "[LibraryService] ===== onClientError() called =====";
-    qWarning() << "[LibraryService] Client error:" << errorMessage;
+    LoggingService::logDebug("LibraryService", "===== onClientError() called =====");
+    LoggingService::logWarning("LibraryService", QString("Client error: %1").arg(errorMessage));
     
     m_pendingCatalogRequests--;
-    qDebug() << "[LibraryService] Remaining pending requests:" << m_pendingCatalogRequests;
+    LoggingService::logDebug("LibraryService", QString("Remaining pending requests: %1").arg(m_pendingCatalogRequests));
     
     if (m_pendingCatalogRequests == 0) {
-        qDebug() << "[LibraryService] All requests completed (with errors). Finishing loading...";
+        LoggingService::logDebug("LibraryService", "All requests completed (with errors). Finishing loading...");
         finishLoadingCatalogs();
+    }
+}
+
+void LibraryService::onSearchResultsFetched(const QString& type, const QJsonArray& metas)
+{
+    AddonClient* senderClient = qobject_cast<AddonClient*>(sender());
+    if (!senderClient) {
+        LoggingService::logWarning("LibraryService", "Could not find sender client for search results");
+        m_pendingSearchRequests--;
+        return;
+    }
+    
+    QString addonId = senderClient->property("addonId").toString();
+    
+    m_pendingSearchRequests--;
+    
+    LoggingService::logDebug("LibraryService", QString("Search results fetched from addon %1, type %2: %3 items").arg(addonId, type).arg(metas.size()));
+    
+    if (metas.isEmpty()) {
+        LoggingService::logDebug("LibraryService", QString("Empty search results for addon: %1, type: %2").arg(addonId, type));
+        return;
+    }
+    
+    // Map type to section name
+    QString sectionName;
+    if (type == "movie") {
+        sectionName = "Movies";
+    } else if (type == "series") {
+        sectionName = "TV Shows";
+    } else if (type == "anime") {
+        sectionName = "Anime Series";
+    } else {
+        sectionName = type;
+    }
+    
+    // Get base URL for image mapping
+    QString baseUrl = senderClient->property("baseUrl").toString();
+    
+    // Create a section map for the search results
+    QVariantMap section;
+    section["name"] = sectionName;
+    section["type"] = type;
+    section["addonId"] = addonId;
+    
+    // Convert QJsonArray to QVariantList using FrontendDataMapper
+    QVariantList items;
+    for (const QJsonValue& value : metas) {
+        if (value.isObject()) {
+            QVariantMap item = FrontendDataMapper::mapCatalogItemToVariantMap(value.toObject(), baseUrl);
+            items.append(item);
+        }
+    }
+    section["items"] = items;
+    
+    // Emit searchSectionLoaded signal for incremental loading
+    emit searchSectionLoaded(section);
+    
+    LoggingService::logDebug("LibraryService", QString("Emitted searchSectionLoaded for %1: %2 items").arg(sectionName).arg(items.size()));
+    
+    // Check if all search requests are complete
+    if (m_pendingSearchRequests == 0) {
+        LoggingService::logDebug("LibraryService", "All search requests completed");
+        // Search is complete - SearchScreen will handle isLoading state via signal connections
+    }
+}
+
+void LibraryService::onSearchClientError(const QString& errorMessage)
+{
+    LoggingService::logWarning("LibraryService", QString("Search client error: %1").arg(errorMessage));
+    
+    m_pendingSearchRequests--;
+    
+    // Check if all search requests are complete
+    if (m_pendingSearchRequests == 0) {
+        LoggingService::logDebug("LibraryService", "All search requests completed");
+        // Search is complete - no need to emit anything, SearchScreen will handle isLoading state
     }
 }
 
 void LibraryService::onPlaybackProgressFetched(const QVariantList& progress)
 {
-    qDebug() << "[LibraryService] onPlaybackProgressFetched: received" << progress.size() << "items";
+    LoggingService::logDebug("LibraryService", QString("onPlaybackProgressFetched: received %1 items").arg(progress.size()));
     
     m_continueWatching.clear();
-    m_pendingContinueWatchingItems.clear();
-    m_tmdbIdToImdbId.clear();
-    m_pendingTmdbRequests = 0;
+    
+    if (progress.isEmpty()) {
+        emit continueWatchingLoaded(QVariantList());
+        return;
+    }
     
     const int watchedThreshold = 81; // More than 80% is considered watched
     
@@ -561,7 +544,7 @@ void LibraryService::onPlaybackProgressFetched(const QVariantList& progress)
         }
     }
     
-    qDebug() << "[LibraryService] After filtering >80% watched:" << filteredItems.size() << "items";
+    LoggingService::logDebug("LibraryService", QString("After filtering >80% watched: %1 items").arg(filteredItems.size()));
     
     // Step 2: For episodes, group by show and keep only the highest episode
     QMap<QString, QVariantMap> showEpisodes; // Key: show title + imdbId, Value: highest episode item
@@ -602,79 +585,100 @@ void LibraryService::onPlaybackProgressFetched(const QVariantList& progress)
         }
     }
     
-    qDebug() << "[LibraryService] After grouping episodes:" << showEpisodes.size() << "shows," << movies.size() << "movies";
+    LoggingService::logDebug("LibraryService", QString("After grouping episodes: %1 shows, %2 movies").arg(showEpisodes.size()).arg(movies.size()));
     
-    // Step 3: Only fetch TMDB metadata for items that will actually appear
-    // Add movies first
+    // Step 3: Request metadata for continue watching items to enrich with images
+    m_continueWatching.clear();
+    m_pendingContinueWatchingItems.clear();
+    m_pendingContinueWatchingMetadataRequests = 0;
+    
+    // Process movies
     for (const QVariant& itemVar : movies) {
         QVariantMap item = itemVar.toMap();
-        QVariantMap movie = item["movie"].toMap();
-        QVariantMap ids = movie["ids"].toMap();
-        QString imdbId = ids["imdb"].toString();
-        int tmdbId = ids["tmdb"].toInt();
+        QVariantMap continueItem = traktPlaybackItemToVariantMap(item);
+        if (continueItem.isEmpty()) continue;
         
-        // Prefer TMDB ID if available (1 API call instead of 2)
-        if (tmdbId > 0) {
-            QString key = QString("tmdb:%1").arg(tmdbId);
-            m_pendingContinueWatchingItems[key] = item;
-            m_tmdbIdToImdbId[tmdbId] = imdbId;
-            m_pendingTmdbRequests++;
-            m_tmdbService->getMovieMetadata(tmdbId);
-        } else if (!imdbId.isEmpty()) {
-            // Fallback to IMDB ID (requires conversion call)
-            m_pendingContinueWatchingItems[imdbId] = item;
-            m_pendingTmdbRequests++;
-            m_tmdbService->getTmdbIdFromImdb(imdbId);
+        // Extract contentId for metadata request
+        QString contentId = continueItem["imdbId"].toString();
+        if (contentId.isEmpty()) {
+            // Fallback to tmdbId if imdbId not available
+            QString tmdbId = continueItem["tmdbId"].toString();
+            if (!tmdbId.isEmpty()) {
+                contentId = "tmdb:" + tmdbId;
+            }
+        }
+        
+        if (!contentId.isEmpty() && m_mediaMetadataService) {
+            // Store item for later merging (store with primary contentId)
+            m_pendingContinueWatchingItems[contentId] = continueItem;
+            
+            // Also store with imdbId if different from contentId (for easier matching)
+            QString imdbId = continueItem["imdbId"].toString();
+            if (!imdbId.isEmpty() && imdbId != contentId) {
+                m_pendingContinueWatchingItems[imdbId] = continueItem;
+            }
+            
+            m_pendingContinueWatchingMetadataRequests++;
+            
+            // Request metadata
+            QString type = continueItem["type"].toString();
+            if (type.isEmpty()) type = "movie";
+            m_mediaMetadataService->getCompleteMetadata(contentId, type);
+        } else {
+            // No metadata available, use item as-is
+            m_continueWatching.append(continueItem);
         }
     }
     
-    // Add highest episodes
+    // Process episodes
     for (auto it = showEpisodes.constBegin(); it != showEpisodes.constEnd(); ++it) {
         QVariantMap item = it.value();
-        QVariantMap show = item["show"].toMap();
-        QVariantMap showIds = show["ids"].toMap();
-        QString imdbId = showIds["imdb"].toString();
-        int tmdbId = showIds["tmdb"].toInt();
+        QVariantMap continueItem = traktPlaybackItemToVariantMap(item);
+        if (continueItem.isEmpty()) continue;
         
-        // Debug: Verify episode data is in the item before storing
-        if (item.contains("episode")) {
-            QVariantMap episode = item["episode"].toMap();
-            qDebug() << "[LibraryService] Storing episode item - IMDB:" << imdbId
-                     << "TMDB:" << tmdbId
-                     << "S" << episode["season"].toInt() << "E" << episode["number"].toInt()
-                     << "Title:" << episode["title"].toString();
-        } else {
-            qWarning() << "[LibraryService] Episode item missing episode data before storing!";
+        // Extract contentId for metadata request
+        QString contentId = continueItem["imdbId"].toString();
+        if (contentId.isEmpty()) {
+            // Fallback to tmdbId if imdbId not available
+            QString tmdbId = continueItem["tmdbId"].toString();
+            if (!tmdbId.isEmpty()) {
+                contentId = "tmdb:" + tmdbId;
+            }
         }
         
-        // Prefer TMDB ID if available (1 API call instead of 2)
-        if (tmdbId > 0) {
-            QString key = QString("tmdb:%1").arg(tmdbId);
-            m_pendingContinueWatchingItems[key] = item;
-            m_tmdbIdToImdbId[tmdbId] = imdbId;
-            m_pendingTmdbRequests++;
-            m_tmdbService->getTvMetadata(tmdbId);
-        } else if (!imdbId.isEmpty()) {
-            // Fallback to IMDB ID (requires conversion call)
-            m_pendingContinueWatchingItems[imdbId] = item;
-            m_pendingTmdbRequests++;
-            m_tmdbService->getTmdbIdFromImdb(imdbId);
+        if (!contentId.isEmpty() && m_mediaMetadataService) {
+            // Store item for later merging (store with primary contentId)
+            m_pendingContinueWatchingItems[contentId] = continueItem;
+            
+            // Also store with imdbId if different from contentId (for easier matching)
+            QString imdbId = continueItem["imdbId"].toString();
+            if (!imdbId.isEmpty() && imdbId != contentId) {
+                m_pendingContinueWatchingItems[imdbId] = continueItem;
+            }
+            
+            m_pendingContinueWatchingMetadataRequests++;
+            
+            // Request metadata (use "series" or "tv" for shows)
+            QString type = continueItem["type"].toString();
+            if (type.isEmpty() || type == "episode") type = "series";
+            m_mediaMetadataService->getCompleteMetadata(contentId, type);
+        } else {
+            // No metadata available, use item as-is
+            m_continueWatching.append(continueItem);
         }
     }
     
-    qDebug() << "[LibraryService] Will fetch TMDB metadata for" << m_pendingTmdbRequests << "items";
-    
-    // If no items to process, emit empty
-    if (m_pendingTmdbRequests == 0) {
-        emit continueWatchingLoaded(QVariantList());
+    // If no metadata requests were made, finish immediately
+    if (m_pendingContinueWatchingMetadataRequests == 0) {
+        finishContinueWatchingLoading();
     }
 }
 
 void LibraryService::processCatalogData(const QString& addonId, const QString& catalogName, 
                                        const QString& type, const QJsonArray& metas)
 {
-    qDebug() << "[LibraryService] ===== processCatalogData() called =====";
-    qDebug() << "[LibraryService] Addon ID:" << addonId << "Catalog:" << catalogName << "Type:" << type << "Metas count:" << metas.size();
+    LoggingService::logDebug("LibraryService", "===== processCatalogData() called =====");
+    LoggingService::logDebug("LibraryService", QString("Addon ID: %1 Catalog: %2 Type: %3 Metas count: %4").arg(addonId, catalogName, type).arg(metas.size()));
     
     CatalogSection section;
     section.name = catalogName;
@@ -684,7 +688,7 @@ void LibraryService::processCatalogData(const QString& addonId, const QString& c
     // Get addon base URL for resolving relative poster URLs
     AddonConfig addon = m_addonRepository->getAddon(addonId);
     QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
-    qDebug() << "[LibraryService] Base URL for resolving images:" << baseUrl;
+    LoggingService::logDebug("LibraryService", QString("Base URL for resolving images: %1").arg(baseUrl));
     
     int processedItems = 0;
     int skippedItems = 0;
@@ -698,8 +702,8 @@ void LibraryService::processCatalogData(const QString& addonId, const QString& c
                 
                 // Debug first few items
                 if (processedItems <= 3) {
-                    qDebug() << "[LibraryService] Processed item" << processedItems << "- Title:" << item["title"].toString() 
-                             << "Poster:" << item["posterUrl"].toString();
+                    LoggingService::logDebug("LibraryService", QString("Processed item %1 - Title: %2 Poster: %3")
+                        .arg(processedItems).arg(item["title"].toString()).arg(item["posterUrl"].toString()));
                 }
             } else {
                 skippedItems++;
@@ -707,13 +711,13 @@ void LibraryService::processCatalogData(const QString& addonId, const QString& c
         }
     }
     
-    qDebug() << "[LibraryService] Processed" << processedItems << "items, skipped" << skippedItems << "items";
+    LoggingService::logDebug("LibraryService", QString("Processed %1 items, skipped %2 items").arg(processedItems).arg(skippedItems));
     
     if (!section.items.isEmpty()) {
         m_catalogSections.append(section);
-        qDebug() << "[LibraryService] ✓ Added catalog section:" << catalogName << "with" << section.items.size() << "items";
+        LoggingService::logDebug("LibraryService", QString("✓ Added catalog section: %1 with %2 items").arg(catalogName).arg(section.items.size()));
     } else {
-        qDebug() << "[LibraryService] ✗ No items in catalog section:" << catalogName << "- section not added";
+        LoggingService::logDebug("LibraryService", QString("✗ No items in catalog section: %1 - section not added").arg(catalogName));
     }
 }
 
@@ -741,6 +745,14 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
         QVariantMap ids = movie["ids"].toMap();
         map["id"] = ids["imdb"].toString();
         map["imdbId"] = ids["imdb"].toString();
+        QString tmdbId = ids["tmdb"].toString();
+        if (tmdbId.isEmpty() && ids.contains("tmdb")) {
+            int tmdbIdInt = ids["tmdb"].toInt();
+            if (tmdbIdInt > 0) {
+                tmdbId = QString::number(tmdbIdInt);
+            }
+        }
+        map["tmdbId"] = tmdbId;
         map["title"] = movie["title"].toString();
         map["year"] = movie["year"].toInt();
         
@@ -760,10 +772,19 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
         QVariantMap logo = images["logo"].toMap();
         map["logoUrl"] = logo["full"].toString();
         
-        qDebug() << "[LibraryService] Movie" << map["title"] << "backdrop:" << backdropUrl << "logo:" << map["logoUrl"].toString();
+        LoggingService::logDebug("LibraryService", QString("Movie %1 backdrop: %2 logo: %3")
+            .arg(map["title"].toString(), backdropUrl, map["logoUrl"].toString()));
     } else if (type == "episode" && !show.isEmpty() && !episode.isEmpty()) {
         QVariantMap showIds = show["ids"].toMap();
         map["imdbId"] = showIds["imdb"].toString();
+        QString tmdbId = showIds["tmdb"].toString();
+        if (tmdbId.isEmpty() && showIds.contains("tmdb")) {
+            int tmdbIdInt = showIds["tmdb"].toInt();
+            if (tmdbIdInt > 0) {
+                tmdbId = QString::number(tmdbIdInt);
+            }
+        }
+        map["tmdbId"] = tmdbId;
         map["title"] = show["title"].toString();
         map["year"] = show["year"].toInt();
         map["season"] = episode["season"].toInt();
@@ -795,8 +816,9 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
         QVariantMap logo = showImages["logo"].toMap();
         map["logoUrl"] = logo["full"].toString();
         
-        qDebug() << "[LibraryService] Episode" << map["title"] << "S" << map["season"] << "E" << map["episode"] 
-                 << "backdrop:" << backdropUrl << "logo:" << map["logoUrl"].toString();
+        LoggingService::logDebug("LibraryService", QString("Episode %1 S%2 E%3 backdrop: %4 logo: %5")
+            .arg(map["title"].toString()).arg(map["season"].toInt()).arg(map["episode"].toInt())
+            .arg(backdropUrl, map["logoUrl"].toString()));
     }
     
     // Extract watched_at
@@ -884,7 +906,7 @@ QVariantMap LibraryService::traktPlaybackItemToVariantMap(const QVariantMap& tra
 
 void LibraryService::finishLoadingCatalogs()
 {
-    qDebug() << "[LibraryService] ===== finishLoadingCatalogs() called =====";
+    LoggingService::logDebug("LibraryService", "===== finishLoadingCatalogs() called =====");
     
     m_isLoadingCatalogs = false;
     
@@ -910,11 +932,11 @@ void LibraryService::finishLoadingCatalogs()
             // Removed debug log - unnecessary
         }
         
-        qDebug() << "[LibraryService] Total items across all sections:" << totalItems;
+        LoggingService::logDebug("LibraryService", QString("Total items across all sections: %1").arg(totalItems));
         emit catalogsLoaded(sections);
     }
     
-    qDebug() << "[LibraryService] ✓ Catalog loading finished!";
+    LoggingService::logDebug("LibraryService", "✓ Catalog loading finished!");
 }
 
 void LibraryService::onHeroCatalogFetched(const QString& type, const QJsonArray& metas)
@@ -931,9 +953,11 @@ void LibraryService::onHeroCatalogFetched(const QString& type, const QJsonArray&
     
     QString addonId = senderClient->property("addonId").toString();
 
-    qCritical() << "[LibraryService] ========== HERO CATALOG FETCHED ==========";
-    qCritical() << "[LibraryService] Hero catalog fetched from" << addonId << ", type:" << type << ", items:" << metas.size() << "taking" << itemsPerCatalog;
-    qCritical() << "[LibraryService] Current hero items count:" << m_heroItems.size() << ", pending requests:" << m_pendingHeroRequests;
+    LoggingService::logCritical("LibraryService", "========== HERO CATALOG FETCHED ==========");
+    LoggingService::logCritical("LibraryService", QString("Hero catalog fetched from %1, type: %2, items: %3 taking %4")
+        .arg(addonId, type).arg(metas.size()).arg(itemsPerCatalog));
+    LoggingService::logCritical("LibraryService", QString("Current hero items count: %1, pending requests: %2")
+        .arg(m_heroItems.size()).arg(m_pendingHeroRequests));
     
     int count = 0;
     for (const QJsonValue& value : metas) {
@@ -947,199 +971,20 @@ void LibraryService::onHeroCatalogFetched(const QString& type, const QJsonArray&
         }
     }
     
-    qDebug() << "[LibraryService] Hero items now:" << m_heroItems.size() << "pending requests:" << m_pendingHeroRequests;
+    LoggingService::logDebug("LibraryService", QString("Hero items now: %1 pending requests: %2").arg(m_heroItems.size()).arg(m_pendingHeroRequests));
     
     // Clean up client
     m_activeClients.removeAll(senderClient);
     senderClient->deleteLater();
     
-    // Enrich when we have enough items OR all requests are complete
+    // Emit when we have enough items OR all requests are complete
     if (m_pendingHeroRequests == 0 || m_heroItems.size() >= 10) {
         QVariantList itemsToEmit = m_heroItems.mid(0, 10); // Limit to 10 items
-        // Enrich hero items with TMDB data
-        enrichHeroItemsWithTmdbData(itemsToEmit);
-    }
-}
-
-void LibraryService::enrichHeroItemsWithTmdbData(const QVariantList& heroItems)
-{
-    // Removed verbose debug logs - unnecessary
-
-    if (heroItems.isEmpty()) {
         m_isLoadingHeroItems = false;
-        emit heroItemsLoaded(QVariantList());
-        return;
-    }
-
-    // Store the items we need to enrich
-    m_pendingHeroTmdbItems = heroItems;
-    m_pendingHeroTmdbRequests = 0;
-
-    qCritical() << "[LibraryService] Stored" << m_pendingHeroTmdbItems.size() << "hero items for enrichment";
-
-    // Process each hero item
-    for (int i = 0; i < heroItems.size(); ++i) {
-        const QVariant& itemVar = heroItems[i];
-        QVariantMap item = itemVar.toMap();
-
-        qCritical() << "[LibraryService] Processing hero item" << i << ":" << item["title"].toString()
-                    << "Type:" << item["type"].toString()
-                    << "TMDB ID:" << item["tmdbId"].toString()
-                    << "IMDB ID:" << item["imdbId"].toString();
-
-        // Extract TMDB ID
-        int tmdbId = 0;
-        QString tmdbIdStr = item["tmdbId"].toString();
-        if (!tmdbIdStr.isEmpty()) {
-            tmdbId = tmdbIdStr.toInt();
-            qWarning() << "[LibraryService] Found TMDB ID:" << tmdbId << "for item:" << item["title"].toString();
-        }
-
-        // If no TMDB ID, check if we have IMDB ID to convert
-        if (tmdbId == 0) {
-            QString imdbId = item["imdbId"].toString();
-            if (!imdbId.isEmpty()) {
-            // Removed warning log - unnecessary
-                m_pendingHeroTmdbRequests++;
-                m_tmdbService->getTmdbIdFromImdb(imdbId);
-                continue;
-            } else {
-                // Removed warning log - unnecessary
-                continue;
-            }
-        }
-
-        // We have TMDB ID, fetch metadata
-        QString type = item["type"].toString();
-        // Removed warning log - unnecessary
-
-        if (type == "movie") {
-            m_pendingHeroTmdbRequests++;
-            m_tmdbService->getMovieMetadata(tmdbId);
-        } else if (type == "tv" || type == "show") {
-            m_pendingHeroTmdbRequests++;
-            m_tmdbService->getTvMetadata(tmdbId);
-        } else {
-            qWarning() << "[LibraryService] Unknown type for TMDB fetch:" << type << "- SKIPPING";
-        }
-    }
-
-    qWarning() << "[LibraryService] Total TMDB requests initiated:" << m_pendingHeroTmdbRequests;
-
-    // If no requests were made, emit immediately
-    if (m_pendingHeroTmdbRequests == 0) {
-        qWarning() << "[LibraryService] No TMDB requests needed, emitting hero items immediately";
-        m_isLoadingHeroItems = false;
-        emit heroItemsLoaded(heroItems);
-    } else {
-        qWarning() << "[LibraryService] Waiting for" << m_pendingHeroTmdbRequests << "TMDB requests to complete";
+        emit heroItemsLoaded(itemsToEmit);
     }
 }
 
-bool LibraryService::updateHeroItemWithTmdbData(int tmdbId, const QJsonObject& data, const QString& type)
-{
-    qWarning() << "[LibraryService] Processing TMDB response for hero item - TMDB ID:" << tmdbId << "Type:" << type;
-
-    // Find the hero item with this TMDB ID
-    for (int i = 0; i < m_pendingHeroTmdbItems.size(); ++i) {
-        QVariantMap heroItem = m_pendingHeroTmdbItems[i].toMap();
-        QString itemTmdbIdStr = heroItem["tmdbId"].toString();
-        int itemTmdbId = itemTmdbIdStr.toInt();
-
-        if (itemTmdbId == tmdbId) {
-            qWarning() << "[LibraryService] Found matching hero item for TMDB ID:" << tmdbId
-                       << "Title:" << heroItem["title"].toString();
-
-            // Enrich the hero item with TMDB data
-            QVariantMap enrichedItem = FrontendDataMapper::enrichItemWithTmdbData(heroItem, data, type);
-
-            // Log what enrichment added
-            QStringList addedFields;
-            if (enrichedItem.contains("runtimeFormatted")) addedFields << "runtime";
-            if (enrichedItem.contains("genres")) addedFields << "genres";
-            if (enrichedItem.contains("badgeText")) addedFields << "badge";
-
-            qWarning() << "[LibraryService] Enriched hero item with:" << addedFields.join(", ")
-                       << "- Badge:" << enrichedItem["badgeText"].toString()
-                       << "- Runtime:" << enrichedItem["runtimeFormatted"].toString()
-                       << "- Genres:" << enrichedItem["genres"].toString();
-
-            // Update the item in our list
-            m_pendingHeroTmdbItems[i] = enrichedItem;
-
-            return true;
-        }
-    }
-
-    qWarning() << "[LibraryService] No matching hero item found for TMDB ID:" << tmdbId;
-    return false;
-}
-
-bool LibraryService::handleHeroTmdbIdLookup(const QString& imdbId, int tmdbId)
-{
-    qWarning() << "[LibraryService] TMDB ID lookup result - IMDB:" << imdbId << "-> TMDB:" << tmdbId;
-
-    // Find the hero item with this IMDB ID and update its TMDB ID
-    for (int i = 0; i < m_pendingHeroTmdbItems.size(); ++i) {
-        QVariantMap heroItem = m_pendingHeroTmdbItems[i].toMap();
-        QString itemImdbId = heroItem["imdbId"].toString();
-
-        if (itemImdbId == imdbId) {
-            qWarning() << "[LibraryService] Found matching hero item for IMDB ID:" << imdbId
-                       << ", setting TMDB ID:" << tmdbId << "for item:" << heroItem["title"].toString();
-
-            // Update the TMDB ID in the hero item
-            heroItem["tmdbId"] = QString::number(tmdbId);
-            m_pendingHeroTmdbItems[i] = heroItem;
-
-            // Now fetch the metadata for this TMDB ID
-            QString type = heroItem["type"].toString();
-            qWarning() << "[LibraryService] Now fetching TMDB metadata for" << type << "TMDB ID:" << tmdbId;
-
-            if (type == "movie") {
-                m_tmdbService->getMovieMetadata(tmdbId);
-            } else if (type == "tv" || type == "show") {
-                m_tmdbService->getTvMetadata(tmdbId);
-            }
-
-            return true;
-        }
-    }
-
-    qWarning() << "[LibraryService] No matching hero item found for IMDB ID:" << imdbId;
-    return false;
-}
-
-void LibraryService::emitHeroItemsWhenReady()
-{
-    if (m_pendingHeroTmdbRequests == 0) {
-        qCritical() << "[LibraryService] ========== HERO ENRICHMENT COMPLETE ==========";
-        qCritical() << "[LibraryService] All hero TMDB requests completed, emitting" << m_pendingHeroTmdbItems.size() << "enriched hero items";
-
-        // Log summary of enriched items
-        for (int i = 0; i < m_pendingHeroTmdbItems.size(); ++i) {
-            QVariantMap item = m_pendingHeroTmdbItems[i].toMap();
-            bool hasEnrichment = item["tmdbDataAvailable"].toBool();
-            QString badge = item["badgeText"].toString();
-            QString runtime = item["runtimeFormatted"].toString();
-            QStringList genres = item["genres"].toStringList();
-
-            qWarning() << "[LibraryService] Hero item" << i << ":"
-                       << item["title"].toString()
-                       << "| Enriched:" << (hasEnrichment ? "YES" : "NO")
-                       << "| Badge:" << (badge.isEmpty() ? "none" : badge)
-                       << "| Runtime:" << (runtime.isEmpty() ? "none" : runtime)
-                       << "| Genres:" << (genres.isEmpty() ? "none" : genres.join(","));
-        }
-
-        m_isLoadingHeroItems = false;
-        emit heroItemsLoaded(m_pendingHeroTmdbItems);
-        qWarning() << "[LibraryService] ========== HERO ITEMS EMITTED ==========";
-    } else {
-        qWarning() << "[LibraryService] emitHeroItemsWhenReady called but still waiting for"
-                   << m_pendingHeroTmdbRequests << "TMDB requests";
-    }
-}
 
 void LibraryService::onHeroClientError(const QString& errorMessage)
 {
@@ -1147,7 +992,7 @@ void LibraryService::onHeroClientError(const QString& errorMessage)
     if (!senderClient) return;
     
     m_pendingHeroRequests--;
-    qWarning() << "[LibraryService] Error loading hero catalog:" << errorMessage;
+    LoggingService::logWarning("LibraryService", QString("Error loading hero catalog: %1").arg(errorMessage));
     
     // Clean up client
     m_activeClients.removeAll(senderClient);
@@ -1156,214 +1001,26 @@ void LibraryService::onHeroClientError(const QString& errorMessage)
     // If all requests completed, emit what we have
     if (m_pendingHeroRequests == 0) {
         m_isLoadingHeroItems = false;
-        qDebug() << "[LibraryService] Emitting hero items (after error):" << m_heroItems.size();
+        LoggingService::logDebug("LibraryService", QString("Emitting hero items (after error): %1").arg(m_heroItems.size()));
         emit heroItemsLoaded(m_heroItems.mid(0, 10));
     }
 }
 
-void LibraryService::onTmdbIdFound(const QString& imdbId, int tmdbId)
-{
-    qDebug() << "[LibraryService] TMDB ID found for IMDB" << imdbId << "-> TMDB" << tmdbId;
-
-    // Check if this is for a hero item
-    bool isHeroItem = handleHeroTmdbIdLookup(imdbId, tmdbId);
-    if (isHeroItem) {
-        return;
-    }
-
-    if (!m_pendingContinueWatchingItems.contains(imdbId)) {
-            // Removed warning log - unnecessary
-        m_pendingTmdbRequests--;
-        if (m_pendingTmdbRequests == 0) {
-            finishContinueWatchingLoading();
-        }
-        return;
-    }
-    
-    QVariantMap traktItem = m_pendingContinueWatchingItems[imdbId];
-    QString type = traktItem["type"].toString();
-    
-    m_tmdbIdToImdbId[tmdbId] = imdbId;
-    
-    // Fetch TMDB metadata
-    if (type == "movie") {
-        m_tmdbService->getMovieMetadata(tmdbId);
-    } else if (type == "episode") {
-        m_tmdbService->getTvMetadata(tmdbId);
-    } else {
-        qWarning() << "[LibraryService] Unknown type for TMDB fetch:" << type;
-        m_pendingTmdbRequests--;
-        if (m_pendingTmdbRequests == 0) {
-            finishContinueWatchingLoading();
-        }
-    }
-}
-
-void LibraryService::onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& data)
-{
-    qCritical() << "[LibraryService] TMDB MOVIE metadata fetched for TMDB ID:" << tmdbId
-                << "(Title:" << data["title"].toString() << ")";
-
-    // Check if this is for a hero item
-    bool isHeroItem = updateHeroItemWithTmdbData(tmdbId, data, "movie");
-    if (isHeroItem) {
-        qCritical() << "[LibraryService] This was a HERO ITEM - remaining requests:" << (m_pendingHeroTmdbRequests - 1);
-        m_pendingHeroTmdbRequests--;
-        if (m_pendingHeroTmdbRequests == 0) {
-            emitHeroItemsWhenReady();
-        }
-        return;
-    }
-
-    qCritical() << "[LibraryService] This was NOT a hero item, processing as regular request";
-
-    if (!m_tmdbIdToImdbId.contains(tmdbId)) {
-        qWarning() << "[LibraryService] Received movie metadata for unknown TMDB ID:" << tmdbId;
-        m_pendingTmdbRequests--;
-        if (m_pendingTmdbRequests == 0) {
-            finishContinueWatchingLoading();
-        }
-        return;
-    }
-    
-    // Try to find the item by TMDB ID key first, then by IMDB ID
-    QString key = QString("tmdb:%1").arg(tmdbId);
-    QVariantMap traktItem;
-    
-    if (m_pendingContinueWatchingItems.contains(key)) {
-        traktItem = m_pendingContinueWatchingItems[key];
-    } else {
-        QString imdbId = m_tmdbIdToImdbId.value(tmdbId);
-        if (!imdbId.isEmpty() && m_pendingContinueWatchingItems.contains(imdbId)) {
-            traktItem = m_pendingContinueWatchingItems[imdbId];
-        } else {
-            qWarning() << "[LibraryService] Movie metadata for unknown TMDB ID:" << tmdbId;
-            m_pendingTmdbRequests--;
-            if (m_pendingTmdbRequests == 0) {
-                finishContinueWatchingLoading();
-            }
-            return;
-        }
-    }
-    QVariantMap continueItem = FrontendDataMapper::mapContinueWatchingItem(traktItem, data);
-    
-    if (!continueItem.isEmpty()) {
-        m_continueWatching.append(continueItem);
-    }
-    
-    m_pendingTmdbRequests--;
-    if (m_pendingTmdbRequests == 0) {
-        finishContinueWatchingLoading();
-    }
-}
-
-void LibraryService::onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data)
-{
-    qCritical() << "[LibraryService] TMDB TV metadata fetched for TMDB ID:" << tmdbId
-                << "(Title:" << data["name"].toString() << ")";
-
-    // Check if this is for a hero item
-    bool isHeroItem = updateHeroItemWithTmdbData(tmdbId, data, "tv");
-    if (isHeroItem) {
-        qCritical() << "[LibraryService] This was a HERO ITEM - remaining requests:" << (m_pendingHeroTmdbRequests - 1);
-        m_pendingHeroTmdbRequests--;
-        if (m_pendingHeroTmdbRequests == 0) {
-            emitHeroItemsWhenReady();
-        }
-        return;
-    }
-
-    qCritical() << "[LibraryService] This was NOT a hero item, processing as regular request";
-
-    // Try to find the item by TMDB ID key first, then by IMDB ID
-    QString key = QString("tmdb:%1").arg(tmdbId);
-    QVariantMap traktItem;
-    
-    if (m_pendingContinueWatchingItems.contains(key)) {
-        traktItem = m_pendingContinueWatchingItems[key];
-    } else {
-        QString imdbId = m_tmdbIdToImdbId.value(tmdbId);
-        if (!imdbId.isEmpty() && m_pendingContinueWatchingItems.contains(imdbId)) {
-            traktItem = m_pendingContinueWatchingItems[imdbId];
-        } else {
-            qWarning() << "[LibraryService] TV metadata for unknown TMDB ID:" << tmdbId;
-            m_pendingTmdbRequests--;
-            if (m_pendingTmdbRequests == 0) {
-                finishContinueWatchingLoading();
-            }
-            return;
-        }
-    }
-    
-    // Debug: Log episode data from Trakt
-    if (traktItem.contains("episode")) {
-        QVariantMap episode = traktItem["episode"].toMap();
-        qDebug() << "[LibraryService] Trakt episode data - season:" << episode["season"].toInt() 
-                 << "episode:" << episode["number"].toInt() 
-                 << "title:" << episode["title"].toString();
-    } else {
-        qWarning() << "[LibraryService] Trakt item missing episode data!";
-    }
-    
-    QVariantMap continueItem = FrontendDataMapper::mapContinueWatchingItem(traktItem, data);
-    
-    // Debug: Log what we extracted
-    qDebug() << "[LibraryService] Continue watching item - season:" << continueItem["season"].toInt()
-             << "episode:" << continueItem["episode"].toInt()
-             << "episodeTitle:" << continueItem["episodeTitle"].toString()
-             << "title:" << continueItem["title"].toString();
-    
-    if (!continueItem.isEmpty()) {
-        m_continueWatching.append(continueItem);
-    }
-    
-    m_pendingTmdbRequests--;
-    if (m_pendingTmdbRequests == 0) {
-        finishContinueWatchingLoading();
-    }
-}
-
-void LibraryService::onTmdbError(const QString& message)
-{
-    qWarning() << "[LibraryService] TMDB ERROR:" << message;
-    qWarning() << "[LibraryService] Current hero TMDB requests pending:" << m_pendingHeroTmdbRequests;
-
-    // Check if this affects hero items
-    if (m_pendingHeroTmdbRequests > 0) {
-        qWarning() << "[LibraryService] TMDB error occurred while processing hero items!"
-                   << "Remaining hero requests:" << m_pendingHeroTmdbRequests;
-
-        // For hero items, we should still emit what we have after a timeout or error
-        // For now, decrement and check if we're done
-        m_pendingHeroTmdbRequests--;
-        if (m_pendingHeroTmdbRequests == 0) {
-            qWarning() << "[LibraryService] All hero TMDB requests failed or completed with errors, emitting what we have";
-            emitHeroItemsWhenReady();
-        }
-    }
-
-    // Decrement pending requests and finish if all done
-    m_pendingTmdbRequests--;
-    if (m_pendingTmdbRequests == 0) {
-        finishContinueWatchingLoading();
-    }
-}
 
 void LibraryService::finishContinueWatchingLoading()
 {
-    qDebug() << "[LibraryService] Finishing continue watching loading, items:" << m_continueWatching.size();
+    LoggingService::logDebug("LibraryService", QString("Finishing continue watching loading, items: %1").arg(m_continueWatching.size()));
     emit continueWatchingLoaded(m_continueWatching);
     m_pendingContinueWatchingItems.clear();
-    m_tmdbIdToImdbId.clear();
 }
 
 void LibraryService::loadItemDetails(const QString& contentId, const QString& type, const QString& addonId)
 {
-    qDebug() << "[LibraryService] loadItemDetails called - contentId:" << contentId << "type:" << type << "addonId:" << addonId;
+    LoggingService::logDebug("LibraryService", QString("loadItemDetails called - contentId: %1 type: %2 addonId: %3").arg(contentId, type, addonId));
     
     if (contentId.isEmpty() || type.isEmpty()) {
-        ErrorService::report("Missing contentId or type", "MISSING_PARAMS", "LibraryService");
-        ErrorService::report("Missing contentId or type", "MISSING_PARAMS", "LibraryService");
+        LoggingService::report("Missing contentId or type", "MISSING_PARAMS", "LibraryService");
+        LoggingService::report("Missing contentId or type", "MISSING_PARAMS", "LibraryService");
         emit error("Missing contentId or type");
         return;
     }
@@ -1379,14 +1036,100 @@ void LibraryService::loadItemDetails(const QString& contentId, const QString& ty
 
 void LibraryService::onMediaMetadataLoaded(const QVariantMap& details)
 {
-    qDebug() << "[LibraryService] Complete metadata loaded from MediaMetadataService";
+    LoggingService::logDebug("LibraryService", "Complete metadata loaded from MediaMetadataService");
+    
+    // Check if this is for continue watching enrichment
+    QString contentId = details["id"].toString();
+    QString imdbId = details["imdbId"].toString();
+    QString tmdbId = details["tmdbId"].toString();
+    
+    // Try to find matching continue watching item by checking multiple ID formats
+    QString matchingKey;
+    if (!contentId.isEmpty() && m_pendingContinueWatchingItems.contains(contentId)) {
+        matchingKey = contentId;
+    } else if (!imdbId.isEmpty() && m_pendingContinueWatchingItems.contains(imdbId)) {
+        matchingKey = imdbId;
+    } else if (!tmdbId.isEmpty()) {
+        QString tmdbKey = "tmdb:" + tmdbId;
+        if (m_pendingContinueWatchingItems.contains(tmdbKey)) {
+            matchingKey = tmdbKey;
+        }
+    }
+    
+    if (!matchingKey.isEmpty()) {
+        // This is a continue watching item - merge metadata
+        QVariantMap traktItem = m_pendingContinueWatchingItems[matchingKey];
+        
+        // Merge metadata into continue watching item
+        // Preserve Trakt-specific fields (progress, episode info) but enrich with metadata images
+        QVariantMap enrichedItem = traktItem;
+        
+        // Enrich with metadata images if available
+        if (details.contains("posterUrl") && !details["posterUrl"].toString().isEmpty()) {
+            enrichedItem["posterUrl"] = details["posterUrl"];
+        }
+        if (details.contains("backdropUrl") && !details["backdropUrl"].toString().isEmpty()) {
+            enrichedItem["backdropUrl"] = details["backdropUrl"];
+        }
+        if (details.contains("logoUrl") && !details["logoUrl"].toString().isEmpty()) {
+            enrichedItem["logoUrl"] = details["logoUrl"];
+        }
+        
+        // Add other useful metadata fields
+        if (details.contains("description") && enrichedItem["description"].toString().isEmpty()) {
+            enrichedItem["description"] = details["description"];
+        }
+        if (details.contains("genres") && !details["genres"].toList().isEmpty()) {
+            enrichedItem["genres"] = details["genres"];
+        }
+        
+        m_continueWatching.append(enrichedItem);
+        m_pendingContinueWatchingItems.remove(matchingKey);
+        // Also remove by other possible keys to avoid duplicates
+        if (!imdbId.isEmpty() && m_pendingContinueWatchingItems.contains(imdbId)) {
+            m_pendingContinueWatchingItems.remove(imdbId);
+        }
+        if (!tmdbId.isEmpty()) {
+            QString tmdbKey = "tmdb:" + tmdbId;
+            if (m_pendingContinueWatchingItems.contains(tmdbKey)) {
+                m_pendingContinueWatchingItems.remove(tmdbKey);
+            }
+        }
+        m_pendingContinueWatchingMetadataRequests--;
+        
+        LoggingService::logDebug("LibraryService", QString("Enriched continue watching item: %1, remaining: %2")
+            .arg(matchingKey).arg(m_pendingContinueWatchingMetadataRequests));
+        
+        // Check if all metadata requests are complete
+        if (m_pendingContinueWatchingMetadataRequests == 0) {
+            finishContinueWatchingLoading();
+        }
+    } else {
+        // This is for item details loading
         emit itemDetailsLoaded(details);
+    }
 }
 
 void LibraryService::onMediaMetadataError(const QString& message)
 {
-    ErrorService::report(message, "LIBRARY_ERROR", "LibraryService");
-    emit error(message);
+    LoggingService::report(message, "LIBRARY_ERROR", "LibraryService");
+    
+    // If we have pending continue watching requests, decrement counter
+    // We can't identify which specific request failed, so we'll just count down
+    // This is a best-effort approach - if metadata fails, we'll use the item without enrichment
+    if (m_pendingContinueWatchingMetadataRequests > 0) {
+        m_pendingContinueWatchingMetadataRequests--;
+        LoggingService::logWarning("LibraryService", QString("Metadata request failed for continue watching, remaining: %1")
+            .arg(m_pendingContinueWatchingMetadataRequests));
+        
+        // If all requests are done (or failed), finish loading
+        if (m_pendingContinueWatchingMetadataRequests == 0) {
+            finishContinueWatchingLoading();
+        }
+    } else {
+        // This was for item details, emit error
+        emit error(message);
+    }
 }
 
 void LibraryService::onWatchProgressLoaded(const QVariantMap& progress)
@@ -1394,14 +1137,14 @@ void LibraryService::onWatchProgressLoaded(const QVariantMap& progress)
     QString contentId = progress["contentId"].toString(); // This is now TMDB ID for smart play
     QString type = progress["type"].toString();
 
-    qDebug() << "[LibraryService] onWatchProgressLoaded for TMDB ID" << contentId << "type:" << type;
-    qDebug() << "[LibraryService] onWatchProgressLoaded - hasProgress:" << progress["hasProgress"] 
-             << "isWatched:" << progress["isWatched"] << "progress:" << progress["progress"];
-    qDebug() << "[LibraryService] onWatchProgressLoaded - pendingSmartPlayItems keys:" << m_pendingSmartPlayItems.keys();
+    LoggingService::logDebug("LibraryService", QString("onWatchProgressLoaded for TMDB ID %1 type: %2").arg(contentId, type));
+    LoggingService::logDebug("LibraryService", QString("onWatchProgressLoaded - hasProgress: %1 isWatched: %2 progress: %3")
+        .arg(progress["hasProgress"].toString()).arg(progress["isWatched"].toString()).arg(progress["progress"].toString()));
+    LoggingService::logDebug("LibraryService", QString("onWatchProgressLoaded - pendingSmartPlayItems keys: %1").arg(QStringList(m_pendingSmartPlayItems.keys()).join(", ")));
 
     // Check if this was for smart play (contentId is now TMDB ID)
     if (!m_pendingSmartPlayItems.contains(contentId)) {
-        qDebug() << "[LibraryService] onWatchProgressLoaded: Not for smart play, ignoring";
+        LoggingService::logDebug("LibraryService", "onWatchProgressLoaded: Not for smart play, ignoring");
         return; // Not for smart play, ignore
     }
 
@@ -1417,9 +1160,8 @@ void LibraryService::onWatchProgressLoaded(const QVariantMap& progress)
     bool hasProgress = progress["hasProgress"].toBool();
     double watchProgress = progress["progress"].toDouble();
 
-    qDebug() << "[LibraryService] Processing smart play state - type:" << type 
-             << "hasProgress:" << hasProgress << "watchProgress:" << watchProgress
-             << "isWatched:" << progress["isWatched"];
+    LoggingService::logDebug("LibraryService", QString("Processing smart play state - type: %1 hasProgress: %2 watchProgress: %3 isWatched: %4")
+        .arg(type).arg(hasProgress).arg(watchProgress).arg(progress["isWatched"].toString()));
 
     if (type == "movie") {
         if (!hasProgress) {
@@ -1509,23 +1251,10 @@ void LibraryService::onWatchProgressLoaded(const QVariantMap& progress)
     emit smartPlayStateLoaded(smartPlayState);
 }
 
-void LibraryService::loadSimilarItems(int tmdbId, const QString& type)
-{
-    qDebug() << "[LibraryService] Loading similar items for TMDB ID:" << tmdbId << "type:" << type;
-    
-    if (type == "movie") {
-        m_tmdbService->getSimilarMovies(tmdbId);
-    } else if (type == "series" || type == "tv") {
-        m_tmdbService->getSimilarTv(tmdbId);
-    } else {
-        ErrorService::report(QString("Unknown type for similar items: %1").arg(type), "INVALID_PARAMS", "LibraryService");
-        emit error(QString("Unknown type for similar items: %1").arg(type));
-    }
-}
 
 void LibraryService::getSmartPlayState(const QVariantMap& itemData)
 {
-    qWarning() << "[LibraryService] ===== getSmartPlayState CALLED =====";
+    LoggingService::logWarning("LibraryService", "===== getSmartPlayState CALLED =====");
     
     // Use TMDB ID as primary identifier
     QString tmdbId = itemData["tmdbId"].toString();
@@ -1551,15 +1280,15 @@ void LibraryService::getSmartPlayState(const QVariantMap& itemData)
         type = "movie";
     } else {
         // If type is empty or unknown, try to infer from itemData
-        qWarning() << "[LibraryService] getSmartPlayState: Unknown type:" << type << ", defaulting to movie";
+        LoggingService::logWarning("LibraryService", QString("getSmartPlayState: Unknown type: %1, defaulting to movie").arg(type));
         type = "movie";
     }
     
-    qWarning() << "[LibraryService] getSmartPlayState - tmdbId:" << tmdbId << "type:" << type;
-    qWarning() << "[LibraryService] getSmartPlayState - itemData keys:" << itemData.keys();
+    LoggingService::logWarning("LibraryService", QString("getSmartPlayState - tmdbId: %1 type: %2").arg(tmdbId, type));
+    LoggingService::logWarning("LibraryService", QString("getSmartPlayState - itemData keys: %1").arg(QStringList(itemData.keys()).join(", ")));
 
     if (tmdbId.isEmpty()) {
-        qWarning() << "[LibraryService] getSmartPlayState: No TMDB ID found in itemData, cannot check watch history";
+        LoggingService::logWarning("LibraryService", "getSmartPlayState: No TMDB ID found in itemData, cannot check watch history");
         // Emit default state
         QVariantMap defaultState;
         defaultState["buttonText"] = "Play";
@@ -1570,127 +1299,66 @@ void LibraryService::getSmartPlayState(const QVariantMap& itemData)
         return;
     }
 
-    // Store the item data for processing when progress is received (use tmdbId as key)
-    m_pendingSmartPlayItems[tmdbId] = itemData;
-    qWarning() << "[LibraryService] Stored pending item for TMDB ID:" << tmdbId << "pending keys:" << m_pendingSmartPlayItems.keys();
-
-    // Get watch progress from local library service using TMDB ID
-    qWarning() << "[LibraryService] Calling getWatchProgressByTmdbId with tmdbId:" << tmdbId << "type:" << type;
-    m_localLibraryService->getWatchProgressByTmdbId(tmdbId, type);
-}
-
-void LibraryService::onSimilarMoviesFetched(int tmdbId, const QJsonArray& results)
-{
-    qDebug() << "[LibraryService] Similar movies fetched for TMDB ID:" << tmdbId << "count:" << results.size();
-    
-    QVariantList items = FrontendDataMapper::mapSimilarItemsToVariantList(results, "movie");
-    emit similarItemsLoaded(items);
-}
-
-void LibraryService::onSimilarTvFetched(int tmdbId, const QJsonArray& results)
-{
-    qDebug() << "[LibraryService] Similar TV shows fetched for TMDB ID:" << tmdbId << "count:" << results.size();
-    
-    QVariantList items = FrontendDataMapper::mapSimilarItemsToVariantList(results, "series");
-    emit similarItemsLoaded(items);
-}
-
-void LibraryService::loadSeasonEpisodes(int tmdbId, int seasonNumber)
-{
-    qDebug() << "[LibraryService] Loading episodes for TMDB ID:" << tmdbId << "Season:" << seasonNumber;
-    
-    // Try to get episodes from AIOMetadata first
-    if (m_mediaMetadataService) {
-        QVariantList episodes = m_mediaMetadataService->getSeriesEpisodesByTmdbId(tmdbId, seasonNumber);
-        if (!episodes.isEmpty()) {
-            qDebug() << "[LibraryService] Found" << episodes.size() << "episodes from AIOMetadata cache";
-            // Map to expected format
-            QVariantList mappedEpisodes;
-            for (const QVariant& episodeVar : episodes) {
-                QVariantMap episode = episodeVar.toMap();
-                QVariantMap mapped;
-                mapped["episodeNumber"] = episode["episodeNumber"];
-                mapped["title"] = episode["title"];
-                mapped["description"] = episode["description"];
-                mapped["airDate"] = episode["airDate"];
-                mapped["duration"] = episode["duration"];
-                mapped["thumbnailUrl"] = episode["thumbnailUrl"];
-                mappedEpisodes.append(mapped);
-            }
-            emit seasonEpisodesLoaded(seasonNumber, mappedEpisodes);
-            return;
-        }
+    // Use contentId as key (fallback to id if contentId not available)
+    QString contentId = itemData["contentId"].toString();
+    if (contentId.isEmpty()) {
+        contentId = itemData["id"].toString();
     }
     
-    // Fallback to TMDB if available
-    if (m_tmdbService) {
-        qDebug() << "[LibraryService] Falling back to TMDB for episodes";
-        m_tmdbService->getTvSeasonDetails(tmdbId, seasonNumber);
-    } else {
-        qWarning() << "[LibraryService] Cannot load episodes: TMDB service not available and AIOMetadata episodes not cached";
-        emit seasonEpisodesLoaded(seasonNumber, QVariantList());
+    if (contentId.isEmpty()) {
+        LoggingService::logWarning("LibraryService", "getSmartPlayState: No contentId or id found in itemData, cannot check watch history");
+        // Emit default state
+        QVariantMap defaultState;
+        defaultState["buttonText"] = "Play";
+        defaultState["action"] = "play";
+        defaultState["season"] = -1;
+        defaultState["episode"] = -1;
+        emit smartPlayStateLoaded(defaultState);
+        return;
     }
+    
+    // Store the item data for processing when progress is received (use contentId as key)
+    m_pendingSmartPlayItems[contentId] = itemData;
+    LoggingService::logWarning("LibraryService", QString("Stored pending item for contentId: %1 pending keys: %2")
+        .arg(contentId).arg(QStringList(m_pendingSmartPlayItems.keys()).join(", ")));
+
+    // Get watch progress from local library service using contentId
+    LoggingService::logWarning("LibraryService", QString("Calling getWatchProgress with contentId: %1 type: %2").arg(contentId, type));
+    m_localLibraryService->getWatchProgress(contentId, type);
 }
 
-void LibraryService::onTvSeasonDetailsFetched(int tmdbId, int seasonNumber, const QJsonObject& data)
-{
-    qDebug() << "[LibraryService] Season details fetched for TMDB ID:" << tmdbId << "Season:" << seasonNumber;
-    
-    QVariantList episodes;
-    QJsonArray episodesArray = data["episodes"].toArray();
-    
-    for (const QJsonValue& value : episodesArray) {
-        QJsonObject episodeObj = value.toObject();
-        QVariantMap episode;
-        
-        episode["episodeNumber"] = episodeObj["episode_number"].toInt();
-        episode["title"] = episodeObj["name"].toString();
-        episode["description"] = episodeObj["overview"].toString();
-        episode["airDate"] = episodeObj["air_date"].toString();
-        
-        // Extract runtime (duration in minutes)
-        int runtime = episodeObj["runtime"].toInt();
-        if (runtime <= 0) {
-            // Try to get from show-level runtime if episode doesn't have it
-            runtime = data["runtime"].toInt();
-        }
-        episode["duration"] = runtime;
-        
-        // Extract thumbnail (still_path)
-        QString stillPath = episodeObj["still_path"].toString();
-        QString thumbnailUrl = "";
-        if (!stillPath.isEmpty()) {
-            thumbnailUrl = QString("https://image.tmdb.org/t/p/w780%1").arg(stillPath);
-        }
-        episode["thumbnailUrl"] = thumbnailUrl;
-        
-        episodes.append(episode);
-    }
-    
-    qDebug() << "[LibraryService] Mapped" << episodes.size() << "episodes for Season" << seasonNumber;
-    emit seasonEpisodesLoaded(seasonNumber, episodes);
-}
 
 void LibraryService::clearMetadataCache()
 {
     if (m_mediaMetadataService) {
         m_mediaMetadataService->clearMetadataCache();
     }
-    if (m_tmdbService) {
-        m_tmdbService->clearCache();
-    }
-    qDebug() << "[LibraryService] All metadata caches cleared";
+    LoggingService::logDebug("LibraryService", "Metadata cache cleared");
 }
 
 int LibraryService::getMetadataCacheSize() const
 {
-    int size = 0;
     if (m_mediaMetadataService) {
-        size += m_mediaMetadataService->getMetadataCacheSize();
+        return m_mediaMetadataService->getMetadataCacheSize();
     }
-    if (m_tmdbService) {
-        size += m_tmdbService->getCacheSize();
-    }
-    return size;
+    return 0;
+}
+
+void LibraryService::loadSimilarItems(int tmdbId, const QString& type)
+{
+    // This method is required by the interface but not currently implemented
+    // Similar items would need to be fetched from TMDB API or addons
+    // For now, emit empty results
+    LoggingService::logWarning("LibraryService", QString("loadSimilarItems not implemented for tmdbId: %1, type: %2").arg(tmdbId).arg(type));
+    emit similarItemsLoaded(QVariantList());
+}
+
+void LibraryService::loadSeasonEpisodes(int tmdbId, int seasonNumber)
+{
+    // This method is required by the interface but not currently implemented
+    // Season episodes would need to be fetched from TMDB API or addons
+    // For now, emit empty results
+    LoggingService::logWarning("LibraryService", QString("loadSeasonEpisodes not implemented for tmdbId: %1, season: %2").arg(tmdbId).arg(seasonNumber));
+    emit seasonEpisodesLoaded(seasonNumber, QVariantList());
 }
 

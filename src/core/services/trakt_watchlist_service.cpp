@@ -1,31 +1,39 @@
 #include "trakt_watchlist_service.h"
-#include "error_service.h"
+#include "logging_service.h"
+#include "logging_service.h"
+#include "core/di/service_registry.h"
 #include "../database/database_manager.h"
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QDebug>
 
 TraktWatchlistService::TraktWatchlistService(QObject* parent)
     : QObject(parent)
-    , m_coreService(TraktCoreService::instance())
+    , m_coreService(nullptr)
 {
-    DatabaseManager& dbManager = DatabaseManager::instance();
-    if (dbManager.isInitialized()) {
-        m_coreService.initializeDatabase();
-        m_coreService.initializeAuth();
+    auto dbManager = ServiceRegistry::instance().resolve<DatabaseManager>();
+    if (dbManager && dbManager->isInitialized()) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+            m_coreService->initializeDatabase();
+            m_coreService->initializeAuth();
+        }
     }
     
-    connect(&m_coreService, &TraktCoreService::watchlistMoviesFetched,
-            this, &TraktWatchlistService::onWatchlistMoviesFetched);
-    connect(&m_coreService, &TraktCoreService::watchlistShowsFetched,
-            this, &TraktWatchlistService::onWatchlistShowsFetched);
-    connect(&m_coreService, &TraktCoreService::collectionMoviesFetched,
-            this, &TraktWatchlistService::onCollectionMoviesFetched);
-    connect(&m_coreService, &TraktCoreService::collectionShowsFetched,
-            this, &TraktWatchlistService::onCollectionShowsFetched);
+    // Connect signals when core service is available
+    if (m_coreService) {
+        connect(m_coreService, &TraktCoreService::watchlistMoviesFetched,
+                this, &TraktWatchlistService::onWatchlistMoviesFetched);
+        connect(m_coreService, &TraktCoreService::watchlistShowsFetched,
+                this, &TraktWatchlistService::onWatchlistShowsFetched);
+        connect(m_coreService, &TraktCoreService::collectionMoviesFetched,
+                this, &TraktWatchlistService::onCollectionMoviesFetched);
+        connect(m_coreService, &TraktCoreService::collectionShowsFetched,
+                this, &TraktWatchlistService::onCollectionShowsFetched);
+    }
 }
 
 QString TraktWatchlistService::ensureImdbPrefix(const QString& imdbId) const
@@ -35,24 +43,44 @@ QString TraktWatchlistService::ensureImdbPrefix(const QString& imdbId) const
 
 void TraktWatchlistService::getWatchlistMoviesWithImages()
 {
-    m_coreService.getWatchlistMoviesWithImages();
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktWatchlistService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->getWatchlistMoviesWithImages();
 }
 
 void TraktWatchlistService::getWatchlistShowsWithImages()
 {
-    m_coreService.getWatchlistShowsWithImages();
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktWatchlistService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->getWatchlistShowsWithImages();
 }
 
 void TraktWatchlistService::addToWatchlist(const QString& type, const QString& imdbId)
 {
     if (imdbId.trimmed().isEmpty()) {
-        ErrorService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
+        LoggingService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
         emit error("IMDb ID is required");
         return;
     }
     
     if (type != "movie" && type != "show") {
-        ErrorService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
+        LoggingService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
         emit error("Type must be either 'movie' or 'show'");
         return;
     }
@@ -72,19 +100,29 @@ void TraktWatchlistService::addToWatchlist(const QString& type, const QString& i
         payload["shows"] = items;
     }
     
-    m_coreService.apiRequest("/sync/watchlist", "POST", payload, this, SLOT(onWatchlistItemAdded()));
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktWatchlistService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->apiRequest("/sync/watchlist", "POST", payload, this, SLOT(onWatchlistItemAdded()));
 }
 
 void TraktWatchlistService::removeFromWatchlist(const QString& type, const QString& imdbId)
 {
     if (imdbId.trimmed().isEmpty()) {
-        ErrorService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
+        LoggingService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
         emit error("IMDb ID is required");
         return;
     }
     
     if (type != "movie" && type != "show") {
-        ErrorService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
+        LoggingService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
         emit error("Type must be either 'movie' or 'show'");
         return;
     }
@@ -104,7 +142,17 @@ void TraktWatchlistService::removeFromWatchlist(const QString& type, const QStri
         payload["shows"] = items;
     }
     
-    m_coreService.apiRequest("/sync/watchlist/remove", "POST", payload, this, SLOT(onWatchlistItemRemoved()));
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktWatchlistService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->apiRequest("/sync/watchlist/remove", "POST", payload, this, SLOT(onWatchlistItemRemoved()));
 }
 
 void TraktWatchlistService::isInWatchlist(const QString& imdbId, const QString& type)
@@ -152,24 +200,44 @@ void TraktWatchlistService::isInWatchlist(const QString& imdbId, const QString& 
 
 void TraktWatchlistService::getCollectionMoviesWithImages()
 {
-    m_coreService.getCollectionMoviesWithImages();
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktWatchlistService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->getCollectionMoviesWithImages();
 }
 
 void TraktWatchlistService::getCollectionShowsWithImages()
 {
-    m_coreService.getCollectionShowsWithImages();
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktWatchlistService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->getCollectionShowsWithImages();
 }
 
 void TraktWatchlistService::addToCollection(const QString& type, const QString& imdbId)
 {
     if (imdbId.trimmed().isEmpty()) {
-        ErrorService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
+        LoggingService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
         emit error("IMDb ID is required");
         return;
     }
     
     if (type != "movie" && type != "show") {
-        ErrorService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
+        LoggingService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
         emit error("Type must be either 'movie' or 'show'");
         return;
     }
@@ -189,19 +257,29 @@ void TraktWatchlistService::addToCollection(const QString& type, const QString& 
         payload["shows"] = items;
     }
     
-    m_coreService.apiRequest("/sync/collection", "POST", payload, this, SLOT(onCollectionItemAdded()));
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktWatchlistService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->apiRequest("/sync/collection", "POST", payload, this, SLOT(onCollectionItemAdded()));
 }
 
 void TraktWatchlistService::removeFromCollection(const QString& type, const QString& imdbId)
 {
     if (imdbId.trimmed().isEmpty()) {
-        ErrorService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
+        LoggingService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
         emit error("IMDb ID is required");
         return;
     }
     
     if (type != "movie" && type != "show") {
-        ErrorService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
+        LoggingService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
         emit error("Type must be either 'movie' or 'show'");
         return;
     }
@@ -221,7 +299,17 @@ void TraktWatchlistService::removeFromCollection(const QString& type, const QStr
         payload["shows"] = items;
     }
     
-    m_coreService.apiRequest("/sync/collection/remove", "POST", payload, this, SLOT(onCollectionItemRemoved()));
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktWatchlistService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->apiRequest("/sync/collection/remove", "POST", payload, this, SLOT(onCollectionItemRemoved()));
 }
 
 void TraktWatchlistService::isInCollection(const QString& imdbId, const QString& type)
@@ -296,7 +384,15 @@ void TraktWatchlistService::onWatchlistItemAdded()
     m_watchlistMovies.clear();
     m_watchlistShows.clear();
     // Also clear TraktCoreService cache for watchlist endpoints
-    m_coreService.clearCacheForEndpoint("/sync/watchlist");
+    if (m_coreService) {
+        m_coreService->clearCacheForEndpoint("/sync/watchlist");
+    } else {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+            m_coreService->clearCacheForEndpoint("/sync/watchlist");
+        }
+    }
     qDebug() << "[TraktWatchlistService] Cleared watchlist cache after successful addition";
     emit watchlistItemAdded(true);
 }
@@ -317,7 +413,15 @@ void TraktWatchlistService::onWatchlistItemRemoved()
             m_watchlistMovies.clear();
             m_watchlistShows.clear();
             // Also clear TraktCoreService cache for watchlist endpoints
-            m_coreService.clearCacheForEndpoint("/sync/watchlist");
+            if (m_coreService) {
+        m_coreService->clearCacheForEndpoint("/sync/watchlist");
+    } else {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+            m_coreService->clearCacheForEndpoint("/sync/watchlist");
+        }
+    }
             qDebug() << "[TraktWatchlistService] Cleared watchlist cache after successful removal";
         } else {
             qWarning() << "[TraktWatchlistService] Watchlist removal failed - statusCode:" << statusCode;

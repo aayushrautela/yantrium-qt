@@ -50,6 +50,11 @@ void ErrorService::clearError()
 
 void ErrorService::report(const QString& message, const QString& code, const QString& context)
 {
-    instance().reportError(message, code, context);
+    auto service = ServiceRegistry::instance().resolve<ErrorService>();
+    if (service) {
+        service->reportError(message, code, context);
+    } else {
+        LoggingService::logError("ErrorService", QString("Error reported but service not available: %1").arg(message));
+    }
 }
 

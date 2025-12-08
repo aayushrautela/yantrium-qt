@@ -1,6 +1,7 @@
 #include "app_controller.h"
 #include "core/database/database_manager.h"
-#include <QDebug>
+#include "core/di/service_registry.h"
+#include "core/services/logging_service.h"
 
 AppController::AppController(QObject *parent)
     : QObject(parent)
@@ -10,14 +11,24 @@ AppController::AppController(QObject *parent)
 bool AppController::initialize()
 {
     if (m_isInitialized) {
-        qWarning() << "[AppController] Already initialized";
+        LoggingService::logWarning("AppController", "Already initialized");
         return true;
     }
     
-    qDebug() << "[AppController] Initializing application...";
+    LoggingService::logDebug("AppController", "Initializing application...");
     
-    // Initialize database first
-    if (!initializeDatabase()) {
+    // Database will be initialized in main.cpp when DatabaseManager is registered
+    // Just verify it's available
+    ServiceRegistry& registry = ServiceRegistry::instance();
+    auto dbManager = registry.resolve<DatabaseManager>();
+    if (!dbManager) {
+        LoggingService::logCritical("AppController", "DatabaseManager not available in registry");
+        emit initializationFailed("Failed to access database manager");
+        return false;
+    }
+    
+    if (!dbManager->isInitialized()) {
+        LoggingService::logCritical("AppController", "Database not initialized");
         emit initializationFailed("Failed to initialize database");
         return false;
     }
@@ -30,19 +41,15 @@ bool AppController::initialize()
     
     m_isInitialized = true;
     emit isInitializedChanged();
-    qDebug() << "[AppController] Application initialized successfully";
+    LoggingService::logDebug("AppController", "Application initialized successfully");
     
     return true;
 }
 
 bool AppController::initializeDatabase()
 {
-    DatabaseManager& dbManager = DatabaseManager::instance();
-    if (!dbManager.initialize()) {
-        qCritical() << "[AppController] Failed to initialize database";
-        return false;
-    }
-    qDebug() << "[AppController] Database initialized";
+    // Database initialization is now handled in main.cpp when DatabaseManager is registered
+    // This method is kept for compatibility but does nothing
     return true;
 }
 
@@ -50,7 +57,7 @@ bool AppController::initializeServices()
 {
     // Services will be registered in main.cpp after this controller is created
     // This method can be extended to perform service-specific initialization
-    qDebug() << "[AppController] Services will be initialized by main.cpp";
+    LoggingService::logDebug("AppController", "Services will be initialized by main.cpp");
     return true;
 }
 
@@ -60,7 +67,7 @@ void AppController::shutdown()
         return;
     }
     
-    qDebug() << "[AppController] Shutting down application...";
+    LoggingService::logDebug("AppController", "Shutting down application...");
     
     // Clear service registry
     ServiceRegistry::instance().clear();
@@ -68,6 +75,6 @@ void AppController::shutdown()
     m_isInitialized = false;
     emit isInitializedChanged();
     
-    qDebug() << "[AppController] Application shutdown complete";
+    LoggingService::logDebug("AppController", "Application shutdown complete");
 }
 

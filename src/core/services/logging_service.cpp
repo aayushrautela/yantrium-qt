@@ -1,24 +1,16 @@
 #include "logging_service.h"
+#include "core/di/service_registry.h"
 #include <QDebug>
 #include <QDateTime>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(yantriumLog, "yantrium.log")
 
-LoggingService* LoggingService::s_instance = nullptr;
-
 LoggingService::LoggingService(QObject* parent)
     : QObject(parent)
     , m_minLevel(Debug)
 {
-    s_instance = this;
     qCDebug(yantriumLog) << "[LoggingService] Initialized";
-}
-
-LoggingService& LoggingService::instance()
-{
-    static LoggingService instance;
-    return instance;
 }
 
 void LoggingService::setMinLevel(LogLevel level)
@@ -56,27 +48,52 @@ void LoggingService::critical(const QString& category, const QString& message)
 
 void LoggingService::logDebug(const QString& category, const QString& message)
 {
-    instance().log(Debug, category, message);
+    auto service = ServiceRegistry::instance().resolve<LoggingService>();
+    if (service) {
+        service->log(Debug, category, message);
+    } else {
+        qCDebug(yantriumLog) << QString("[%1] [DEBUG] %2").arg(category, message);
+    }
 }
 
 void LoggingService::logInfo(const QString& category, const QString& message)
 {
-    instance().log(Info, category, message);
+    auto service = ServiceRegistry::instance().resolve<LoggingService>();
+    if (service) {
+        service->log(Info, category, message);
+    } else {
+        qCInfo(yantriumLog) << QString("[%1] [INFO] %2").arg(category, message);
+    }
 }
 
 void LoggingService::logWarning(const QString& category, const QString& message)
 {
-    instance().log(Warning, category, message);
+    auto service = ServiceRegistry::instance().resolve<LoggingService>();
+    if (service) {
+        service->log(Warning, category, message);
+    } else {
+        qCWarning(yantriumLog) << QString("[%1] [WARN] %2").arg(category, message);
+    }
 }
 
 void LoggingService::logError(const QString& category, const QString& message)
 {
-    instance().log(Error, category, message);
+    auto service = ServiceRegistry::instance().resolve<LoggingService>();
+    if (service) {
+        service->log(Error, category, message);
+    } else {
+        qCCritical(yantriumLog) << QString("[%1] [ERROR] %2").arg(category, message);
+    }
 }
 
 void LoggingService::logCritical(const QString& category, const QString& message)
 {
-    instance().log(Critical, category, message);
+    auto service = ServiceRegistry::instance().resolve<LoggingService>();
+    if (service) {
+        service->log(Critical, category, message);
+    } else {
+        qCCritical(yantriumLog) << QString("[%1] [CRITICAL] %2").arg(category, message);
+    }
 }
 
 QString LoggingService::formatMessage(const QString& format, const QStringList& args)
@@ -133,6 +150,50 @@ QString LoggingService::levelToString(LogLevel level) const
         case Error: return "ERROR";
         case Critical: return "CRITICAL";
         default: return "UNKNOWN";
+    }
+}
+
+void LoggingService::reportError(const QString& message, const QString& code, const QString& context)
+{
+    if (message.isEmpty()) {
+        logWarning("LoggingService", "reportError called with empty message");
+        return;
+    }
+
+    m_lastError = message;
+    m_lastErrorCode = code;
+    m_lastErrorContext = context;
+
+    // Log the error
+    QString errorMsg = QString("Error reported - Context: %1, Code: %2, Message: %3").arg(context, code, message);
+    log(Error, context.isEmpty() ? "LoggingService" : context, errorMsg);
+
+    emit errorOccurred(message, code, context);
+    emit lastErrorChanged();
+    emit hasErrorChanged();
+}
+
+void LoggingService::clearError()
+{
+    if (m_lastError.isEmpty()) {
+        return;
+    }
+
+    m_lastError.clear();
+    m_lastErrorCode.clear();
+    m_lastErrorContext.clear();
+
+    emit lastErrorChanged();
+    emit hasErrorChanged();
+}
+
+void LoggingService::report(const QString& message, const QString& code, const QString& context)
+{
+    auto service = ServiceRegistry::instance().resolve<LoggingService>();
+    if (service) {
+        service->reportError(message, code, context);
+    } else {
+        qCCritical(yantriumLog) << QString("[LoggingService] [ERROR] Error reported but service not available: %1").arg(message);
     }
 }
 

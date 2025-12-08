@@ -14,19 +14,17 @@ ApplicationWindow {
     property TraktAuthService traktAuthService: TraktAuthService
     property TraktCoreService traktService: TraktCoreService
     
-    // Navigation services
+    // Navigation service (includes screen management)
     property NavigationService navigationService: NavigationService
-    property ScreenManager screenManager: ScreenManager
     
     // Infrastructure services
-    property ErrorService errorService: ErrorService
     property LoggingService loggingService: LoggingService
     
-    // Connect ErrorService to handle errors globally
+    // Connect LoggingService to handle errors globally
     Connections {
-        target: errorService
+        target: loggingService
         function onErrorOccurred(message, code, context) {
-            // Error logged by ErrorService internally
+            // Error logged by LoggingService internally
             // TODO: Display error to user (toast, dialog, etc.)
         }
     }
@@ -69,10 +67,10 @@ ApplicationWindow {
                     detailLoader.pendingContentId = ""
                     detailLoader.pendingType = ""
                     detailLoader.pendingAddonId = ""
-                    screenManager.navigateTo(ScreenManager.Detail)
+                    navigationService.navigateTo(NavigationService.Detail)
                 } else {
                     // Navigation will happen when loader is ready (handled in onStatusChanged)
-                    screenManager.navigateTo(ScreenManager.Detail)
+                    navigationService.navigateTo(NavigationService.Detail)
                 }
             }
         }
@@ -98,16 +96,16 @@ ApplicationWindow {
                 })
                 videoPlayerLoader.pendingStreamUrl = ""
                 videoPlayerLoader.pendingContentData = {}
-                screenManager.navigateTo(ScreenManager.Player)
+                navigationService.navigateTo(NavigationService.Player)
             } else {
                 // Navigation will happen when loader is ready (handled in onStatusChanged)
-                screenManager.navigateTo(ScreenManager.Player)
+                navigationService.navigateTo(NavigationService.Player)
             }
         }
         function onSearchRequested(query) {
             loggingService.debug("MainApp", "NavigationService: Search requested - query: " + query)
             searchLoader.active = true
-            screenManager.navigateTo(ScreenManager.Search)
+            navigationService.navigateTo(NavigationService.Search)
             // Use a timer to set query when loader is ready
             if (query) {
                 var queryTimer = Qt.createQmlObject("import QtQuick; Timer { interval: 100; running: true; repeat: true }", root)
@@ -122,16 +120,18 @@ ApplicationWindow {
             }
         }
         function onBackRequested() {
-            if (screenManager.currentScreen === ScreenManager.Detail) {
+            // Handle detail screen cleanup when going back
+            if (navigationService.currentScreen === NavigationService.Detail) {
                 detailLoader.active = false
             }
-            screenManager.navigateBack()
+            // Don't call navigateBack() here - it's already been handled by NavigationService
+            // Calling it again would create an infinite loop
         }
     }
     
-    // Connect ScreenManager signals
+    // Connect NavigationService screen change signals
     Connections {
-        target: screenManager
+        target: navigationService
         function onScreenChangeRequested(screenIndex) {
             // Handle any screen-specific logic here if needed
             loggingService.debug("MainApp", "Screen change requested to: " + screenIndex)
@@ -152,12 +152,12 @@ ApplicationWindow {
                 width: parent.width
                 height: 60
                 source: "qrc:/qml/components/NavigationBar.qml"
-                visible: screenManager.currentScreen !== ScreenManager.Player
+                visible: navigationService.currentScreen !== NavigationService.Player
                 
                 Connections {
                     target: navBarLoader.item
                     function onTabClicked(index) {
-                        screenManager.navigateToIndex(index)
+                        navigationService.navigateToIndex(index)
                     }
                     function onSearchClicked(query) {
                         // Removed debug logs - unnecessary
@@ -170,10 +170,10 @@ ApplicationWindow {
                 
                 onLoaded: {
                     if (item) {
-                        item.currentIndex = Qt.binding(function() { return screenManager.currentScreen })
+                        item.currentIndex = Qt.binding(function() { return navigationService.currentScreen })
                         // Show back button for Search (3) and Detail (4) screens
                         item.showBackButton = Qt.binding(function() { 
-                            return screenManager.currentScreen === ScreenManager.Search || screenManager.currentScreen === ScreenManager.Detail 
+                            return navigationService.currentScreen === NavigationService.Search || navigationService.currentScreen === NavigationService.Detail 
                         })
                     }
                 }
@@ -184,19 +184,19 @@ ApplicationWindow {
                 id: stackLayout
                 width: parent.width
                 height: parent.height - (navBarLoader.visible ? navBarLoader.height : 0)
-                currentIndex: screenManager.currentScreen
+                currentIndex: navigationService.currentScreen
 
-                property int previousScreen: ScreenManager.Home
+                property int previousScreen: NavigationService.Home
                 
                 onCurrentIndexChanged: {
                     // Stop video playback if leaving the video player
-                    if (previousScreen === ScreenManager.Player && currentIndex !== ScreenManager.Player) {
+                    if (previousScreen === NavigationService.Player && currentIndex !== NavigationService.Player) {
                         if (videoPlayerLoader.item && videoPlayerLoader.item.videoPlayer) {
                             videoPlayerLoader.item.videoPlayer.stop()
                         }
                         
                         // Refresh home page if returning to it after watching content
-                        if (currentIndex === ScreenManager.Home && homeLoader.item) {
+                        if (currentIndex === NavigationService.Home && homeLoader.item) {
                             homeLoader.item.loadCatalogs()
                         }
                     }
@@ -205,7 +205,7 @@ ApplicationWindow {
                     previousScreen = currentIndex
 
                     // Activate search loader when switching to search screen
-                    if (currentIndex === ScreenManager.Search && !searchLoader.active) {
+                    if (currentIndex === NavigationService.Search && !searchLoader.active) {
                         searchLoader.active = true
                     }
                 }
@@ -231,9 +231,9 @@ ApplicationWindow {
 
                     // Reload library when switching to library tab
                     Connections {
-                        target: screenManager
+                        target: navigationService
                         function onCurrentScreenChanged(screen) {
-                            if (screen === ScreenManager.Library && libraryLoader.item) {
+                            if (screen === NavigationService.Library && libraryLoader.item) {
                                 // Reload library when switching to library tab
                                 libraryLoader.item.loadLibrary()
                             }
@@ -325,7 +325,7 @@ ApplicationWindow {
                             // Load details if we have pending data (from NavigationService)
                             if (pendingContentId && pendingType) {
                                 item.loadDetails(pendingContentId, pendingType, pendingAddonId)
-                                screenManager.navigateTo(ScreenManager.Detail)
+                                navigationService.navigateTo(NavigationService.Detail)
                                 pendingContentId = ""
                                 pendingType = ""
                                 pendingAddonId = ""
@@ -336,7 +336,7 @@ ApplicationWindow {
                     onStatusChanged: {
                         if (status === Loader.Ready && item && pendingContentId && pendingType) {
                             item.loadDetails(pendingContentId, pendingType, pendingAddonId)
-                            screenManager.navigateTo(ScreenManager.Detail)
+                            navigationService.navigateTo(NavigationService.Detail)
                             pendingContentId = ""
                             pendingType = ""
                             pendingAddonId = ""
@@ -398,7 +398,7 @@ ApplicationWindow {
                             Qt.callLater(function() {
                                 item.videoPlayer.play()
                             })
-                            screenManager.navigateTo(ScreenManager.Player)
+                            navigationService.navigateTo(NavigationService.Player)
                             pendingStreamUrl = ""
                             pendingContentData = {}
                         }

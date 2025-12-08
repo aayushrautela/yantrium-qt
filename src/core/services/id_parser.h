@@ -3,20 +3,56 @@
 
 #include <QString>
 
-/// Utility for parsing content IDs from addons
-class IdParser
+/// Utility namespace for parsing content IDs from addons
+namespace IdParser
 {
-public:
     /// Extract TMDB ID from various ID formats
     /// Supports: "tmdb:123", "tt1234567" (IMDB), numeric strings
-    static int extractTmdbId(const QString& contentId);
+    inline int extractTmdbId(const QString& contentId)
+    {
+        // Handle tmdb:123 format
+        if (contentId.startsWith("tmdb:")) {
+            QString id = contentId.mid(5);
+            bool ok;
+            int result = id.toInt(&ok);
+            if (ok) {
+                return result;
+            }
+            return 0;
+        }
+        
+        // Handle numeric string (assume TMDB ID)
+        bool ok;
+        int numericId = contentId.toInt(&ok);
+        if (ok && numericId > 0) {
+            return numericId;
+        }
+        
+        // Handle IMDB ID (tt1234567) - return 0, will need to search by IMDB ID
+        if (contentId.startsWith("tt")) {
+            return 0; // Will need to search by IMDB ID
+        }
+        
+        return 0;
+    }
     
     /// Check if ID is an IMDB ID
-    static bool isImdbId(const QString& contentId);
+    inline bool isImdbId(const QString& contentId)
+    {
+        return contentId.startsWith("tt") && contentId.length() >= 9;
+    }
     
     /// Check if ID is a TMDB ID
-    static bool isTmdbId(const QString& contentId);
-};
+    inline bool isTmdbId(const QString& contentId)
+    {
+        if (contentId.startsWith("tmdb:")) {
+            return true;
+        }
+        bool ok;
+        int id = contentId.toInt(&ok);
+        return ok && id > 0;
+    }
+}
 
 #endif // ID_PARSER_H
 

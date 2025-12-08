@@ -1,8 +1,9 @@
 #include "trakt_core_service.h"
+#include "trakt_cache_helper.h"
 #include "cache_service.h"
 #include "logging_service.h"
-#include "error_service.h"
 #include "configuration.h"
+#include "core/di/service_registry.h"
 #include "../database/database_manager.h"
 #include "../database/sync_tracking_dao.h"
 #include "../database/watch_history_dao.h"
@@ -10,19 +11,12 @@
 #include <QNetworkRequest>
 #include <QJsonDocument>
 #include <QJsonArray>
-#include <QDebug>
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <cmath>
 #include <QVariantMap>
 #include <QUrl>
-
-TraktCoreService& TraktCoreService::instance()
-{
-    static TraktCoreService instance;
-    return instance;
-}
 
 TraktCoreService::TraktCoreService(QObject* parent)
     : QObject(parent)
@@ -139,24 +133,28 @@ QString TraktCoreService::getAccessTokenSync()
 void TraktCoreService::refreshAccessToken()
 {
     if (m_refreshToken.isEmpty()) {
-        qWarning() << "[TraktCoreService] No refresh token available";
+        LoggingService::logWarning("TraktCoreService", "No refresh token available");
         return;
     }
     
-    Configuration& config = Configuration::instance();
-    QUrl url(config.traktTokenUrl());
+    auto config = ServiceRegistry::instance().resolve<Configuration>();
+    if (!config) {
+        LoggingService::logError("TraktCoreService", "Configuration service not available");
+        return;
+    }
+    QUrl url(config->traktTokenUrl());
     
     QJsonObject data;
     data["refresh_token"] = m_refreshToken;
-    data["client_id"] = config.traktClientId();
-    data["client_secret"] = config.traktClientSecret();
-    data["redirect_uri"] = config.traktRedirectUri();
+    data["client_id"] = config->traktClientId();
+    data["client_secret"] = config->traktClientSecret();
+    data["redirect_uri"] = config->traktRedirectUri();
     data["grant_type"] = "refresh_token";
     
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    request.setRawHeader("trakt-api-version", config.traktApiVersion().toUtf8());
-    request.setRawHeader("trakt-api-key", config.traktClientId().toUtf8());
+    request.setRawHeader("trakt-api-version", config->traktApiVersion().toUtf8());
+    request.setRawHeader("trakt-api-key", config->traktClientId().toUtf8());
     
     QNetworkReply* reply = m_networkManager->post(request, QJsonDocument(data).toJson());
     
@@ -218,29 +216,22 @@ void TraktCoreService::logout()
 
 QUrl TraktCoreService::buildUrl(const QString& endpoint)
 {
-    Configuration& config = Configuration::instance();
-    return QUrl(config.traktBaseUrl() + endpoint);
+    auto config = ServiceRegistry::instance().resolve<Configuration>();
+    if (!config) {
+        LoggingService::logError("TraktCoreService", "Configuration service not available");
+        return QUrl();
+    }
+    return QUrl(config->traktBaseUrl() + endpoint);
 }
 
 QString TraktCoreService::getCacheKey(const QString& endpoint, const QUrlQuery& query) const
 {
-    return CacheService::generateKeyFromQuery("trakt", endpoint, query);
+    return TraktCacheHelper::getCacheKey(endpoint, query);
 }
-
 
 int TraktCoreService::getTtlForEndpoint(const QString& endpoint) const
 {
-    // Different TTLs for different endpoint types
-    if (endpoint.contains("/users/me")) {
-        return 3600; // 1 hour for user profile
-    } else if (endpoint.contains("/sync/watched") || endpoint.contains("/sync/collection") || endpoint.contains("/sync/watchlist")) {
-        return 1800; // 30 minutes for watched/collection/watchlist
-    } else if (endpoint.contains("/sync/playback")) {
-        return 300; // 5 minutes for playback progress
-    } else if (endpoint.contains("/sync/ratings")) {
-        return 3600; // 1 hour for ratings
-    }
-    return 300; // 5 minutes default
+    return TraktCacheHelper::getTtlForEndpoint(endpoint);
 }
 
 void TraktCoreService::apiRequest(const QString& endpoint, const QString& method,
@@ -343,7 +334,7 @@ void TraktCoreService::apiRequest(const QString& endpoint, const QString& method
     // Ensure we have a valid token
     QString token = getAccessTokenSync();
     if (token.isEmpty()) {
-        ErrorService::report("Not authenticated", "AUTH_ERROR", "TraktCoreService");
+        LoggingService::report("Not authenticated", "AUTH_ERROR", "TraktCoreService");
         emit error("Not authenticated");
         return;
     }
@@ -352,8 +343,11 @@ void TraktCoreService::apiRequest(const QString& endpoint, const QString& method
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader("Authorization", ("Bearer " + token).toUtf8());
-    request.setRawHeader("trakt-api-version", Configuration::instance().traktApiVersion().toUtf8());
-    request.setRawHeader("trakt-api-key", Configuration::instance().traktClientId().toUtf8());
+    auto config = ServiceRegistry::instance().resolve<Configuration>();
+    if (config) {
+        request.setRawHeader("trakt-api-version", config->traktApiVersion().toUtf8());
+        request.setRawHeader("trakt-api-key", config->traktClientId().toUtf8());
+    }
     
     QNetworkReply* reply = nullptr;
     if (method == "GET") {
@@ -455,7 +449,7 @@ void TraktCoreService::handleError(QNetworkReply* reply, const QString& context)
     
     if (statusCode == 429) {
         qWarning() << "[TraktCoreService] Rate limited (429) for" << context;
-        ErrorService::report("Rate limited. Please try again later.", "RATE_LIMITED", "TraktCoreService");
+        LoggingService::report("Rate limited. Please try again later.", "RATE_LIMITED", "TraktCoreService");
         emit error("Rate limited. Please try again later.");
     } else if (statusCode == 409) {
         qWarning() << "[TraktCoreService] Conflict (409) for" << context;

@@ -1,10 +1,11 @@
 #include "omdb_service.h"
-#include "error_service.h"
+#include "logging_service.h"
+#include "logging_service.h"
 #include "configuration.h"
+#include "core/di/service_registry.h"
 #include <QUrlQuery>
 #include <QNetworkRequest>
 #include <QJsonDocument>
-#include <QDebug>
 
 OmdbService::OmdbService(QObject* parent)
     : QObject(parent)
@@ -14,12 +15,16 @@ OmdbService::OmdbService(QObject* parent)
 
 QUrl OmdbService::buildUrl(const QString& imdbId)
 {
-    Configuration& config = Configuration::instance();
+    auto config = ServiceRegistry::instance().resolve<Configuration>();
+    if (!config) {
+        LoggingService::logError("OmdbService", "Configuration service not available");
+        return QUrl();
+    }
     QUrl url("http://www.omdbapi.com/");
     
     QUrlQuery query;
     query.addQueryItem("i", imdbId);
-    query.addQueryItem("apikey", config.omdbApiKey());
+    query.addQueryItem("apikey", config->omdbApiKey());
     url.setQuery(query);
     
     return url;
@@ -28,15 +33,15 @@ QUrl OmdbService::buildUrl(const QString& imdbId)
 void OmdbService::getRatings(const QString& imdbId)
 {
     if (imdbId.isEmpty() || !imdbId.startsWith("tt")) {
-        ErrorService::report("Invalid IMDB ID", "INVALID_PARAMS", "OmdbService");
+        LoggingService::report("Invalid IMDB ID", "INVALID_PARAMS", "OmdbService");
         emit error("Invalid IMDB ID");
         return;
     }
     
     // Check if API key is configured
-    Configuration& config = Configuration::instance();
-    if (config.omdbApiKey().isEmpty()) {
-        qDebug() << "[OmdbService] OMDB API key not set, skipping ratings fetch";
+    auto config = ServiceRegistry::instance().resolve<Configuration>();
+    if (!config || config->omdbApiKey().isEmpty()) {
+        LoggingService::logDebug("OmdbService", "OMDB API key not set, skipping ratings fetch");
         return; // Silently skip if key is not configured
     }
     
@@ -96,7 +101,7 @@ void OmdbService::handleError(QNetworkReply* reply, const QString& context, cons
 {
     QString errorString = reply ? reply->errorString() : "Unknown error";
     // Only log errors, don't emit them to avoid breaking the UI when key is missing
-    qDebug() << "[OmdbService]" << context << "error:" << errorString;
+    LoggingService::logDebug("OmdbService", QString("%1 error: %2").arg(context, errorString));
     // Don't emit error signal for authentication issues - these are expected when key is missing
     if (reply && reply->error() != QNetworkReply::AuthenticationRequiredError) {
         emit error(QString("%1: %2").arg(context, errorString), imdbId);

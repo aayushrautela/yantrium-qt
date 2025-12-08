@@ -11,10 +11,10 @@ class DatabaseManager : public QObject
     Q_OBJECT
 
 public:
-    // Thread-safe Singleton access
-    static DatabaseManager& instance();
+    explicit DatabaseManager(QObject* parent = nullptr);
+    ~DatabaseManager();
 
-    // Delete copy and move constructors to ensure Singleton uniqueness
+    // Delete copy and move constructors
     DatabaseManager(const DatabaseManager&) = delete;
     DatabaseManager& operator=(const DatabaseManager&) = delete;
 
@@ -26,8 +26,6 @@ public:
     static const QString CONNECTION_NAME;
 
 private:
-    explicit DatabaseManager(QObject* parent = nullptr);
-    ~DatabaseManager();
 
     // Internal helper to create all tables in a single transaction
     bool createTables();

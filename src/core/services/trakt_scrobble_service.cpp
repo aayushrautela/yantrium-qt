@@ -1,23 +1,28 @@
 #include "trakt_scrobble_service.h"
-#include "error_service.h"
+#include "logging_service.h"
+#include "logging_service.h"
+#include "core/di/service_registry.h"
 #include "../database/database_manager.h"
 #include "configuration.h"
 #include <QUrlQuery>
 #include <QNetworkRequest>
 #include <QJsonDocument>
 #include <QJsonArray>
-#include <QDebug>
 #include <QtMath>
 
 TraktScrobbleService::TraktScrobbleService(QObject* parent)
     : QObject(parent)
-    , m_coreService(TraktCoreService::instance())
+    , m_coreService(nullptr)
     , m_networkManager(std::make_unique<QNetworkAccessManager>(this))
 {
-    DatabaseManager& dbManager = DatabaseManager::instance();
-    if (dbManager.isInitialized()) {
-        m_coreService.initializeDatabase();
-        m_coreService.initializeAuth();
+    auto dbManager = ServiceRegistry::instance().resolve<DatabaseManager>();
+    if (dbManager && dbManager->isInitialized()) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+            m_coreService->initializeDatabase();
+            m_coreService->initializeAuth();
+        }
     }
 }
 
@@ -25,13 +30,13 @@ bool TraktScrobbleService::validateContentData(const QJsonObject& contentData)
 {
     QString type = contentData["type"].toString();
     if (type != "movie" && type != "episode") {
-        ErrorService::report("Invalid content type: " + type, "INVALID_PARAMS", "TraktScrobbleService");
+        LoggingService::report("Invalid content type: " + type, "INVALID_PARAMS", "TraktScrobbleService");
         emit error("Invalid content type: " + type);
         return false;
     }
     
     if (contentData["title"].toString().trimmed().isEmpty()) {
-        ErrorService::report("Missing or empty title", "MISSING_PARAMS", "TraktScrobbleService");
+        LoggingService::report("Missing or empty title", "MISSING_PARAMS", "TraktScrobbleService");
         emit error("Missing or empty title");
         return false;
     }
@@ -118,7 +123,17 @@ void TraktScrobbleService::scrobbleStart(const QJsonObject& contentData, double 
     }
     
     QJsonObject payload = buildScrobblePayload(contentData, progress);
-    m_coreService.apiRequest("/scrobble/start", "POST", payload, this, SLOT(onScrobbleReplyFinished()));
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktScrobbleService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->apiRequest("/scrobble/start", "POST", payload, this, SLOT(onScrobbleReplyFinished()));
 }
 
 void TraktScrobbleService::scrobblePause(const QJsonObject& contentData, double progress, [[maybe_unused]] bool force)
@@ -128,7 +143,17 @@ void TraktScrobbleService::scrobblePause(const QJsonObject& contentData, double 
     }
     
     QJsonObject payload = buildScrobblePayload(contentData, progress);
-    m_coreService.apiRequest("/scrobble/pause", "POST", payload, this, SLOT(onScrobbleReplyFinished()));
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktScrobbleService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->apiRequest("/scrobble/pause", "POST", payload, this, SLOT(onScrobbleReplyFinished()));
 }
 
 void TraktScrobbleService::scrobbleStop(const QJsonObject& contentData, double progress)
@@ -137,11 +162,31 @@ void TraktScrobbleService::scrobbleStop(const QJsonObject& contentData, double p
         return;
     }
     
-    int threshold = m_coreService.completionThreshold();
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktScrobbleService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    int threshold = m_coreService->completionThreshold();
     QString endpoint = (progress >= threshold) ? "/scrobble/stop" : "/scrobble/pause";
     
     QJsonObject payload = buildScrobblePayload(contentData, progress);
-    m_coreService.apiRequest(endpoint, "POST", payload, this, SLOT(onScrobbleReplyFinished()));
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktScrobbleService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->apiRequest(endpoint, "POST", payload, this, SLOT(onScrobbleReplyFinished()));
 }
 
 void TraktScrobbleService::scrobblePauseImmediate(const QJsonObject& contentData, double progress)
@@ -185,7 +230,17 @@ void TraktScrobbleService::getHistory(const QString& type, int id, const QDateTi
 {
     QString endpoint = buildHistoryEndpoint(type, id);
     QJsonObject params = buildHistoryQueryParams(startAt, endAt, page, limit);
-    m_coreService.apiRequest(endpoint, "GET", params, this, SLOT(onHistoryReplyFinished()));
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktScrobbleService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->apiRequest(endpoint, "GET", params, this, SLOT(onHistoryReplyFinished()));
 }
 
 void TraktScrobbleService::getHistoryMovies(const QDateTime& startAt, const QDateTime& endAt, int page, int limit)
@@ -205,7 +260,17 @@ void TraktScrobbleService::getHistoryShows(const QDateTime& startAt, const QDate
 
 void TraktScrobbleService::removeFromHistory(const QJsonObject& payload)
 {
-    m_coreService.apiRequest("/sync/history/remove", "POST", payload, this, SLOT(onHistoryRemoveReplyFinished()));
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::report("TraktCoreService not available", "SERVICE_ERROR", "TraktScrobbleService");
+            emit error("TraktCoreService not available");
+            return;
+        }
+    }
+    m_coreService->apiRequest("/sync/history/remove", "POST", payload, this, SLOT(onHistoryRemoveReplyFinished()));
 }
 
 void TraktScrobbleService::removeMovieFromHistory(const QString& imdbId)

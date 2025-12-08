@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include <QDebug>
+#include "logging_service.h"
 #include <QStandardPaths>
 #include <QDir>
 #include <QFile>
@@ -36,11 +36,11 @@ Configuration::Configuration(QObject* parent)
     m_tmdbApiKey = apiKey;
     
     if (m_tmdbApiKey.isEmpty()) {
-        qWarning() << "TMDB API key not set. Set it via CMake: -DTMDB_API_KEY=your_key";
-        qWarning() << "Or set environment variable: TMDB_API_KEY=your_key";
-        qWarning() << "Or create file: ~/.local/share/Yantrium/tmdb_config.txt with your API key";
+        LoggingService::logWarning("Configuration", "TMDB API key not set. Set it via CMake: -DTMDB_API_KEY=your_key");
+        LoggingService::logWarning("Configuration", "Or set environment variable: TMDB_API_KEY=your_key");
+        LoggingService::logWarning("Configuration", "Or create file: ~/.local/share/Yantrium/tmdb_config.txt with your API key");
     } else {
-        qDebug() << "TMDB API key loaded (length:" << m_tmdbApiKey.length() << ")";
+        LoggingService::logDebug("Configuration", QString("TMDB API key loaded (length: %1)").arg(m_tmdbApiKey.length()));
     }
     
     // Load OMDB API key
@@ -64,12 +64,12 @@ Configuration::Configuration(QObject* parent)
     m_omdbApiKey = omdbApiKey;
     
     if (m_omdbApiKey.isEmpty()) {
-        qDebug() << "OMDB API key not set (optional). Additional ratings will not be available.";
-        qDebug() << "To enable OMDB ratings, set it via CMake: -DOMDB_API_KEY=your_key";
-        qDebug() << "Or set environment variable: OMDB_API_KEY=your_key";
-        qDebug() << "Or create file: ~/.local/share/Yantrium/omdb_config.txt with your API key";
+        LoggingService::logDebug("Configuration", "OMDB API key not set (optional). Additional ratings will not be available.");
+        LoggingService::logDebug("Configuration", "To enable OMDB ratings, set it via CMake: -DOMDB_API_KEY=your_key");
+        LoggingService::logDebug("Configuration", "Or set environment variable: OMDB_API_KEY=your_key");
+        LoggingService::logDebug("Configuration", "Or create file: ~/.local/share/Yantrium/omdb_config.txt with your API key");
     } else {
-        qDebug() << "OMDB API key loaded (length:" << m_omdbApiKey.length() << ")";
+        LoggingService::logDebug("Configuration", QString("OMDB API key loaded (length: %1)").arg(m_omdbApiKey.length()));
     }
     
     // Load Trakt client ID
@@ -87,21 +87,15 @@ Configuration::Configuration(QObject* parent)
     m_traktClientSecret = clientSecret;
     
     if (!isTraktConfigured()) {
-        qWarning() << "Trakt API not configured. Set it via CMake: -DTRAKT_CLIENT_ID=your_id -DTRAKT_CLIENT_SECRET=your_secret";
-        qWarning() << "Or set environment variables: TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET";
+        LoggingService::logWarning("Configuration", "Trakt API not configured. Set it via CMake: -DTRAKT_CLIENT_ID=your_id -DTRAKT_CLIENT_SECRET=your_secret");
+        LoggingService::logWarning("Configuration", "Or set environment variables: TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET");
     } else {
-        qDebug() << "Trakt API configured (client ID length:" << m_traktClientId.length() << ")";
+        LoggingService::logDebug("Configuration", QString("Trakt API configured (client ID length: %1)").arg(m_traktClientId.length()));
     }
 }
 
 Configuration::~Configuration()
 {
-}
-
-Configuration& Configuration::instance()
-{
-    static Configuration instance;
-    return instance;
 }
 
 QString Configuration::tmdbApiKey() const

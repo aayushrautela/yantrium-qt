@@ -54,7 +54,7 @@ private slots:
     void onCollectionItemRemoved();
 
 private:
-    TraktCoreService& m_coreService;
+    TraktCoreService* m_coreService;
     QVariantList m_watchlistMovies;
     QVariantList m_watchlistShows;
     QVariantList m_collectionMovies;

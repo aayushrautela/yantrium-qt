@@ -10,7 +10,6 @@ Item {
     property LibraryService libraryService: LibraryService
     property NavigationService navigationService: NavigationService
     property LoggingService loggingService: LoggingService
-    property ErrorService errorService: ErrorService
     signal itemClicked(string contentId, string type, string addonId)
     signal closeRequested()  // Signal to go back to previous screen
 
@@ -383,11 +382,8 @@ Item {
         root.isLoading = true
         root.currentQuery = query
 
-        if (typeof libraryService.searchTmdb === 'function') {
-            libraryService.searchTmdb(query)
-        } else {
-            root.isLoading = false
-        }
+        // Use searchCatalogs instead (addon-based search)
+        libraryService.searchCatalogs(query)
         searchQuery = ""
     }
 

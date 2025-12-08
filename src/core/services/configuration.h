@@ -29,7 +29,8 @@ class Configuration : public QObject
     Q_PROPERTY(QString tmdbImageBaseUrl READ tmdbImageBaseUrl CONSTANT)
 
 public:
-    static Configuration& instance();
+    explicit Configuration(QObject* parent = nullptr);
+    ~Configuration();
 
     QString tmdbApiKey() const;
     QString tmdbBaseUrl() const;
@@ -50,8 +51,6 @@ public:
     bool isTraktConfigured() const;
 
 private:
-    explicit Configuration(QObject* parent = nullptr);
-    ~Configuration();
     Q_DISABLE_COPY(Configuration)
 
     QString m_tmdbApiKey;

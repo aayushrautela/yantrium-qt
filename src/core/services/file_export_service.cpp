@@ -1,10 +1,10 @@
 #include "file_export_service.h"
-#include "error_service.h"
+#include "logging_service.h"
+#include "logging_service.h"
 #include <QFile>
 #include <QTextStream>
 #include <QStandardPaths>
 #include <QDir>
-#include <QDebug>
 #include <QStringConverter>
 
 FileExportService::FileExportService(QObject* parent)
@@ -21,17 +21,17 @@ bool FileExportService::writeTextFile(const QString& filePath, const QString& co
     QDir dir = fileInfo.dir();
     if (!dir.exists()) {
         if (!dir.mkpath(".")) {
-            qWarning() << "[FileExportService] Failed to create directory:" << dir.path();
+            LoggingService::logWarning("FileExportService", QString("Failed to create directory: %1").arg(dir.path()));
             QString errorMsg = QString("Failed to create directory: %1").arg(dir.path());
-            ErrorService::report(errorMsg, "FILE_ERROR", "FileExportService");
+            LoggingService::report(errorMsg, "FILE_ERROR", "FileExportService");
             emit error(errorMsg);
             return false;
         }
     }
     
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        qWarning() << "[FileExportService] Failed to open file for writing:" << filePath;
-        qWarning() << "[FileExportService] Error:" << file.errorString();
+        LoggingService::logWarning("FileExportService", QString("Failed to open file for writing: %1").arg(filePath));
+        LoggingService::logWarning("FileExportService", QString("Error: %1").arg(file.errorString()));
         emit error(QString("Failed to open file: %1").arg(file.errorString()));
         return false;
     }
@@ -41,8 +41,8 @@ bool FileExportService::writeTextFile(const QString& filePath, const QString& co
     out << content;
     file.close();
     
-    qDebug() << "[FileExportService] Successfully wrote file:" << filePath;
-    qDebug() << "[FileExportService] File size:" << QFileInfo(filePath).size() << "bytes";
+    LoggingService::logDebug("FileExportService", QString("Successfully wrote file: %1").arg(filePath));
+    LoggingService::logDebug("FileExportService", QString("File size: %1 bytes").arg(QFileInfo(filePath).size()));
     
     emit fileWritten(filePath);
     return true;
@@ -51,7 +51,7 @@ bool FileExportService::writeTextFile(const QString& filePath, const QString& co
 QString FileExportService::getDocumentsPath()
 {
     QString path = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-    qDebug() << "[FileExportService] Documents path:" << path;
+    LoggingService::logDebug("FileExportService", QString("Documents path: %1").arg(path));
     return path;
 }
 
@@ -62,7 +62,7 @@ QString FileExportService::getDownloadsPath()
         // Fallback to Documents if Downloads doesn't exist
         path = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
     }
-    qDebug() << "[FileExportService] Downloads path:" << path;
+    LoggingService::logDebug("FileExportService", QString("Downloads path: %1").arg(path));
     return path;
 }
 

@@ -1,25 +1,32 @@
 #include "local_library_service.h"
-#include "error_service.h"
+#include "logging_service.h"
+#include "logging_service.h"
+#include "core/di/service_registry.h"
 #include "../database/database_manager.h"
-#include <QDebug>
 #include <QDateTime>
 
 LocalLibraryService::LocalLibraryService(QObject* parent)
     : QObject(parent)
-    , m_dbManager(&DatabaseManager::instance())
+    , m_dbManager(nullptr)
 {
-    if (m_dbManager->isInitialized()) {
-        m_libraryDao = std::make_unique<LocalLibraryDao>();
-        m_historyDao = std::make_unique<WatchHistoryDao>();
+    auto dbManager = ServiceRegistry::instance().resolve<DatabaseManager>();
+    if (dbManager) {
+        m_dbManager = dbManager.get();
+        if (m_dbManager->isInitialized()) {
+            m_libraryDao = std::make_unique<LocalLibraryDao>();
+            m_historyDao = std::make_unique<WatchHistoryDao>();
+        } else {
+            LoggingService::logWarning("LocalLibraryService", "Database not initialized");
+        }
     } else {
-        qWarning() << "[LocalLibraryService] Database not initialized";
+        LoggingService::logWarning("LocalLibraryService", "DatabaseManager not available in registry");
     }
 }
 
 void LocalLibraryService::addToLibrary(const QVariantMap& item)
 {
     if (!m_libraryDao) {
-        ErrorService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
+        LoggingService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
         emit error("Database not initialized");
         return;
     }
@@ -38,7 +45,7 @@ void LocalLibraryService::addToLibrary(const QVariantMap& item)
 void LocalLibraryService::removeFromLibrary(const QString& contentId)
 {
     if (!m_libraryDao) {
-        ErrorService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
+        LoggingService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
         emit error("Database not initialized");
         return;
     }
@@ -59,7 +66,7 @@ void LocalLibraryService::removeFromLibrary(const QString& contentId)
 void LocalLibraryService::getLibraryItems()
 {
     if (!m_libraryDao) {
-        ErrorService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
+        LoggingService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
         emit error("Database not initialized");
         emit libraryItemsLoaded(QVariantList());
         return;
@@ -78,7 +85,7 @@ void LocalLibraryService::getLibraryItems()
 void LocalLibraryService::isInLibrary(const QString& contentId)
 {
     if (!m_libraryDao) {
-        ErrorService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
+        LoggingService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
         emit error("Database not initialized");
         emit isInLibraryResult(false);
         return;
@@ -96,7 +103,7 @@ void LocalLibraryService::isInLibrary(const QString& contentId)
 void LocalLibraryService::addToWatchHistory(const QVariantMap& item)
 {
     if (!m_historyDao) {
-        ErrorService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
+        LoggingService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
         emit error("Database not initialized");
         return;
     }
@@ -114,7 +121,7 @@ void LocalLibraryService::addToWatchHistory(const QVariantMap& item)
 void LocalLibraryService::getWatchHistory(int limit)
 {
     if (!m_historyDao) {
-        ErrorService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
+        LoggingService::report("Database not initialized", "DATABASE_ERROR", "LocalLibraryService");
         emit error("Database not initialized");
         emit watchHistoryLoaded(QVariantList());
         return;

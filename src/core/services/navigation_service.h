@@ -4,13 +4,15 @@
 #include <QObject>
 #include <QString>
 #include <QVariantMap>
+#include <QList>
 #include <QtQmlIntegration/qqmlintegration.h>
 
 /**
- * @brief Centralized navigation service for managing app navigation and data passing
+ * @brief Unified navigation service for managing app navigation, screen stack, and data passing
  * 
- * Replaces the "pending properties" pattern with a clean, signal-based navigation API.
- * All navigation requests go through this service, ensuring consistent behavior.
+ * Combines navigation requests with screen management. Replaces the "pending properties" pattern
+ * with a clean, signal-based navigation API. All navigation requests go through this service,
+ * ensuring consistent behavior.
  */
 class NavigationService : public QObject
 {
@@ -18,8 +20,28 @@ class NavigationService : public QObject
     QML_ELEMENT
     QML_SINGLETON
 
+    Q_PROPERTY(int currentScreen READ currentScreen NOTIFY currentScreenChanged)
+
 public:
     explicit NavigationService(QObject* parent = nullptr);
+
+    /**
+     * @brief Screen identifiers
+     */
+    enum Screen {
+        Home = 0,
+        Library = 1,
+        Settings = 2,
+        Search = 3,
+        Detail = 4,
+        Player = 5
+    };
+    Q_ENUM(Screen)
+
+    /**
+     * @brief Get current screen index
+     */
+    [[nodiscard]] int currentScreen() const { return m_currentScreen; }
 
     /**
      * @brief Navigate to detail screen for a content item
@@ -48,10 +70,27 @@ public:
     Q_INVOKABLE void navigateBack();
 
     /**
+     * @brief Navigate to a specific screen
+     * @param screen Screen enum value
+     */
+    Q_INVOKABLE void navigateTo(Screen screen);
+
+    /**
      * @brief Navigate to a specific screen by index
      * @param screenIndex Screen index (0=Home, 1=Library, 2=Settings, 3=Search, 4=Detail, 5=Player)
      */
+    Q_INVOKABLE void navigateToIndex(int screenIndex);
+
+    /**
+     * @brief Navigate to a specific screen by index (alias for navigateToIndex)
+     * @param screenIndex Screen index (0=Home, 1=Library, 2=Settings, 3=Search, 4=Detail, 5=Player)
+     */
     Q_INVOKABLE void navigateToScreen(int screenIndex);
+
+    /**
+     * @brief Check if back navigation is available
+     */
+    Q_INVOKABLE bool canGoBack() const;
 
 signals:
     /**
@@ -79,8 +118,21 @@ signals:
      */
     void screenRequested(int screenIndex);
 
+    /**
+     * @brief Emitted when current screen changes
+     */
+    void currentScreenChanged(int screen);
+
+    /**
+     * @brief Emitted when navigation to a screen is requested
+     */
+    void screenChangeRequested(int screenIndex);
+
 private:
-    // Navigation history for back button support
+    void pushToHistory(int screen);
+    int popFromHistory();
+
+    int m_currentScreen = 0;
     QList<int> m_navigationHistory;
     static constexpr int MAX_HISTORY = 50;
 };

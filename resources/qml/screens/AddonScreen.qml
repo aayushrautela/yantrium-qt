@@ -25,10 +25,6 @@ Item {
                 width: 150
             }
             TabButton {
-                text: "TMDB"
-                width: 150
-            }
-            TabButton {
                 text: "Trakt"
                 width: 150
             }
@@ -239,390 +235,140 @@ Item {
                 }
             }
 
-            // TMDB Tab
+            // Trakt Tab
             ScrollView {
-                id: tmdbTab
+                id: traktTab
                 anchors.fill: parent
                 visible: tabBar.currentIndex === 1
                 clip: true
                 
                 Column {
-                    id: tmdbColumn
+                    id: traktColumn
                     width: parent.width
                     spacing: 15
 
-                        Text {
-                            text: "TMDB Integration"
-                            font.pixelSize: 28
-                            font.bold: true
-                            color: "#FFFFFF"
-                        }
+                    Text {
+                        text: "Trakt Integration"
+                        font.pixelSize: 28
+                        font.bold: true
+                        color: "#FFFFFF"
+                    }
 
-                        TmdbDataService {
-                            id: tmdbSearch
-                            
-                            onMoviesFound: function(results) {
-                        tmdbStatusText.text = "✓ Found " + results.length + " movies"
-                        tmdbStatusText.color = "#4CAF50"
-                        tmdbResultsModel.clear()
-                        for (var i = 0; i < results.length; i++) {
-                            var result = results[i]
-                            tmdbResultsModel.append({
-                                "id": result.id || 0,
-                                "title": result.title || result.name || "",
-                                "overview": result.overview || "",
-                                "posterPath": result.posterPath || "",
-                                "voteAverage": result.voteAverage || 0.0,
-                                "popularity": result.popularity || 0.0
-                            })
+                    // TraktAuthService is a singleton, accessed directly
+                    Connections {
+                        target: TraktAuthService
+                        
+                        function onDeviceCodeGenerated(userCode, verificationUrl, expiresIn) {
+                            traktStatusText.text = "✓ Device code generated!\nUser Code: " + userCode + "\nVisit: " + verificationUrl
+                            traktStatusText.color = "#4CAF50"
+                            traktUserCodeText.text = "User Code: " + userCode
+                            traktVerificationUrlText.text = "Visit: " + verificationUrl
                         }
-                            }
-                            
-                            onTvFound: function(results) {
-                        tmdbStatusText.text = "✓ Found " + results.length + " TV shows"
-                        tmdbStatusText.color = "#4CAF50"
-                        tmdbResultsModel.clear()
-                        for (var i = 0; i < results.length; i++) {
-                            var result = results[i]
-                            tmdbResultsModel.append({
-                                "id": result.id || 0,
-                                "title": result.name || result.title || "",
-                                "overview": result.overview || "",
-                                "posterPath": result.posterPath || "",
-                                "voteAverage": result.voteAverage || 0.0,
-                                "popularity": result.popularity || 0.0
-                            })
-                        }
-                            }
-                            
-                            onError: function(errorMessage) {
-                                tmdbStatusText.text = "✗ Error: " + errorMessage
-                                tmdbStatusText.color = "#F44336"
+                        
+                        function onAuthenticationStatusChanged(authenticated) {
+                            if (authenticated) {
+                                traktStatusText.text = "✓ Authenticated with Trakt"
+                                traktStatusText.color = "#4CAF50"
+                            } else {
+                                traktStatusText.text = "Not authenticated"
+                                traktStatusText.color = "#FF9800"
                             }
                         }
-
-                        TmdbService {
-                            id: tmdbService
-                            
-                            onMovieMetadataFetched: function(tmdbId, data) {
-                                tmdbStatusText.text = "✓ Movie metadata fetched for ID: " + tmdbId
-                                tmdbStatusText.color = "#4CAF50"
-                                tmdbMetadataText.text = JSON.stringify(data, null, 2)
-                            }
-                            
-                            onTvMetadataFetched: function(tmdbId, data) {
-                                tmdbStatusText.text = "✓ TV metadata fetched for ID: " + tmdbId
-                                tmdbStatusText.color = "#4CAF50"
-                                tmdbMetadataText.text = JSON.stringify(data, null, 2)
-                            }
-                            
-                            onTmdbIdFound: function(imdbId, tmdbId) {
-                                tmdbStatusText.text = "✓ Found TMDB ID: " + tmdbId + " for IMDB: " + imdbId
-                                tmdbStatusText.color = "#4CAF50"
-                            }
-                            
-                            onError: function(errorMessage) {
-                                tmdbStatusText.text = "✗ Error: " + errorMessage
-                                tmdbStatusText.color = "#F44336"
-                            }
+                        
+                        function onUserInfoFetched(username, slug) {
+                            traktStatusText.text = "✓ User: " + username + " (" + slug + ")"
+                            traktStatusText.color = "#4CAF50"
                         }
-
-                        // Status display
-                        Rectangle {
-                            width: parent.width
-                    height: 60
-                    color: "#1a1a1a"
-                    radius: 8
-                    border.color: "#333333"
-                    border.width: 1
-
-                    Column {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.margins: 10
-                        spacing: 5
-
-                        Text {
-                            id: tmdbStatusText
-                            text: "Ready"
-                            color: "#FFFFFF"
-                            font.pixelSize: 14
+                        
+                        function onError(errorMessage) {
+                            traktStatusText.text = "✗ Error: " + errorMessage
+                            traktStatusText.color = "#F44336"
                         }
                     }
-                }
 
-                        // Search section
-                        Rectangle {
-                            width: parent.width
-                    height: 120
-                    color: "#1a1a1a"
-                    radius: 8
-                    border.color: "#333333"
-                    border.width: 1
-
-                    Column {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 10
-
-                        Text {
-                            text: "TMDB Search"
-                            color: "#FFFFFF"
-                            font.pixelSize: 16
-                            font.bold: true
+                    property TraktScrobbleService traktScrobble: TraktScrobbleService
+                    
+                    Connections {
+                        target: traktScrobble
+                        function onScrobbleStarted(success) {
+                            traktStatusText.text = success ? "✓ Scrobble started" : "✗ Failed to start scrobble"
+                            traktStatusText.color = success ? "#4CAF50" : "#F44336"
                         }
+                        
+                        function onScrobblePaused(success) {
+                            traktStatusText.text = success ? "✓ Scrobble paused" : "✗ Failed to pause scrobble"
+                            traktStatusText.color = success ? "#4CAF50" : "#F44336"
+                        }
+                        
+                        function onScrobbleStopped(success) {
+                            traktStatusText.text = success ? "✓ Scrobble stopped" : "✗ Failed to stop scrobble"
+                            traktStatusText.color = success ? "#4CAF50" : "#F44336"
+                        }
+                        
+                        function onHistoryFetched(history) {
+                            traktStatusText.text = "✓ Fetched " + history.length + " history items"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        function onError(errorMessage) {
+                            traktStatusText.text = "✗ Error: " + errorMessage
+                            traktStatusText.color = "#F44336"
+                        }
+                    }
 
-                        Row {
-                            width: parent.width
-                            spacing: 10
+                    TraktWatchlistService {
+                        id: traktWatchlist
+                        
+                        onWatchlistMoviesFetched: function(movies) {
+                            traktStatusText.text = "✓ Fetched " + movies.length + " watchlist movies"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        onWatchlistShowsFetched: function(shows) {
+                            traktStatusText.text = "✓ Fetched " + shows.length + " watchlist shows"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        onCollectionMoviesFetched: function(movies) {
+                            traktStatusText.text = "✓ Fetched " + movies.length + " collection movies"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        onCollectionShowsFetched: function(shows) {
+                            traktStatusText.text = "✓ Fetched " + shows.length + " collection shows"
+                            traktStatusText.color = "#4CAF50"
+                        }
+                        
+                        onError: function(errorMessage) {
+                            traktStatusText.text = "✗ Error: " + errorMessage
+                            traktStatusText.color = "#F44336"
+                        }
+                    }
 
-                            TextField {
-                                id: tmdbSearchInput
-                                width: parent.width - searchMoviesButton.width - searchTvButton.width - parent.spacing * 2
-                                placeholderText: "Enter search query (e.g., Matrix, Breaking Bad)"
+                    // Status display
+                    Rectangle {
+                        width: parent.width
+                        height: 60
+                        color: "#1a1a1a"
+                        radius: 8
+                        border.color: "#333333"
+                        border.width: 1
+
+                        Column {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.margins: 10
+                            spacing: 5
+
+                            Text {
+                                id: traktStatusText
+                                text: "Ready"
                                 color: "#FFFFFF"
-                                background: Rectangle {
-                                    color: "#2a2a2a"
-                                    border.color: "#444444"
-                                    border.width: 1
-                                    radius: 4
-                                }
-                                text: "Matrix"
-                            }
-
-                            Button {
-                                id: searchMoviesButton
-                                text: "Search Movies"
-                                onClicked: {
-                                    if (tmdbSearchInput.text.trim() !== "") {
-                                        tmdbStatusText.text = "Searching movies..."
-                                        tmdbStatusText.color = "#FFA500"
-                                        tmdbResultsModel.clear()
-                                        tmdbSearch.searchMovies(tmdbSearchInput.text.trim())
-                                    }
-                                }
-                            }
-
-                            Button {
-                                id: searchTvButton
-                                text: "Search TV"
-                                onClicked: {
-                                    if (tmdbSearchInput.text.trim() !== "") {
-                                        tmdbStatusText.text = "Searching TV shows..."
-                                        tmdbStatusText.color = "#FFA500"
-                                        tmdbResultsModel.clear()
-                                        tmdbSearch.searchTv(tmdbSearchInput.text.trim())
-                                    }
-                                }
-                            }
-                        }
-
-                        // Quick search buttons
-                        Row {
-                            spacing: 10
-                            Button {
-                                text: "Matrix"
-                                onClicked: tmdbSearchInput.text = "Matrix"
-                            }
-                            Button {
-                                text: "Breaking Bad"
-                                onClicked: tmdbSearchInput.text = "Breaking Bad"
-                            }
-                            Button {
-                                text: "Inception"
-                                onClicked: tmdbSearchInput.text = "Inception"
+                                font.pixelSize: 14
                             }
                         }
                     }
-                }
-
-                        // Metadata fetch section
-                        Rectangle {
-                            width: parent.width
-                    height: 100
-                    color: "#1a1a1a"
-                    radius: 8
-                    border.color: "#333333"
-                    border.width: 1
-
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 10
-
-                        TextField {
-                            id: tmdbIdInput
-                            placeholderText: "Enter TMDB ID (e.g., 603 for The Matrix)"
-                            color: "#FFFFFF"
-                            background: Rectangle {
-                                color: "#2a2a2a"
-                                border.color: "#444444"
-                                border.width: 1
-                                radius: 4
-                            }
-                            width: 200
-                            text: "603"
-                        }
-
-                        Button {
-                            text: "Get Movie Metadata"
-                            onClicked: {
-                                var id = parseInt(tmdbIdInput.text)
-                                if (id > 0) {
-                                    tmdbStatusText.text = "Fetching movie metadata..."
-                                    tmdbStatusText.color = "#FFA500"
-                                    tmdbService.getMovieMetadata(id)
-                                }
-                            }
-                        }
-
-                        Button {
-                            text: "Get TV Metadata"
-                            onClicked: {
-                                var id = parseInt(tmdbIdInput.text)
-                                if (id > 0) {
-                                    tmdbStatusText.text = "Fetching TV metadata..."
-                                    tmdbStatusText.color = "#FFA500"
-                                    tmdbService.getTvMetadata(id)
-                                }
-                            }
-                        }
-
-                        Button {
-                            text: "IMDB to TMDB"
-                            onClicked: {
-                                var imdbId = tmdbIdInput.text
-                                if (imdbId.startsWith("tt")) {
-                                    tmdbStatusText.text = "Looking up TMDB ID..."
-                                    tmdbStatusText.color = "#FFA500"
-                                    tmdbService.getTmdbIdFromImdb(imdbId)
-                                } else {
-                                    tmdbStatusText.text = "Enter IMDB ID (starts with 'tt')"
-                                    tmdbStatusText.color = "#FF9800"
-                                }
-                            }
-                        }
-                    }
-                }
-
-                        // Results section
-                        Rectangle {
-                            width: parent.width
-                            height: 400
-                            color: "#1a1a1a"
-                            radius: 8
-                            border.color: "#333333"
-                            border.width: 1
-
-                    Column {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 10
-
-                        Text {
-                            text: "Search Results / Metadata"
-                            color: "#FFFFFF"
-                            font.pixelSize: 16
-                            font.bold: true
-                        }
-
-                        ScrollView {
-                            width: parent.width
-                            height: parent.height - 40
-                            clip: true
-
-                            Column {
-                                width: parent.width
-                                spacing: 10
-
-                                // Search results list
-                                Repeater {
-                                    model: ListModel {
-                                        id: tmdbResultsModel
-                                    }
-                                    delegate: Rectangle {
-                                        width: parent.width
-                                        height: 80
-                                        color: "#2a2a2a"
-                                        radius: 4
-                                        border.color: "#444444"
-                                        border.width: 1
-
-                                        Row {
-                                            anchors.fill: parent
-                                            anchors.margins: 10
-                                            spacing: 10
-
-                                            Text {
-                                                width: 60
-                                                text: "ID: " + model.id
-                                                color: "#AAAAAA"
-                                                font.pixelSize: 11
-                                            }
-
-                                            Column {
-                                                width: parent.width - 200
-                                                spacing: 5
-
-                                                Text {
-                                                    text: model.title || "Unknown"
-                                                    color: "#FFFFFF"
-                                                    font.pixelSize: 14
-                                                    font.bold: true
-                                                    elide: Text.ElideRight
-                                                    width: parent.width
-                                                }
-                                                Text {
-                                                    text: model.overview || ""
-                                                    color: "#AAAAAA"
-                                                    font.pixelSize: 11
-                                                    elide: Text.ElideRight
-                                                    width: parent.width
-                                                    maximumLineCount: 2
-                                                }
-                                            }
-
-                                            Column {
-                                                width: 100
-                                                spacing: 5
-
-                                                Text {
-                                                    text: "Rating: " + model.voteAverage.toFixed(1)
-                                                    color: "#AAAAAA"
-                                                    font.pixelSize: 11
-                                                }
-                                                Text {
-                                                    text: "Popularity: " + model.popularity.toFixed(1)
-                                                    color: "#AAAAAA"
-                                                    font.pixelSize: 11
-                                                }
-                                            }
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            onClicked: {
-                                                tmdbIdInput.text = model.id
-                                                tmdbService.getMovieMetadata(model.id)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Metadata display
-                                Text {
-                                    id: tmdbMetadataText
-                                    width: parent.width
-                                    visible: text !== ""
-                                    color: "#AAAAAA"
-                                    font.pixelSize: 10
-                                    font.family: "monospace"
-                                    wrapMode: Text.Wrap
-                                }
-                            }
-                        }
-                    }
-                }
                 }
             }
 
@@ -630,7 +376,7 @@ Item {
             ScrollView {
                 id: traktTab
                 anchors.fill: parent
-                visible: tabBar.currentIndex === 2
+                visible: tabBar.currentIndex === 1
                 clip: true
                 
                 Column {
@@ -1048,78 +794,30 @@ Item {
                                 }
 
                                 Button {
-                                    text: "Get Movies"
-                                    onClicked: traktWatchlist.getWatchlistMoviesWithImages()
-                                }
-
-                                Button {
-                                    text: "Get Shows"
-                                    onClicked: traktWatchlist.getWatchlistShowsWithImages()
-                                }
-
-                                Button {
-                                    text: "Add"
+                                    text: "Get Watchlist Movies"
                                     onClicked: {
-                                        traktWatchlist.addToWatchlist(watchlistTypeInput.text, watchlistImdbInput.text)
+                                        traktWatchlist.getWatchlistMovies()
                                     }
                                 }
 
                                 Button {
-                                    text: "Remove"
+                                    text: "Get Watchlist Shows"
                                     onClicked: {
-                                        traktWatchlist.removeFromWatchlist(watchlistTypeInput.text, watchlistImdbInput.text)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Collection section
-                    Rectangle {
-                        width: parent.width
-                        height: 120
-                        color: "#1a1a1a"
-                        radius: 8
-                        border.color: "#333333"
-                        border.width: 1
-
-                        Column {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 10
-
-                            Text {
-                                text: "Collection"
-                                color: "#FFFFFF"
-                                font.pixelSize: 16
-                                font.bold: true
-                            }
-
-                            Row {
-                                width: parent.width
-                                spacing: 10
-
-                                Button {
-                                    text: "Get Movies"
-                                    onClicked: traktWatchlist.getCollectionMoviesWithImages()
-                                }
-
-                                Button {
-                                    text: "Get Shows"
-                                    onClicked: traktWatchlist.getCollectionShowsWithImages()
-                                }
-
-                                Button {
-                                    text: "Add"
-                                    onClicked: {
-                                        traktWatchlist.addToCollection(watchlistTypeInput.text, watchlistImdbInput.text)
+                                        traktWatchlist.getWatchlistShows()
                                     }
                                 }
 
                                 Button {
-                                    text: "Remove"
+                                    text: "Get Collection Movies"
                                     onClicked: {
-                                        traktWatchlist.removeFromCollection(watchlistTypeInput.text, watchlistImdbInput.text)
+                                        traktWatchlist.getCollectionMovies()
+                                    }
+                                }
+
+                                Button {
+                                    text: "Get Collection Shows"
+                                    onClicked: {
+                                        traktWatchlist.getCollectionShows()
                                     }
                                 }
                             }
@@ -1135,5 +833,3 @@ Item {
         enabledCount.text = "Enabled: " + addonRepo.getEnabledAddonsCount()
     }
 }
-
-

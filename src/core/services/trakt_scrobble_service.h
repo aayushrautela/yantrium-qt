@@ -58,7 +58,7 @@ private slots:
     void onHistoryRemoveReplyFinished();
 
 private:
-    TraktCoreService& m_coreService;
+    TraktCoreService* m_coreService;
     std::unique_ptr<QNetworkAccessManager> m_networkManager;
     
     bool validateContentData(const QJsonObject& contentData);

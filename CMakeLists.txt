@@ -34,7 +34,6 @@ set(PROJECT_SOURCES
     src/core/di/service_registry.cpp
     src/core/di/service_registry.h
     # Core service interfaces
-    src/core/services/interfaces/itmdb_data_service.h
     src/core/services/interfaces/imedia_metadata_service.h
     src/core/services/interfaces/istream_service.h
     src/core/services/interfaces/ilibrary_service.h
@@ -76,8 +75,6 @@ set(PROJECT_SOURCES
     src/features/addons/logic/addon_repository.cpp
     src/features/addons/logic/addon_repository.h
     # Core models
-    src/core/models/tmdb_models.cpp
-    src/core/models/tmdb_models.h
     src/core/models/trakt_models.cpp
     src/core/models/trakt_models.h
     src/core/models/stream_info.cpp
@@ -85,16 +82,7 @@ set(PROJECT_SOURCES
     # Core services
     src/core/services/configuration.cpp
     src/core/services/configuration.h
-    src/core/services/id_parser.cpp
     src/core/services/id_parser.h
-    src/core/services/tmdb_api_client.cpp
-    src/core/services/tmdb_api_client.h
-    src/core/services/tmdb_data_service.cpp
-    src/core/services/tmdb_data_service.h
-    src/core/services/tmdb_search_service.cpp
-    src/core/services/tmdb_search_service.h
-    src/core/services/tmdb_data_mapper.cpp
-    src/core/services/tmdb_data_mapper.h
     src/core/services/frontend_data_mapper.cpp
     src/core/services/frontend_data_mapper.h
     src/core/services/media_metadata_service.cpp
@@ -103,6 +91,8 @@ set(PROJECT_SOURCES
     src/core/services/omdb_service.h
     src/core/services/trakt_core_service.cpp
     src/core/services/trakt_core_service.h
+    src/core/services/trakt_cache_helper.cpp
+    src/core/services/trakt_cache_helper.h
     src/core/services/trakt_auth_service.cpp
     src/core/services/trakt_auth_service.h
     src/core/services/trakt_scrobble_service.cpp
@@ -121,10 +111,6 @@ set(PROJECT_SOURCES
     src/core/services/stream_service.h
     src/core/services/navigation_service.cpp
     src/core/services/navigation_service.h
-    src/core/services/screen_manager.cpp
-    src/core/services/screen_manager.h
-    src/core/services/error_service.cpp
-    src/core/services/error_service.h
     src/core/services/logging_service.cpp
     src/core/services/logging_service.h
     src/core/services/cache_service.cpp
@@ -143,14 +129,6 @@ qt_add_executable(Yantrium
 target_include_directories(Yantrium PRIVATE src)
 
 # --- API KEYS ---
-option(TMDB_API_KEY "TMDB API Key" "")
-if(TMDB_API_KEY)
-    target_compile_definitions(Yantrium PRIVATE TMDB_API_KEY="${TMDB_API_KEY}")
-    message(STATUS "TMDB API Key configured")
-else()
-    message(WARNING "TMDB_API_KEY not set.")
-    target_compile_definitions(Yantrium PRIVATE TMDB_API_KEY="")
-endif()
 
 option(TRAKT_CLIENT_ID "Trakt Client ID" "")
 if(TRAKT_CLIENT_ID)

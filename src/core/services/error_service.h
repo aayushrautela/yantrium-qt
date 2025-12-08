@@ -24,11 +24,6 @@ public:
     explicit ErrorService(QObject* parent = nullptr);
 
     /**
-     * @brief Get singleton instance (for C++ usage)
-     */
-    static ErrorService& instance();
-
-    /**
      * @brief Get the last error message
      */
     [[nodiscard]] QString lastError() const { return m_lastError; }
@@ -79,7 +74,6 @@ private:
     QString m_lastError;
     QString m_lastErrorCode;
     QString m_lastErrorContext;
-    static ErrorService* s_instance;
 };
 
 #endif // ERROR_SERVICE_H

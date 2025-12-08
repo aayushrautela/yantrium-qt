@@ -1,9 +1,105 @@
 #include "frontend_data_mapper.h"
-#include "tmdb_data_mapper.h"
 #include "configuration.h"
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QDebug>
+
+// Inline helper functions to replace deleted TmdbDataMapper
+namespace {
+    QString extractPosterUrl(const QJsonObject& tmdbData) {
+        QString posterPath = tmdbData["poster_path"].toString();
+        if (posterPath.isEmpty()) return QString();
+        if (posterPath.startsWith("http")) return posterPath;
+        return "https://image.tmdb.org/t/p/w500" + posterPath;
+    }
+    
+    QString extractBackdropUrl(const QJsonObject& tmdbData) {
+        QString backdropPath = tmdbData["backdrop_path"].toString();
+        if (backdropPath.isEmpty()) return QString();
+        if (backdropPath.startsWith("http")) return backdropPath;
+        return "https://image.tmdb.org/t/p/w1280" + backdropPath;
+    }
+    
+    QString extractLogoUrl(const QJsonObject& tmdbData) {
+        QJsonObject images = tmdbData["images"].toObject();
+        QJsonArray logos = images["logos"].toArray();
+        if (!logos.isEmpty()) {
+            QJsonObject logo = logos[0].toObject();
+            QString filePath = logo["file_path"].toString();
+            if (!filePath.isEmpty()) {
+                if (filePath.startsWith("http")) return filePath;
+                return "https://image.tmdb.org/t/p/w500" + filePath;
+            }
+        }
+        return QString();
+    }
+    
+    QJsonObject extractCastAndCrew(const QJsonObject& tmdbData) {
+        QJsonObject result;
+        result["cast"] = tmdbData["credits"].toObject()["cast"].toArray();
+        result["crew"] = tmdbData["credits"].toObject()["crew"].toArray();
+        return result;
+    }
+    
+    QJsonObject extractAdditionalMetadata(const QJsonObject& tmdbData, const QString& type) {
+        QJsonObject result;
+        if (type == "movie") {
+            result["runtime"] = tmdbData["runtime"].toInt();
+        } else {
+            QJsonArray runtimes = tmdbData["episode_run_time"].toArray();
+            if (!runtimes.isEmpty()) {
+                result["runtime"] = runtimes[0].toInt();
+            }
+        }
+        return result;
+    }
+    
+    QString extractMaturityRating(const QJsonObject& tmdbData, const QString& type) {
+        QJsonArray certifications;
+        if (type == "movie") {
+            QJsonArray results = tmdbData["release_dates"].toObject()["results"].toArray();
+            for (const QJsonValue& value : results) {
+                QJsonObject country = value.toObject();
+                if (country["iso_3166_1"].toString() == "US") {
+                    QJsonArray dates = country["release_dates"].toArray();
+                    if (!dates.isEmpty()) {
+                        QString cert = dates[0].toObject()["certification"].toString();
+                        if (!cert.isEmpty()) return cert;
+                    }
+                }
+            }
+        } else {
+            QJsonArray results = tmdbData["content_ratings"].toObject()["results"].toArray();
+            for (const QJsonValue& value : results) {
+                QJsonObject country = value.toObject();
+                if (country["iso_3166_1"].toString() == "US") {
+                    QString rating = country["rating"].toString();
+                    if (!rating.isEmpty()) return rating;
+                }
+            }
+        }
+        return QString();
+    }
+}
+
+// Inline helper for TmdbImageUrlBuilder
+namespace {
+    class ImageUrlBuilder {
+    public:
+        enum class ImageSize { Small, Medium, Large };
+        static QString buildUrl(const QString& path, ImageSize size) {
+            if (path.isEmpty()) return QString();
+            if (path.startsWith("http")) return path;
+            QString sizeStr = (size == ImageSize::Small) ? "w185" : (size == ImageSize::Medium) ? "w500" : "w1280";
+            return "https://image.tmdb.org/t/p/" + sizeStr + path;
+        }
+        static QString buildUrl(const QString& path, const QString& size) {
+            if (path.isEmpty()) return QString();
+            if (path.startsWith("http")) return path;
+            return "https://image.tmdb.org/t/p/" + size + path;
+        }
+    };
+}
 
 QString FrontendDataMapper::formatDateDDMMYYYY(const QString& dateString)
 {
@@ -26,7 +122,7 @@ QJsonObject FrontendDataMapper::mapTmdbToCatalogItem(const QJsonObject& tmdbData
     
     try {
         // Extract cast and crew
-        QJsonObject castAndCrew = TmdbDataMapper::extractCastAndCrew(tmdbData);
+        QJsonObject castAndCrew = extractCastAndCrew(tmdbData);
         QJsonArray cast = castAndCrew["cast"].toArray();
         QJsonArray crew = castAndCrew["crew"].toArray();
         
@@ -64,10 +160,10 @@ QJsonObject FrontendDataMapper::mapTmdbToCatalogItem(const QJsonObject& tmdbData
         }
         
         // Extract logo
-        QString logoUrl = TmdbDataMapper::extractLogoUrl(tmdbData);
+        QString logoUrl = extractLogoUrl(tmdbData);
         
         // Extract additional metadata
-        QJsonObject additionalMetadata = TmdbDataMapper::extractAdditionalMetadata(tmdbData, type);
+        QJsonObject additionalMetadata = extractAdditionalMetadata(tmdbData, type);
         int runtime = additionalMetadata["runtime"].toInt();
         
         // Extract cast names (first 10)
@@ -102,8 +198,8 @@ QJsonObject FrontendDataMapper::mapTmdbToCatalogItem(const QJsonObject& tmdbData
             result["releaseInfo"] = releaseInfo;
         }
         
-        result["poster"] = TmdbDataMapper::extractPosterUrl(tmdbData);
-        result["background"] = TmdbDataMapper::extractBackdropUrl(tmdbData);
+        result["poster"] = extractPosterUrl(tmdbData);
+        result["background"] = extractBackdropUrl(tmdbData);
         result["logo"] = logoUrl;
         result["description"] = tmdbData["overview"].toString();
         result["genres"] = genres;
@@ -155,9 +251,9 @@ QVariantMap FrontendDataMapper::mapTmdbToDetailVariantMap(const QJsonObject& tmd
         }
         
         // Images - always use "posterUrl", "backdropUrl", "logoUrl"
-        map["backdropUrl"] = TmdbDataMapper::extractBackdropUrl(tmdbData);
-        map["logoUrl"] = TmdbDataMapper::extractLogoUrl(tmdbData);
-        map["posterUrl"] = TmdbDataMapper::extractPosterUrl(tmdbData);
+        map["backdropUrl"] = extractBackdropUrl(tmdbData);
+        map["logoUrl"] = extractLogoUrl(tmdbData);
+        map["posterUrl"] = extractPosterUrl(tmdbData);
         
         // Description - always use "description" for frontend
         map["description"] = tmdbData["overview"].toString();
@@ -188,7 +284,7 @@ QVariantMap FrontendDataMapper::mapTmdbToDetailVariantMap(const QJsonObject& tmd
         }
         
         // Content rating
-        QString maturityRating = TmdbDataMapper::extractMaturityRating(tmdbData, type);
+        QString maturityRating = extractMaturityRating(tmdbData, type);
         map["contentRating"] = maturityRating;
         
         // Genres
@@ -216,7 +312,7 @@ QVariantMap FrontendDataMapper::mapTmdbToDetailVariantMap(const QJsonObject& tmd
         map["tmdbId"] = QString::number(tmdbData["id"].toInt());
         
         // Cast and crew
-        QJsonObject castAndCrew = TmdbDataMapper::extractCastAndCrew(tmdbData);
+        QJsonObject castAndCrew = extractCastAndCrew(tmdbData);
         QJsonArray cast = castAndCrew["cast"].toArray();
         QJsonArray crew = castAndCrew["crew"].toArray();
         
@@ -231,7 +327,7 @@ QVariantMap FrontendDataMapper::mapTmdbToDetailVariantMap(const QJsonObject& tmd
             // Build full profile image URL
             QString profilePath = person["profile_path"].toString();
             if (!profilePath.isEmpty() && !profilePath.startsWith("http")) {
-                personMap["profileImageUrl"] = TmdbImageUrlBuilder::buildUrl(profilePath, TmdbImageUrlBuilder::ImageSize::Small);
+                personMap["profileImageUrl"] = ImageUrlBuilder::buildUrl(profilePath, ImageUrlBuilder::ImageSize::Small);
             } else if (profilePath.startsWith("http")) {
                 personMap["profileImageUrl"] = profilePath;
             } else {
@@ -898,9 +994,9 @@ QVariantMap FrontendDataMapper::mapContinueWatchingItem(const QVariantMap& trakt
             }
             
             // Extract images from TMDB
-            QString posterUrl = TmdbDataMapper::extractPosterUrl(tmdbData);
-            QString backdropUrl = TmdbDataMapper::extractBackdropUrl(tmdbData);
-            QString logoUrl = TmdbDataMapper::extractLogoUrl(tmdbData);
+            QString posterUrl = extractPosterUrl(tmdbData);
+            QString backdropUrl = extractBackdropUrl(tmdbData);
+            QString logoUrl = extractLogoUrl(tmdbData);
             
             // Fallback: backdrop -> poster
             if (backdropUrl.isEmpty() && !posterUrl.isEmpty()) {
@@ -923,9 +1019,9 @@ QVariantMap FrontendDataMapper::mapContinueWatchingItem(const QVariantMap& trakt
             }
             
             // Extract images from TMDB
-            QString posterUrl = TmdbDataMapper::extractPosterUrl(tmdbData);
-            QString backdropUrl = TmdbDataMapper::extractBackdropUrl(tmdbData);
-            QString logoUrl = TmdbDataMapper::extractLogoUrl(tmdbData);
+            QString posterUrl = extractPosterUrl(tmdbData);
+            QString backdropUrl = extractBackdropUrl(tmdbData);
+            QString logoUrl = extractLogoUrl(tmdbData);
             
             // Fallback: backdrop -> poster
             if (backdropUrl.isEmpty() && !posterUrl.isEmpty()) {
@@ -1014,13 +1110,13 @@ QVariantList FrontendDataMapper::mapSearchResultsToVariantList(const QJsonArray&
         QString posterPath = result["poster_path"].toString();
         if (!posterPath.isEmpty()) {
             map["posterPath"] = posterPath;
-            map["posterUrl"] = TmdbImageUrlBuilder::buildUrl(posterPath, TmdbImageUrlBuilder::ImageSize::Medium);
+            map["posterUrl"] = ImageUrlBuilder::buildUrl(posterPath, ImageUrlBuilder::ImageSize::Medium);
         }
         
         QString backdropPath = result["backdrop_path"].toString();
         if (!backdropPath.isEmpty()) {
             map["backdropPath"] = backdropPath;
-            map["backdropUrl"] = TmdbImageUrlBuilder::buildUrl(backdropPath, "w1280");
+            map["backdropUrl"] = ImageUrlBuilder::buildUrl(backdropPath, "w1280");
         }
         
         map["voteAverage"] = result["vote_average"].toDouble();
@@ -1074,7 +1170,7 @@ QVariantList FrontendDataMapper::mapSimilarItemsToVariantList(const QJsonArray& 
         // Poster URL
         QString posterPath = item["poster_path"].toString();
         if (!posterPath.isEmpty()) {
-            map["posterUrl"] = TmdbImageUrlBuilder::buildUrl(posterPath, TmdbImageUrlBuilder::ImageSize::Medium);
+            map["posterUrl"] = ImageUrlBuilder::buildUrl(posterPath, ImageUrlBuilder::ImageSize::Medium);
         }
         
         // Rating

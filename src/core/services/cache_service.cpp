@@ -1,20 +1,21 @@
 #include "cache_service.h"
 #include "logging_service.h"
+#include "core/di/service_registry.h"
 #include <QUrlQuery>
 
-CacheService* CacheService::s_instance = nullptr;
+CacheService& CacheService::instance()
+{
+    static CacheService* s_instance = nullptr;
+    if (!s_instance) {
+        s_instance = new CacheService();
+    }
+    return *s_instance;
+}
 
 CacheService::CacheService(QObject* parent)
     : QObject(parent)
 {
-    s_instance = this;
     LoggingService::logInfo("CacheService", "Initialized");
-}
-
-CacheService& CacheService::instance()
-{
-    static CacheService instance;
-    return instance;
 }
 
 void CacheService::set(const QString& key, const QVariant& data, int ttlSeconds)
@@ -140,32 +141,44 @@ QString CacheService::generateKeyFromQuery(const QString& service, const QString
 
 void CacheService::setCache(const QString& key, const QVariant& data, int ttlSeconds)
 {
-    instance().set(key, data, ttlSeconds);
+    auto service = ServiceRegistry::instance().resolve<CacheService>();
+    if (service) {
+        service->set(key, data, ttlSeconds);
+    }
 }
 
 void CacheService::setJsonCache(const QString& key, const QJsonObject& data, int ttlSeconds)
 {
-    instance().setJson(key, data, ttlSeconds);
+    auto service = ServiceRegistry::instance().resolve<CacheService>();
+    if (service) {
+        service->setJson(key, data, ttlSeconds);
+    }
 }
 
 QVariant CacheService::getCache(const QString& key)
 {
-    return instance().get(key);
+    auto service = ServiceRegistry::instance().resolve<CacheService>();
+    return service ? service->get(key) : QVariant();
 }
 
 QJsonObject CacheService::getJsonCache(const QString& key)
 {
-    return instance().getJson(key);
+    auto service = ServiceRegistry::instance().resolve<CacheService>();
+    return service ? service->getJson(key) : QJsonObject();
 }
 
 bool CacheService::hasCache(const QString& key)
 {
-    return instance().contains(key);
+    auto service = ServiceRegistry::instance().resolve<CacheService>();
+    return service ? service->contains(key) : false;
 }
 
 void CacheService::removeCache(const QString& key)
 {
-    instance().remove(key);
+    auto service = ServiceRegistry::instance().resolve<CacheService>();
+    if (service) {
+        service->remove(key);
+    }
 }
 
 void CacheService::cleanupExpired() const

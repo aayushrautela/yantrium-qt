@@ -16,10 +16,7 @@
 #include "features/addons/models/addon_config.h"
 #include "features/addons/models/addon_manifest.h"
 #include "core/services/trakt_core_service.h"
-#include "core/services/tmdb_data_service.h"
-#include "core/services/tmdb_search_service.h"
 #include "core/services/media_metadata_service.h"
-#include "core/services/tmdb_data_mapper.h"
 #include "core/services/frontend_data_mapper.h"
 #include "core/services/omdb_service.h"
 #include "core/database/catalog_preferences_dao.h"
@@ -36,8 +33,6 @@ class LibraryService : public QObject, public ILibraryService
 public:
     explicit LibraryService(
         std::shared_ptr<AddonRepository> addonRepository,
-        std::shared_ptr<TmdbDataService> tmdbService,
-        std::shared_ptr<TmdbSearchService> tmdbSearchService,
         std::shared_ptr<MediaMetadataService> mediaMetadataService,
         std::shared_ptr<OmdbService> omdbService,
         std::shared_ptr<LocalLibraryService> localLibraryService,
@@ -54,9 +49,9 @@ public:
     Q_INVOKABLE void loadCatalogsRaw(); // Load catalogs without processing (for raw export)
     Q_INVOKABLE void loadHeroItems(); // Load items from hero catalogs
     Q_INVOKABLE void loadItemDetails(const QString& contentId, const QString& type, const QString& addonId = QString());
-    Q_INVOKABLE void loadSimilarItems(int tmdbId, const QString& type);
     Q_INVOKABLE void getSmartPlayState(const QVariantMap& itemData);
-    Q_INVOKABLE void loadSeasonEpisodes(int tmdbId, int seasonNumber);
+    void loadSimilarItems(int tmdbId, const QString& type) override;
+    void loadSeasonEpisodes(int tmdbId, int seasonNumber) override;
 
     // Cache management
     Q_INVOKABLE void clearMetadataCache();
@@ -83,18 +78,13 @@ private slots:
     void onCatalogFetched(const QString& type, const QJsonArray& metas);
     void onClientError(const QString& errorMessage);
     void onPlaybackProgressFetched(const QVariantList& progress);
-    void onTmdbMovieMetadataFetched(int tmdbId, const QJsonObject& data);
-    void onTmdbTvMetadataFetched(int tmdbId, const QJsonObject& data);
-    void onTmdbIdFound(const QString& imdbId, int tmdbId);
-    void onTmdbError(const QString& message);
     void onHeroCatalogFetched(const QString& type, const QJsonArray& metas);
     void onHeroClientError(const QString& errorMessage);
+    void onSearchResultsFetched(const QString& type, const QJsonArray& metas);
+    void onSearchClientError(const QString& errorMessage);
     void onMediaMetadataLoaded(const QVariantMap& details);
     void onMediaMetadataError(const QString& message);
     void onWatchProgressLoaded(const QVariantMap& progress);
-    void onSimilarMoviesFetched(int tmdbId, const QJsonArray& results);
-    void onSimilarTvFetched(int tmdbId, const QJsonArray& results);
-    void onTvSeasonDetailsFetched(int tmdbId, int seasonNumber, const QJsonObject& data);
 
 private:
     struct CatalogSection {
@@ -110,8 +100,6 @@ private:
     
     std::shared_ptr<AddonRepository> m_addonRepository;
     TraktCoreService* m_traktService;
-    std::shared_ptr<TmdbDataService> m_tmdbService;
-    std::shared_ptr<TmdbSearchService> m_tmdbSearchService;
     std::shared_ptr<MediaMetadataService> m_mediaMetadataService;
     std::shared_ptr<OmdbService> m_omdbService;
     std::shared_ptr<LocalLibraryService> m_localLibraryService;
@@ -128,29 +116,21 @@ private:
     QVariantList m_heroItems;
     int m_pendingHeroRequests;
     bool m_isLoadingHeroItems;
-    int m_pendingHeroTmdbRequests;
-    QVariantList m_pendingHeroTmdbItems;
-
-    // Hero TMDB enrichment methods
-    void enrichHeroItemsWithTmdbData(const QVariantList& heroItems);
-    bool updateHeroItemWithTmdbData(int tmdbId, const QJsonObject& data, const QString& type);
-    bool handleHeroTmdbIdLookup(const QString& imdbId, int tmdbId);
     void emitHeroItemsWhenReady();
     
-    // Continue watching TMDB loading
-    QMap<QString, QVariantMap> m_pendingContinueWatchingItems; // IMDB ID -> Trakt item data
+    // Continue watching loading
+    QMap<QString, QVariantMap> m_pendingContinueWatchingItems; // Content ID -> Trakt item data
     QMap<QString, QVariantMap> m_pendingSmartPlayItems; // Content ID -> item data for smart play
-    QMap<int, QString> m_tmdbIdToImdbId; // TMDB ID -> IMDB ID
-    int m_pendingTmdbRequests;
+    int m_pendingContinueWatchingMetadataRequests;
     void finishContinueWatchingLoading();
     
-    // Search state (no longer needed for incremental loading, but kept for potential cleanup)
+    // Search state
+    int m_pendingSearchRequests;
     
     // Item details loading
     QString m_pendingDetailsContentId;
     QString m_pendingDetailsType;
     QString m_pendingDetailsAddonId;
-    QMap<int, QString> m_tmdbIdToImdbIdForDetails; // TMDB ID -> IMDB ID for details
 };
 
 #endif // LIBRARY_SERVICE_H

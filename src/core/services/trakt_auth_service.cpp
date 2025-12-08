@@ -1,28 +1,25 @@
 #include "trakt_auth_service.h"
-#include "error_service.h"
+#include "logging_service.h"
+#include "logging_service.h"
+#include "core/di/service_registry.h"
 #include "../database/database_manager.h"
 #include "../database/trakt_auth_dao.h"
 #include <QUrlQuery>
 #include <QNetworkRequest>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QDebug>
-
-TraktAuthService& TraktAuthService::instance()
-{
-    static TraktAuthService instance;
-    return instance;
-}
 
 TraktAuthService::TraktAuthService(QObject* parent)
     : QObject(parent)
-    , m_config(Configuration::instance())
-    , m_coreService(TraktCoreService::instance())
+    , m_config(ServiceRegistry::instance().resolve<Configuration>())
+    , m_coreService(nullptr)
     , m_networkManager(new QNetworkAccessManager(this))
     , m_pollTimer(new QTimer(this))
     , m_currentInterval(0)
     , m_isAuthenticated(false)
 {
+    // Resolve TraktCoreService from registry (will be set up later in main.cpp)
+    // For now, we'll resolve it when needed
     m_pollTimer->setSingleShot(false);
     connect(m_pollTimer, &QTimer::timeout, this, [this]() {
         if (!m_currentDeviceCode.isEmpty()) {
@@ -30,19 +27,17 @@ TraktAuthService::TraktAuthService(QObject* parent)
         }
     });
     
-    // Initialize core service database if needed
-    DatabaseManager& dbManager = DatabaseManager::instance();
-    if (dbManager.isInitialized()) {
-        m_coreService.initializeDatabase();
-        m_coreService.initializeAuth();
-    }
-    
-    checkAuthentication();
+    // Don't check authentication in constructor - wait until services are fully registered
+    // Authentication will be checked when QML calls checkAuthentication() or when explicitly requested
+    // This avoids timing issues with service registration order
 }
 
 bool TraktAuthService::isConfigured() const
 {
-    return m_config.isTraktConfigured();
+    if (!m_config) {
+        m_config = ServiceRegistry::instance().resolve<Configuration>();
+    }
+    return m_config && m_config->isTraktConfigured();
 }
 
 bool TraktAuthService::isAuthenticated() const
@@ -52,34 +47,60 @@ bool TraktAuthService::isAuthenticated() const
 
 void TraktAuthService::checkAuthentication()
 {
-    m_coreService.checkAuthentication();
-    // Connect to authentication status changes (singleton ensures this only happens once)
-    // Use a lambda with capture to ensure we're always connected
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::logError("TraktAuthService", "TraktCoreService not available in registry");
+            return;
+        }
+    }
+    
+    // Connect to authentication status changes BEFORE checking (so we receive the signal)
     static QMetaObject::Connection connection;
-    if (!connection) {
-        connection = connect(&m_coreService, &TraktCoreService::authenticationStatusChanged, this, [this](bool authenticated) {
+    if (!connection && m_coreService) {
+        connection = connect(m_coreService, &TraktCoreService::authenticationStatusChanged, this, [this](bool authenticated) {
             m_isAuthenticated = authenticated;
             emit authenticationStatusChanged(authenticated);
+            LoggingService::logDebug("TraktAuthService", QString("Authentication status changed via signal: %1").arg(authenticated ? "authenticated" : "not authenticated"));
         });
     }
+    
+    // Ensure core service is initialized
+    m_coreService->initializeDatabase();
+    m_coreService->initializeAuth();
+    
+    // Now check authentication (this will emit the signal which we're now connected to)
+    // The signal will update m_isAuthenticated via the connection above
+    m_coreService->checkAuthentication();
 }
 
 void TraktAuthService::generateDeviceCode()
 {
     if (!isConfigured()) {
-        ErrorService::report("Trakt API not configured. Please set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET", "CONFIG_ERROR", "TraktAuthService");
+        LoggingService::report("Trakt API not configured. Please set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET", "CONFIG_ERROR", "TraktAuthService");
         emit error("Trakt API not configured. Please set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET");
         return;
     }
     
-    QUrl url(m_config.traktDeviceCodeUrl());
+    if (!m_config) {
+        m_config = ServiceRegistry::instance().resolve<Configuration>();
+        if (!m_config) {
+            LoggingService::report("Configuration service not available", "SERVICE_ERROR", "TraktAuthService");
+            emit error("Configuration service not available");
+            return;
+        }
+    }
+    
+    QUrl url(m_config->traktDeviceCodeUrl());
     QJsonObject data;
-    data["client_id"] = m_config.traktClientId();
+    data["client_id"] = m_config->traktClientId();
     
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    request.setRawHeader("trakt-api-version", m_config.traktApiVersion().toUtf8());
-    request.setRawHeader("trakt-api-key", m_config.traktClientId().toUtf8());
+    request.setRawHeader("trakt-api-version", m_config->traktApiVersion().toUtf8());
+    request.setRawHeader("trakt-api-key", m_config->traktClientId().toUtf8());
     
     QNetworkReply* reply = m_networkManager->post(request, QJsonDocument(data).toJson());
     connect(reply, &QNetworkReply::finished, this, &TraktAuthService::onDeviceCodeReplyFinished);
@@ -99,16 +120,25 @@ void TraktAuthService::pollForAccessToken(const QString& deviceCode, int interva
     m_currentDeviceCode = deviceCode;
     m_currentInterval = intervalSeconds;
     
-    QUrl url(m_config.traktDeviceTokenUrl());
+    if (!m_config) {
+        m_config = ServiceRegistry::instance().resolve<Configuration>();
+        if (!m_config) {
+            LoggingService::report("Configuration service not available", "SERVICE_ERROR", "TraktAuthService");
+            emit error("Configuration service not available");
+            return;
+        }
+    }
+    
+    QUrl url(m_config->traktDeviceTokenUrl());
     QJsonObject data;
     data["code"] = deviceCode;
-    data["client_id"] = m_config.traktClientId();
-    data["client_secret"] = m_config.traktClientSecret();
+    data["client_id"] = m_config->traktClientId();
+    data["client_secret"] = m_config->traktClientSecret();
     
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    request.setRawHeader("trakt-api-version", m_config.traktApiVersion().toUtf8());
-    request.setRawHeader("trakt-api-key", m_config.traktClientId().toUtf8());
+    request.setRawHeader("trakt-api-version", m_config->traktApiVersion().toUtf8());
+    request.setRawHeader("trakt-api-key", m_config->traktClientId().toUtf8());
     
     QNetworkReply* reply = m_networkManager->post(request, QJsonDocument(data).toJson());
     connect(reply, &QNetworkReply::finished, this, &TraktAuthService::onDeviceTokenReplyFinished);
@@ -140,17 +170,35 @@ void TraktAuthService::pollForAccessToken(const QString& deviceCode, int interva
 
 void TraktAuthService::refreshToken()
 {
-    m_coreService.checkAuthentication();
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::logError("TraktAuthService", "TraktCoreService not available in registry");
+            return;
+        }
+    }
+    m_coreService->checkAuthentication();
     // Token refresh is handled automatically by TraktCoreService
 }
 
 void TraktAuthService::getCurrentUser()
 {
-    m_coreService.getUserProfile();
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::logError("TraktAuthService", "TraktCoreService not available in registry");
+            return;
+        }
+    }
+    m_coreService->getUserProfile();
     // Connect only if not already connected
     static bool userConnected = false;
-    if (!userConnected) {
-        connect(&m_coreService, &TraktCoreService::userProfileFetched, this, [this](const QJsonObject& user) {
+    if (!userConnected && m_coreService) {
+        connect(m_coreService, &TraktCoreService::userProfileFetched, this, [this](const QJsonObject& user) {
             QString username = user["username"].toString();
             QJsonObject ids = user["ids"].toObject();
             QString slug = ids["slug"].toString();
@@ -162,7 +210,20 @@ void TraktAuthService::getCurrentUser()
 
 void TraktAuthService::logout()
 {
-    m_coreService.logout();
+    if (!m_coreService) {
+        auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+        if (coreService) {
+            m_coreService = coreService.get();
+        } else {
+            LoggingService::logError("TraktAuthService", "TraktCoreService not available in registry");
+            m_isAuthenticated = false;
+            m_pollTimer->stop();
+            m_currentDeviceCode.clear();
+            emit authenticationStatusChanged(false);
+            return;
+        }
+    }
+    m_coreService->logout();
     m_isAuthenticated = false;
     m_pollTimer->stop();
     m_currentDeviceCode.clear();
@@ -224,8 +285,8 @@ void TraktAuthService::onDeviceTokenReplyFinished()
         int expiresIn = data["expires_in"].toInt();
         
         // Save tokens via core service
-        DatabaseManager& dbManager = DatabaseManager::instance();
-        if (dbManager.isInitialized()) {
+        auto dbManager = ServiceRegistry::instance().resolve<DatabaseManager>();
+        if (dbManager && dbManager->isInitialized()) {
             TraktAuthDao dao{};
             TraktAuthRecord record;
             record.accessToken = accessToken;
@@ -235,7 +296,15 @@ void TraktAuthService::onDeviceTokenReplyFinished()
             record.expiresAt = QDateTime::currentDateTime().addSecs(expiresIn);
             
             (void)dao.upsertTraktAuth(record);
-            m_coreService.reloadAuth();
+            if (!m_coreService) {
+                auto coreService = ServiceRegistry::instance().resolve<TraktCoreService>();
+                if (coreService) {
+                    m_coreService = coreService.get();
+                }
+            }
+            if (m_coreService) {
+                m_coreService->reloadAuth();
+            }
             
             // Fetch user info
             fetchUserInfo(accessToken);
@@ -288,8 +357,8 @@ void TraktAuthService::onUserInfoReplyFinished()
     QString slug = ids["slug"].toString();
     
     // Update database with username/slug
-    DatabaseManager& dbManager = DatabaseManager::instance();
-    if (dbManager.isInitialized()) {
+    auto dbManager = ServiceRegistry::instance().resolve<DatabaseManager>();
+    if (dbManager && dbManager->isInitialized()) {
         TraktAuthDao dao{};
         auto auth = dao.getTraktAuth();
         if (auth) {
@@ -305,17 +374,25 @@ void TraktAuthService::onUserInfoReplyFinished()
 
 void TraktAuthService::fetchUserInfo(const QString& accessToken)
 {
-    QUrl url(m_config.traktBaseUrl() + "/users/settings");
+    if (!m_config) {
+        m_config = ServiceRegistry::instance().resolve<Configuration>();
+        if (!m_config) {
+            LoggingService::logError("TraktAuthService", "Configuration service not available");
+            return;
+        }
+    }
+    
+    QUrl url(m_config->traktBaseUrl() + "/users/settings");
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader("Authorization", ("Bearer " + accessToken).toUtf8());
-    request.setRawHeader("trakt-api-version", m_config.traktApiVersion().toUtf8());
-    request.setRawHeader("trakt-api-key", m_config.traktClientId().toUtf8());
+    request.setRawHeader("trakt-api-version", m_config->traktApiVersion().toUtf8());
+    request.setRawHeader("trakt-api-key", m_config->traktClientId().toUtf8());
     
     QNetworkReply* reply = m_networkManager->get(request);
     connect(reply, &QNetworkReply::finished, this, &TraktAuthService::onUserInfoReplyFinished);
     connect(reply, &QNetworkReply::errorOccurred, this, [this, reply]() {
-        qWarning() << "[TraktAuthService] Failed to fetch user info:" << reply->errorString();
+        LoggingService::logWarning("TraktAuthService", QString("Failed to fetch user info: %1").arg(reply->errorString()));
         reply->deleteLater();
     });
 }
