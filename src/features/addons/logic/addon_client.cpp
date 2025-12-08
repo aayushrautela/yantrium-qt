@@ -200,6 +200,43 @@ void AddonClient::getStreams(const QString& type, const QString& id)
     });
 }
 
+void AddonClient::search(const QString& type, const QString& query)
+{
+    // AIOMetadata search endpoint format: /catalog/{type}/search/search={query}.json
+    // The search parameter is part of the path, not a query parameter
+    QString encodedQuery = QUrl::toPercentEncoding(query);
+    QString path = QString("/catalog/%1/search/search=%2.json").arg(type, encodedQuery);
+    QUrl url = buildUrl(path);
+    
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Accept", "application/json");
+    
+    QNetworkReply* reply = m_networkManager->get(request);
+    
+    connect(reply, &QNetworkReply::finished, this, [this, reply, type]() {
+        reply->deleteLater();
+        
+        if (reply->error() != QNetworkReply::NoError) {
+            if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404) {
+                emit searchResultsFetched(type, QJsonArray());
+            } else {
+                emit error(QString("Failed to search: %1").arg(reply->errorString()));
+            }
+            return;
+        }
+        
+        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (doc.isNull() || !doc.isObject()) {
+            emit searchResultsFetched(type, QJsonArray());
+            return;
+        }
+        
+        QJsonObject obj = doc.object();
+        emit searchResultsFetched(type, obj["metas"].toArray());
+    });
+}
+
 bool AddonClient::validateManifest(const AddonManifest& manifest)
 {
     if (manifest.id().isEmpty()) return false;

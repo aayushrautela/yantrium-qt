@@ -69,7 +69,8 @@ signals:
     void catalogsLoaded(const QVariantList& sections);
     void continueWatchingLoaded(const QVariantList& items);
     void searchResultsLoaded(const QVariantList& results);
-    void tmdbSearchResultsLoaded(const QVariantList& results);  // Combined movies + TV results
+    void searchSectionLoaded(const QVariantMap& section);  // Single search section loaded incrementally
+    void searchSectionsLoaded(const QVariantList& sections);  // Search results as catalog sections (deprecated - use searchSectionLoaded)
     void rawCatalogsLoaded(const QVariantList& rawData); // Raw unprocessed catalog data
     void heroItemsLoaded(const QVariantList& items); // Hero items loaded
     void itemDetailsLoaded(const QVariantMap& details);
@@ -93,9 +94,6 @@ private slots:
     void onWatchProgressLoaded(const QVariantMap& progress);
     void onSimilarMoviesFetched(int tmdbId, const QJsonArray& results);
     void onSimilarTvFetched(int tmdbId, const QJsonArray& results);
-    void onSearchMoviesFound(const QVariantList& results);
-    void onSearchTvFound(const QVariantList& results);
-    void onSearchError(const QString& message);
     void onTvSeasonDetailsFetched(int tmdbId, int seasonNumber, const QJsonObject& data);
 
 private:
@@ -146,13 +144,7 @@ private:
     int m_pendingTmdbRequests;
     void finishContinueWatchingLoading();
     
-    // Search state
-    QString m_pendingSearchQuery;
-    QVariantList m_pendingSearchMovies;
-    QVariantList m_pendingSearchTv;
-    bool m_searchMoviesReceived;
-    bool m_searchTvReceived;
-    void finishSearch();
+    // Search state (no longer needed for incremental loading, but kept for potential cleanup)
     
     // Item details loading
     QString m_pendingDetailsContentId;

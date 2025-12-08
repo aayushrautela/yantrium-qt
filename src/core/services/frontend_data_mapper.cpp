@@ -271,6 +271,338 @@ QVariantMap FrontendDataMapper::mapTmdbToDetailVariantMap(const QJsonObject& tmd
     return map;
 }
 
+QVariantMap FrontendDataMapper::mapAddonMetaToDetailVariantMap(const QJsonObject& addonMeta, const QString& contentId, const QString& type)
+{
+    QVariantMap map;
+    
+    try {
+        // Basic info
+        map["id"] = contentId;
+        map["type"] = (type == "movie") ? "movie" : "tv";
+        
+        // Title/Name - Stremio uses "name" field
+        QString name = addonMeta["name"].toString();
+        map["title"] = name;
+        map["name"] = name;
+        
+        // Description - Stremio uses "description"
+        map["description"] = addonMeta["description"].toString();
+        map["overview"] = addonMeta["description"].toString();
+        
+        // Images - Stremio uses "poster", "background", "logo"
+        QString poster = addonMeta["poster"].toString();
+        QString background = addonMeta["background"].toString();
+        QString logo = addonMeta["logo"].toString();
+        
+        map["posterUrl"] = poster;
+        map["backdropUrl"] = background;
+        map["logoUrl"] = logo;
+        
+        // Release dates - Stremio uses "releaseInfo" or "released"
+        QString releaseInfo = addonMeta["releaseInfo"].toString();
+        QString released = addonMeta["released"].toString();
+        
+        QString releaseDate;
+        if (!releaseInfo.isEmpty()) {
+            // releaseInfo can be "2025" or "2023-01-01"
+            if (releaseInfo.length() >= 4) {
+                releaseDate = releaseInfo.left(4) + "-01-01"; // Use year as date
+                if (releaseInfo.length() >= 10) {
+                    releaseDate = releaseInfo.left(10); // Full date
+                }
+            }
+        } else if (!released.isEmpty()) {
+            // released is ISO format "2025-11-26T00:00:00.000Z"
+            releaseDate = released.left(10);
+        }
+        
+        if (!releaseDate.isEmpty()) {
+            map["releaseDate"] = formatDateDDMMYYYY(releaseDate);
+            map["firstAirDate"] = formatDateDDMMYYYY(releaseDate);
+            
+            // Extract year
+            if (releaseDate.length() >= 4) {
+                map["year"] = releaseDate.left(4).toInt();
+            }
+        }
+        
+        // Genres - Stremio uses "genres" array
+        QVariantList genres;
+        if (addonMeta.contains("genres") && addonMeta["genres"].isArray()) {
+            QJsonArray genresArray = addonMeta["genres"].toArray();
+            for (const QJsonValue& value : genresArray) {
+                if (value.isString()) {
+                    genres.append(value.toString());
+                } else if (value.isObject()) {
+                    QJsonObject genreObj = value.toObject();
+                    genres.append(genreObj["name"].toString());
+                }
+            }
+        }
+        map["genres"] = genres;
+        
+        // Ratings - Stremio uses "imdbRating" or "rating"
+        QString imdbRating = addonMeta["imdbRating"].toString();
+        if (imdbRating.isEmpty()) {
+            imdbRating = addonMeta["rating"].toString();
+        }
+        map["imdbRating"] = imdbRating;
+        map["tmdbRating"] = imdbRating; // Use same rating if no separate TMDB rating
+        
+        // IDs - extract from meta or use contentId
+        QString imdbId = addonMeta["imdb_id"].toString();
+        if (imdbId.isEmpty() && contentId.startsWith("tt")) {
+            imdbId = contentId;
+        }
+        map["imdbId"] = imdbId;
+        
+        // Extract TMDB ID if available
+        QString tmdbId = addonMeta["tmdb_id"].toString();
+        if (tmdbId.isEmpty()) {
+            tmdbId = addonMeta["tmdbId"].toString();
+        }
+        map["tmdbId"] = tmdbId;
+        
+        // Cast - AIOMetadata uses "app_extras.cast" array
+        QVariantList castList;
+        QJsonArray castArray;
+        
+        // Check for cast in app_extras first (AIOMetadata format)
+        if (addonMeta.contains("app_extras") && addonMeta["app_extras"].isObject()) {
+            QJsonObject appExtras = addonMeta["app_extras"].toObject();
+            if (appExtras.contains("cast") && appExtras["cast"].isArray()) {
+                castArray = appExtras["cast"].toArray();
+            }
+        }
+        // Fallback to direct "cast" field
+        if (castArray.isEmpty() && addonMeta.contains("cast") && addonMeta["cast"].isArray()) {
+            castArray = addonMeta["cast"].toArray();
+        }
+        
+        for (const QJsonValue& value : castArray) {
+            if (value.isString()) {
+                // Simple string cast member
+                QVariantMap person;
+                person["name"] = value.toString();
+                castList.append(person);
+            } else if (value.isObject()) {
+                // Full cast object with name, character, photo, etc.
+                QJsonObject personObj = value.toObject();
+                QVariantMap person;
+                
+                // Extract name
+                person["name"] = personObj["name"].toString();
+                
+                // Extract character
+                if (personObj.contains("character")) {
+                    person["character"] = personObj["character"].toString();
+                }
+                
+                // Extract profile image - AIOMetadata uses "photo" field
+                QString photo = personObj["photo"].toString();
+                if (photo.isEmpty()) {
+                    photo = personObj["profile_path"].toString();
+                }
+                
+                if (!photo.isEmpty() && !photo.startsWith("http")) {
+                    person["profileImageUrl"] = "https://image.tmdb.org/t/p/w185" + photo;
+                } else if (photo.startsWith("http")) {
+                    person["profileImageUrl"] = photo;
+                } else {
+                    person["profileImageUrl"] = "";
+                }
+                
+                // Copy other fields
+                if (personObj.contains("id")) {
+                    person["id"] = personObj["id"].toInt();
+                }
+                if (personObj.contains("order")) {
+                    person["order"] = personObj["order"].toInt();
+                }
+                
+                castList.append(person);
+            }
+        }
+        map["castFull"] = castList;
+        
+        // Crew - AIOMetadata uses "director" and "writer" as strings or arrays
+        QVariantList crewList;
+        
+        // Handle director (can be string or array)
+        if (addonMeta.contains("director")) {
+            QVariant directorVar = addonMeta["director"];
+            if (directorVar.typeId() == QMetaType::QString) {
+                QString directorStr = directorVar.toString();
+                if (!directorStr.isEmpty()) {
+                    // Split by comma if multiple directors
+                    QStringList directors = directorStr.split(",");
+                    for (const QString& dir : directors) {
+                        QVariantMap person;
+                        person["name"] = dir.trimmed();
+                        person["job"] = "Director";
+                        crewList.append(person);
+                    }
+                }
+            } else if (directorVar.typeId() == QMetaType::QJsonArray) {
+                QJsonArray directorArray = directorVar.toJsonArray();
+                for (const QJsonValue& value : directorArray) {
+                    QVariantMap person;
+                    person["name"] = value.toString();
+                    person["job"] = "Director";
+                    crewList.append(person);
+                }
+            }
+        }
+        
+        // Handle writer (can be string or array)
+        if (addonMeta.contains("writer")) {
+            QVariant writerVar = addonMeta["writer"];
+            if (writerVar.typeId() == QMetaType::QString) {
+                QString writerStr = writerVar.toString();
+                if (!writerStr.isEmpty()) {
+                    // Split by comma if multiple writers
+                    QStringList writers = writerStr.split(",");
+                    for (const QString& wr : writers) {
+                        QVariantMap person;
+                        person["name"] = wr.trimmed();
+                        person["job"] = "Writer";
+                        crewList.append(person);
+                    }
+                }
+            } else if (writerVar.typeId() == QMetaType::QJsonArray) {
+                QJsonArray writerArray = writerVar.toJsonArray();
+                for (const QJsonValue& value : writerArray) {
+                    QVariantMap person;
+                    person["name"] = value.toString();
+                    person["job"] = "Writer";
+                    crewList.append(person);
+                }
+            }
+        }
+        
+        // Handle standard crew array
+        if (addonMeta.contains("crew") && addonMeta["crew"].isArray()) {
+            QJsonArray crewArray = addonMeta["crew"].toArray();
+            for (const QJsonValue& value : crewArray) {
+                if (value.isObject()) {
+                    crewList.append(value.toObject().toVariantMap());
+                }
+            }
+        }
+        map["crewFull"] = crewList;
+        
+        // Videos/Trailers - AIOMetadata uses "trailers" or "trailerStreams"
+        QVariantList videos;
+        
+        // Check for trailers array (AIOMetadata format)
+        if (addonMeta.contains("trailers") && addonMeta["trailers"].isArray()) {
+            QJsonArray trailersArray = addonMeta["trailers"].toArray();
+            for (const QJsonValue& value : trailersArray) {
+                if (value.isObject()) {
+                    QJsonObject trailerObj = value.toObject();
+                    QVariantMap trailer;
+                    trailer["name"] = trailerObj["name"].toString();
+                    // AIOMetadata uses "ytId" or "source" for YouTube ID
+                    QString ytId = trailerObj["ytId"].toString();
+                    if (ytId.isEmpty()) {
+                        ytId = trailerObj["source"].toString();
+                    }
+                    trailer["key"] = ytId;
+                    trailer["site"] = "YouTube";
+                    trailer["type"] = trailerObj["type"].toString();
+                    videos.append(trailer);
+                }
+            }
+        }
+        // Fallback to trailerStreams
+        else if (addonMeta.contains("trailerStreams") && addonMeta["trailerStreams"].isArray()) {
+            QJsonArray trailerStreamsArray = addonMeta["trailerStreams"].toArray();
+            for (const QJsonValue& value : trailerStreamsArray) {
+                if (value.isObject()) {
+                    QJsonObject trailerObj = value.toObject();
+                    QVariantMap trailer;
+                    trailer["name"] = trailerObj["title"].toString();
+                    trailer["key"] = trailerObj["ytId"].toString();
+                    trailer["site"] = "YouTube";
+                    videos.append(trailer);
+                }
+            }
+        }
+        // Fallback to standard "videos" array
+        else if (addonMeta.contains("videos") && addonMeta["videos"].isArray()) {
+            QJsonArray videosArray = addonMeta["videos"].toArray();
+            for (const QJsonValue& value : videosArray) {
+                if (value.isObject()) {
+                    QJsonObject video = value.toObject();
+                    QVariantMap trailer;
+                    trailer["name"] = video["name"].toString();
+                    trailer["key"] = video["key"].toString();
+                    trailer["site"] = video["site"].toString();
+                    videos.append(trailer);
+                }
+            }
+        }
+        map["videos"] = videos;
+        
+        // Runtime - AIOMetadata uses "runtime" as string like "2h22min" or integer
+        if (addonMeta.contains("runtime")) {
+            QVariant runtimeVar = addonMeta["runtime"];
+            int runtime = 0;
+            
+            if (runtimeVar.typeId() == QMetaType::QString) {
+                // Parse string format like "2h22min" or "142min"
+                QString runtimeStr = runtimeVar.toString();
+                // Remove "min" suffix
+                runtimeStr = runtimeStr.replace("min", "");
+                // Extract hours and minutes
+                int hours = 0;
+                int minutes = 0;
+                if (runtimeStr.contains("h")) {
+                    QStringList parts = runtimeStr.split("h");
+                    if (parts.size() >= 1) {
+                        hours = parts[0].toInt();
+                    }
+                    if (parts.size() >= 2) {
+                        minutes = parts[1].toInt();
+                    }
+                } else {
+                    minutes = runtimeStr.toInt();
+                }
+                runtime = hours * 60 + minutes;
+            } else {
+                runtime = runtimeVar.toInt();
+            }
+            
+            if (runtime > 0) {
+                map["runtime"] = runtime;
+                map["runtimeFormatted"] = formatRuntime(runtime);
+            }
+        }
+        
+        // Number of seasons for TV shows
+        if (type == "tv" || type == "series") {
+            if (addonMeta.contains("numberOfSeasons")) {
+                map["numberOfSeasons"] = addonMeta["numberOfSeasons"].toInt();
+            }
+        }
+        
+        // Content rating
+        if (addonMeta.contains("certification") || addonMeta.contains("contentRating")) {
+            QString rating = addonMeta["certification"].toString();
+            if (rating.isEmpty()) {
+                rating = addonMeta["contentRating"].toString();
+            }
+            map["contentRating"] = rating;
+        }
+        
+    } catch (...) {
+        qDebug() << "Error converting addon metadata to detail variant map";
+        return QVariantMap();
+    }
+    
+    return map;
+}
+
 QVariantMap FrontendDataMapper::mapCatalogItemToVariantMap(const QJsonObject& item, const QString& baseUrl)
 {
     QVariantMap map;

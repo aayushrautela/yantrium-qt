@@ -4,6 +4,9 @@
 #include "core/services/configuration.h"
 #include "core/services/frontend_data_mapper.h"
 #include "core/services/local_library_service.h"
+#include "features/addons/logic/addon_client.h"
+#include "features/addons/models/addon_config.h"
+#include "features/addons/models/addon_manifest.h"
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -35,8 +38,6 @@ LibraryService::LibraryService(
     , m_isLoadingHeroItems(false)
     , m_pendingHeroTmdbRequests(0)
     , m_pendingTmdbRequests(0)
-    , m_searchMoviesReceived(false)
-    , m_searchTvReceived(false)
 {
     // Connect to Trakt service for continue watching
     connect(m_traktService, &TraktCoreService::playbackProgressFetched,
@@ -329,197 +330,128 @@ void LibraryService::searchCatalogs(const QString& query)
 
 void LibraryService::searchTmdb(const QString& query)
 {
-    qWarning() << "[LibraryService] ===== searchTmdb CALLED =====";
-    qWarning() << "[LibraryService] Query:" << query;
+    qDebug() << "[LibraryService] searchTmdb called with query:" << query;
     
     if (query.trimmed().isEmpty()) {
-        qWarning() << "[LibraryService] Empty query, emitting empty results";
-        emit tmdbSearchResultsLoaded(QVariantList());
+        emit searchSectionsLoaded(QVariantList());
         return;
     }
     
-    if (!m_tmdbSearchService) {
-        qWarning() << "[LibraryService] ERROR: m_tmdbSearchService is null!";
-        emit tmdbSearchResultsLoaded(QVariantList());
+    if (!m_addonRepository) {
+        emit error("Addon repository not available");
         return;
     }
     
-    qWarning() << "[LibraryService] Searching TMDB for:" << query;
-    qWarning() << "[LibraryService] m_tmdbSearchService pointer:" << (void*)m_tmdbSearchService.get();
+    // Find all addons that support search (have catalog with id "search")
+    QList<AddonConfig> enabledAddons = m_addonRepository->getEnabledAddons();
+    QList<QPair<AddonConfig, QList<CatalogDefinition>>> searchAddons;
     
-    // Track pending searches
-    m_pendingSearchQuery = query;
-    m_pendingSearchMovies.clear();
-    m_pendingSearchTv.clear();
-    m_searchMoviesReceived = false;
-    m_searchTvReceived = false;
-    
-    qWarning() << "[LibraryService] Disconnecting previous signal connections";
-    // Connect to search service signals (use disconnect first to avoid duplicates)
-    disconnect(m_tmdbSearchService.get(), &TmdbSearchService::moviesFound, this, nullptr);
-    disconnect(m_tmdbSearchService.get(), &TmdbSearchService::tvFound, this, nullptr);
-    disconnect(m_tmdbSearchService.get(), &TmdbSearchService::error, this, nullptr);
-    
-    qWarning() << "[LibraryService] Connecting to search service signals";
-    bool moviesConnected = connect(m_tmdbSearchService.get(), &TmdbSearchService::moviesFound, this, &LibraryService::onSearchMoviesFound);
-    bool tvConnected = connect(m_tmdbSearchService.get(), &TmdbSearchService::tvFound, this, &LibraryService::onSearchTvFound);
-    bool errorConnected = connect(m_tmdbSearchService.get(), &TmdbSearchService::error, this, &LibraryService::onSearchError);
-    
-    qWarning() << "[LibraryService] Signal connections - movies:" << moviesConnected << "tv:" << tvConnected << "error:" << errorConnected;
-    
-    // Search both movies and TV
-    qWarning() << "[LibraryService] Calling searchMovies and searchTv";
-    m_tmdbSearchService->searchMovies(query);
-    m_tmdbSearchService->searchTv(query);
-    qWarning() << "[LibraryService] Search requests sent";
-}
-
-void LibraryService::onSearchMoviesFound(const QVariantList& results)
-{
-    qWarning() << "[LibraryService] ===== onSearchMoviesFound CALLED =====";
-    qWarning() << "[LibraryService] Movies found:" << results.size() << "results";
-    
-    if (results.size() > 0) {
-        qWarning() << "[LibraryService] First movie sample:" << results.first().toMap();
-    }
-    
-    m_pendingSearchMovies = results;
-    m_searchMoviesReceived = true;
-    qWarning() << "[LibraryService] Movies received flag set, calling finishSearch";
-    finishSearch();
-}
-
-void LibraryService::onSearchTvFound(const QVariantList& results)
-{
-    qWarning() << "[LibraryService] ===== onSearchTvFound CALLED =====";
-    qWarning() << "[LibraryService] TV found:" << results.size() << "results";
-    
-    if (results.size() > 0) {
-        qWarning() << "[LibraryService] First TV show sample:" << results.first().toMap();
-    }
-    
-    m_pendingSearchTv = results;
-    m_searchTvReceived = true;
-    qWarning() << "[LibraryService] TV received flag set, calling finishSearch";
-    finishSearch();
-}
-
-void LibraryService::onSearchError(const QString& message)
-{
-    qWarning() << "[LibraryService] ===== onSearchError CALLED =====";
-    qWarning() << "[LibraryService] Search error:" << message;
-    // Still try to finish with what we have
-    finishSearch();
-}
-
-void LibraryService::finishSearch()
-{
-    qWarning() << "[LibraryService] ===== finishSearch CALLED =====";
-    qWarning() << "[LibraryService] Movies received:" << m_searchMoviesReceived << "TV received:" << m_searchTvReceived;
-    
-    // Wait for both searches to complete
-    if (!m_searchMoviesReceived || !m_searchTvReceived) {
-        qWarning() << "[LibraryService] Waiting for both searches to complete...";
-        return;
-    }
-    
-    qWarning() << "[LibraryService] Both searches complete, combining results";
-    qWarning() << "[LibraryService] Movies count:" << m_pendingSearchMovies.size() << "TV count:" << m_pendingSearchTv.size();
-    
-    // Combine results and format for frontend
-    QVariantList combinedResults;
-    
-    // Add movies with type
-    for (const QVariant& item : m_pendingSearchMovies) {
-        QVariantMap movie = item.toMap();
-        movie["type"] = "movie";
-        // Extract year from releaseDate
-        QString releaseDate = movie["releaseDate"].toString();
-        if (!releaseDate.isEmpty() && releaseDate.length() >= 4) {
-            movie["year"] = releaseDate.left(4).toInt();
+    for (const AddonConfig& addon : enabledAddons) {
+        AddonManifest manifest = m_addonRepository->getManifest(addon);
+        if (manifest.id().isEmpty()) {
+            continue;
         }
-        // Use title for both title and name
-        if (movie["title"].toString().isEmpty() && !movie["name"].toString().isEmpty()) {
-            movie["title"] = movie["name"];
-        }
-        // Ensure we have contentId and tmdbId
-        int id = movie["id"].toInt();
-        if (id > 0) {
-            movie["tmdbId"] = QString::number(id);
-            movie["contentId"] = "tmdb:" + QString::number(id);
-        }
-        // Build poster URL if we have posterPath
-        if (movie.contains("posterPath") && !movie["posterPath"].toString().isEmpty()) {
-            QString posterPath = movie["posterPath"].toString();
-            if (!posterPath.startsWith("http")) {
-                movie["posterUrl"] = "https://image.tmdb.org/t/p/w500" + posterPath;
-            } else {
-                movie["posterUrl"] = posterPath;
+        
+        // Find all search catalogs for this addon
+        QList<CatalogDefinition> searchCatalogs;
+        QList<CatalogDefinition> catalogs = manifest.catalogs();
+        for (const CatalogDefinition& catalog : catalogs) {
+            if (catalog.id() == "search") {
+                searchCatalogs.append(catalog);
             }
         }
-        // Format rating
-        if (movie.contains("voteAverage")) {
-            double rating = movie["voteAverage"].toDouble();
-            movie["rating"] = QString::number(rating, 'f', 1);
+        
+        if (!searchCatalogs.isEmpty()) {
+            searchAddons.append({addon, searchCatalogs});
+            qDebug() << "[LibraryService] Found addon with search support:" << addon.name << "(" << addon.id << ") with" << searchCatalogs.size() << "search catalogs";
         }
-        combinedResults.append(movie);
     }
     
-    // Add TV shows with type
-    for (const QVariant& item : m_pendingSearchTv) {
-        QVariantMap tv = item.toMap();
-        tv["type"] = "tv";
-        // Extract year from firstAirDate
-        QString firstAirDate = tv["firstAirDate"].toString();
-        if (!firstAirDate.isEmpty() && firstAirDate.length() >= 4) {
-            tv["year"] = firstAirDate.left(4).toInt();
-        }
-        // Use name for title
-        if (tv["title"].toString().isEmpty() && !tv["name"].toString().isEmpty()) {
-            tv["title"] = tv["name"];
-        }
-        // Ensure we have contentId and tmdbId
-        int id = tv["id"].toInt();
-        if (id > 0) {
-            tv["tmdbId"] = QString::number(id);
-            tv["contentId"] = "tmdb:" + QString::number(id);
-        }
-        // Build poster URL if we have posterPath
-        if (tv.contains("posterPath") && !tv["posterPath"].toString().isEmpty()) {
-            QString posterPath = tv["posterPath"].toString();
-            if (!posterPath.startsWith("http")) {
-                tv["posterUrl"] = "https://image.tmdb.org/t/p/w500" + posterPath;
-            } else {
-                tv["posterUrl"] = posterPath;
+    if (searchAddons.isEmpty()) {
+        emit error("No addons with search support found");
+        return;
+    }
+    
+    // Map of type -> section name for display
+    QMap<QString, QString> typeToSectionName = {
+        {"movie", "Movies"},
+        {"series", "TV Shows"},
+        {"tv", "TV Shows"},
+        {"anime.series", "Anime Series"},
+        {"anime.movie", "Anime Movies"}
+    };
+    
+    // Track which types we've already searched to avoid duplicates
+    QSet<QString> searchedTypes;
+    
+    // Search each type from each addon that supports it
+    for (const auto& pair : searchAddons) {
+        const AddonConfig& addon = pair.first;
+        const QList<CatalogDefinition>& searchCatalogs = pair.second;
+        QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
+        
+        for (const CatalogDefinition& catalog : searchCatalogs) {
+            QString catalogType = catalog.type();
+            
+            // Skip if we've already searched this type (to avoid duplicate sections)
+            QString typeKey = catalogType;
+            if (searchedTypes.contains(typeKey)) {
+                qDebug() << "[LibraryService] Skipping duplicate search for type:" << catalogType << "from addon:" << addon.name;
+                continue;
             }
+            searchedTypes.insert(typeKey);
+            
+            // Get section name for this type
+            QString sectionName = typeToSectionName.value(catalogType, catalogType);
+            if (catalogType == "series") {
+                sectionName = "TV Shows"; // Normalize series to TV Shows
+            }
+            
+            AddonClient* client = new AddonClient(baseUrl, this);
+            
+            connect(client, &AddonClient::searchResultsFetched, this, [this, catalogType, sectionName, addon](const QString& responseType, const QJsonArray& metas) {
+                Q_UNUSED(responseType);
+                QVariantList results;
+                for (const QJsonValue& value : metas) {
+                    if (value.isObject()) {
+                        QJsonObject meta = value.toObject();
+                        QVariantMap map = FrontendDataMapper::mapCatalogItemToVariantMap(meta, addon.id);
+                        // Normalize type: "series" -> "tv"
+                        QString normalizedType = (catalogType == "series") ? "tv" : catalogType;
+                        map["type"] = normalizedType;
+                        results.append(map);
+                    }
+                }
+                
+                qDebug() << "[LibraryService] Search results received for" << catalogType << "from" << addon.name << ":" << results.size() << "results";
+                
+                // Emit section immediately if we have results
+                if (!results.isEmpty()) {
+                    QVariantMap section;
+                    section["name"] = sectionName;
+                    section["type"] = (catalogType == "series") ? "tv" : catalogType;
+                    section["items"] = results;
+                    section["addonId"] = addon.id;
+                    
+                    qDebug() << "[LibraryService] Emitting searchSectionLoaded for" << sectionName << "with" << results.size() << "items from addon:" << addon.name;
+                    emit searchSectionLoaded(section);
+                }
+                
+                sender()->deleteLater();
+            });
+            
+            connect(client, &AddonClient::error, this, [this, catalogType, addon](const QString& error) {
+                qWarning() << "[LibraryService] Search error for" << catalogType << "from" << addon.name << ":" << error;
+                sender()->deleteLater();
+            });
+            
+            qDebug() << "[LibraryService] Searching" << catalogType << "for:" << query << "from addon:" << addon.name;
+            client->search(catalogType, query);
         }
-        // Format rating
-        if (tv.contains("voteAverage")) {
-            double rating = tv["voteAverage"].toDouble();
-            tv["rating"] = QString::number(rating, 'f', 1);
-        }
-        combinedResults.append(tv);
     }
-    
-    qWarning() << "[LibraryService] ===== SEARCH COMPLETE =====";
-    qWarning() << "[LibraryService] Total combined results:" << combinedResults.size();
-    
-    if (combinedResults.size() > 0) {
-        qWarning() << "[LibraryService] First result sample:" << combinedResults.first().toMap();
-    }
-    
-    qWarning() << "[LibraryService] Emitting tmdbSearchResultsLoaded signal with" << combinedResults.size() << "results";
-    emit tmdbSearchResultsLoaded(combinedResults);
-    qWarning() << "[LibraryService] Signal emitted";
-    
-    // Reset state
-    m_pendingSearchQuery = "";
-    m_pendingSearchMovies.clear();
-    m_pendingSearchTv.clear();
-    m_searchMoviesReceived = false;
-    m_searchTvReceived = false;
-    qWarning() << "[LibraryService] Search state reset";
 }
+
+// finishSearch() removed - we now use incremental loading with searchSectionLoaded signal
 
 QVariantList LibraryService::getCatalogSections()
 {
@@ -1713,7 +1645,38 @@ void LibraryService::onSimilarTvFetched(int tmdbId, const QJsonArray& results)
 void LibraryService::loadSeasonEpisodes(int tmdbId, int seasonNumber)
 {
     qDebug() << "[LibraryService] Loading episodes for TMDB ID:" << tmdbId << "Season:" << seasonNumber;
-    m_tmdbService->getTvSeasonDetails(tmdbId, seasonNumber);
+    
+    // Try to get episodes from AIOMetadata first
+    if (m_mediaMetadataService) {
+        QVariantList episodes = m_mediaMetadataService->getSeriesEpisodesByTmdbId(tmdbId, seasonNumber);
+        if (!episodes.isEmpty()) {
+            qDebug() << "[LibraryService] Found" << episodes.size() << "episodes from AIOMetadata cache";
+            // Map to expected format
+            QVariantList mappedEpisodes;
+            for (const QVariant& episodeVar : episodes) {
+                QVariantMap episode = episodeVar.toMap();
+                QVariantMap mapped;
+                mapped["episodeNumber"] = episode["episodeNumber"];
+                mapped["title"] = episode["title"];
+                mapped["description"] = episode["description"];
+                mapped["airDate"] = episode["airDate"];
+                mapped["duration"] = episode["duration"];
+                mapped["thumbnailUrl"] = episode["thumbnailUrl"];
+                mappedEpisodes.append(mapped);
+            }
+            emit seasonEpisodesLoaded(seasonNumber, mappedEpisodes);
+            return;
+        }
+    }
+    
+    // Fallback to TMDB if available
+    if (m_tmdbService) {
+        qDebug() << "[LibraryService] Falling back to TMDB for episodes";
+        m_tmdbService->getTvSeasonDetails(tmdbId, seasonNumber);
+    } else {
+        qWarning() << "[LibraryService] Cannot load episodes: TMDB service not available and AIOMetadata episodes not cached";
+        emit seasonEpisodesLoaded(seasonNumber, QVariantList());
+    }
 }
 
 void LibraryService::onTvSeasonDetailsFetched(int tmdbId, int seasonNumber, const QJsonObject& data)

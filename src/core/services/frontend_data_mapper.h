@@ -21,6 +21,9 @@ public:
     // TMDB to Detail VariantMap - for detail pages
     static QVariantMap mapTmdbToDetailVariantMap(const QJsonObject& tmdbData, const QString& contentId, const QString& type);
     
+    // Stremio/Addon metadata to Detail VariantMap - for detail pages
+    static QVariantMap mapAddonMetaToDetailVariantMap(const QJsonObject& addonMeta, const QString& contentId, const QString& type);
+    
     // Catalog Item to VariantMap - for QML display
     static QVariantMap mapCatalogItemToVariantMap(const QJsonObject& item, const QString& baseUrl = QString());
     

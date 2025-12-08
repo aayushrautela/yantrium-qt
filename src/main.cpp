@@ -153,7 +153,19 @@ int main(int argc, char *argv[])
             qCritical() << "[MAIN] Unknown exception resolving OmdbService in factory";
             throw;
         }
-        qDebug() << "[MAIN] Step 3: Getting TraktCoreService instance...";
+        qDebug() << "[MAIN] Step 3: Resolving AddonRepository...";
+        std::shared_ptr<AddonRepository> addonRepo;
+        try {
+            addonRepo = registry.resolve<AddonRepository>();
+            qDebug() << "[MAIN] AddonRepository resolved in factory:" << (addonRepo ? "yes" : "no");
+        } catch (const std::exception& e) {
+            qCritical() << "[MAIN] Exception resolving AddonRepository in factory:" << e.what();
+            throw;
+        } catch (...) {
+            qCritical() << "[MAIN] Unknown exception resolving AddonRepository in factory";
+            throw;
+        }
+        qDebug() << "[MAIN] Step 4: Getting TraktCoreService instance...";
         TraktCoreService* traktService = nullptr;
         try {
             traktService = &TraktCoreService::instance();
@@ -165,10 +177,10 @@ int main(int argc, char *argv[])
             qCritical() << "[MAIN] Unknown exception getting TraktCoreService instance";
             throw;
         }
-        qDebug() << "[MAIN] Step 4: Creating MediaMetadataService instance...";
+        qDebug() << "[MAIN] Step 5: Creating MediaMetadataService instance...";
         try {
             auto service = std::make_shared<MediaMetadataService>(
-                tmdbService, omdbService, traktService);
+                tmdbService, omdbService, addonRepo, traktService);
             qDebug() << "[MAIN] MediaMetadataService instance created successfully";
             return service;
         } catch (const std::exception& e) {

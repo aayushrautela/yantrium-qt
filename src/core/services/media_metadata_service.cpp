@@ -5,18 +5,25 @@
 #include "frontend_data_mapper.h"
 #include "id_parser.h"
 #include "configuration.h"
+#include "features/addons/logic/addon_repository.h"
+#include "features/addons/logic/addon_client.h"
+#include "features/addons/models/addon_config.h"
+#include "features/addons/models/addon_manifest.h"
 #include <QDebug>
 #include <QJsonObject>
 #include <QDateTime>
+#include <algorithm>
 
 MediaMetadataService::MediaMetadataService(
     std::shared_ptr<TmdbDataService> tmdbService,
     std::shared_ptr<OmdbService> omdbService,
+    std::shared_ptr<AddonRepository> addonRepository,
     TraktCoreService* traktService,
     QObject* parent)
     : QObject(parent)
     , m_tmdbService(std::move(tmdbService))
     , m_omdbService(std::move(omdbService))
+    , m_addonRepository(std::move(addonRepository))
     , m_traktService(traktService ? traktService : &TraktCoreService::instance())
 {
     // Connect to TMDB service
@@ -63,66 +70,27 @@ void MediaMetadataService::getCompleteMetadata(const QString& contentId, const Q
         }
     }
     
-    // Try to extract TMDB ID
-    int tmdbId = IdParser::extractTmdbId(contentId);
-    
-    // If IMDB ID, search for TMDB ID first
-    if (tmdbId == 0 && contentId.startsWith("tt")) {
-        if (!m_tmdbService) {
-            qWarning() << "[MediaMetadataService] TMDB service not available, cannot fetch metadata";
-            emit error("TMDB service not available");
+    // Try to fetch from AIOMetadata addon first
+    if (m_addonRepository) {
+        AddonConfig aiometadataAddon = findAiometadataAddon();
+        if (!aiometadataAddon.id.isEmpty()) {
+            qDebug() << "[MediaMetadataService] AIOMetadata addon found, fetching metadata from addon";
+            fetchMetadataFromAddon(contentId, type);
             return;
         }
-        qDebug() << "[MediaMetadataService] IMDB ID detected, fetching TMDB ID first";
-        m_tmdbService->getTmdbIdFromImdb(contentId);
-        
-        // Store pending request
-        PendingRequest request;
-        request.contentId = contentId;
-        request.type = type;
-        request.tmdbId = 0;
-        m_pendingDetailsByImdbId[contentId] = request;
-        return;
     }
     
-    if (tmdbId == 0) {
-        emit error("Could not extract TMDB ID from content ID");
-        return;
-    }
-    
-    // Store TMDB ID mapping for direct TMDB IDs
-    // Store both the original contentId and type in a pending request
-    // We'll use the IMDB ID as the key once we extract it from TMDB response
-    PendingRequest request;
-    request.contentId = contentId;
-    request.type = type;
-    request.tmdbId = tmdbId;
-    // Store temporarily with TMDB ID as string key until we get IMDB ID
-    m_pendingDetailsByImdbId[QString("tmdb:%1").arg(tmdbId)] = request;
-    m_tmdbIdToImdbId[tmdbId] = contentId; // Keep this for backward compatibility
-    
-    // Fetch metadata based on type
-    getCompleteMetadataFromTmdbId(tmdbId, type);
+    // If AIOMetadata not available, emit error
+    emit error("AIOMetadata addon not installed or not enabled");
 }
 
 void MediaMetadataService::getCompleteMetadataFromTmdbId(int tmdbId, const QString& type)
 {
     qDebug() << "[MediaMetadataService] getCompleteMetadataFromTmdbId called - tmdbId:" << tmdbId << "type:" << type;
     
-    if (!m_tmdbService) {
-        qWarning() << "[MediaMetadataService] TMDB service not available, cannot fetch metadata";
-        emit error("TMDB service not available");
-        return;
-    }
-    
-    // Fetch metadata based on type
-    if (type == "movie") {
-        m_tmdbService->getMovieMetadata(tmdbId);
-    } else if (type == "series" || type == "tv") {
-        m_tmdbService->getTvMetadata(tmdbId);
-    } else {
-        emit error(QString("Unknown content type: %1").arg(type));
-    }
+    // Convert TMDB ID to contentId format and use the main method
+    QString contentId = QString("tmdb:%1").arg(tmdbId);
+    getCompleteMetadata(contentId, type);
 }
 
 void MediaMetadataService::onTmdbIdFound(const QString& imdbId, int tmdbId)
@@ -384,6 +352,250 @@ void MediaMetadataService::clearMetadataCache()
 int MediaMetadataService::getMetadataCacheSize() const
 {
     return m_metadataCache.size();
+}
+
+QVariantList MediaMetadataService::getSeriesEpisodes(const QString& contentId, int seasonNumber)
+{
+    qDebug() << "[MediaMetadataService] getSeriesEpisodes called - contentId:" << contentId << "season:" << seasonNumber;
+    
+    if (!m_seriesEpisodes.contains(contentId)) {
+        qDebug() << "[MediaMetadataService] No episodes cached for series:" << contentId;
+        return QVariantList();
+    }
+    
+    QVariantList allEpisodes = m_seriesEpisodes[contentId];
+    
+    // If seasonNumber is -1, return all episodes
+    if (seasonNumber < 0) {
+        return allEpisodes;
+    }
+    
+    // Filter by season number and sort by episode number
+    QVariantList seasonEpisodes;
+    for (const QVariant& episodeVar : allEpisodes) {
+        QVariantMap episode = episodeVar.toMap();
+        int episodeSeason = episode["season"].toInt();
+        if (episodeSeason == seasonNumber) {
+            seasonEpisodes.append(episode);
+        }
+    }
+    
+    // Sort by episode number
+    std::sort(seasonEpisodes.begin(), seasonEpisodes.end(), [](const QVariant& a, const QVariant& b) {
+        QVariantMap aMap = a.toMap();
+        QVariantMap bMap = b.toMap();
+        return aMap["episodeNumber"].toInt() < bMap["episodeNumber"].toInt();
+    });
+    
+    qDebug() << "[MediaMetadataService] Found" << seasonEpisodes.size() << "episodes for season" << seasonNumber;
+    return seasonEpisodes;
+}
+
+QVariantList MediaMetadataService::getSeriesEpisodesByTmdbId(int tmdbId, int seasonNumber)
+{
+    qDebug() << "[MediaMetadataService] getSeriesEpisodesByTmdbId called - tmdbId:" << tmdbId << "season:" << seasonNumber;
+    
+    // Look up contentId from TMDB ID
+    if (!m_tmdbIdToContentId.contains(tmdbId)) {
+        qDebug() << "[MediaMetadataService] No contentId mapping found for TMDB ID:" << tmdbId;
+        return QVariantList();
+    }
+    
+    QString contentId = m_tmdbIdToContentId[tmdbId];
+    return getSeriesEpisodes(contentId, seasonNumber);
+}
+
+AddonConfig MediaMetadataService::findAiometadataAddon()
+{
+    if (!m_addonRepository) {
+        return AddonConfig();
+    }
+    
+    QList<AddonConfig> enabledAddons = m_addonRepository->getEnabledAddons();
+    for (const AddonConfig& addon : enabledAddons) {
+        AddonManifest manifest = m_addonRepository->getManifest(addon);
+        
+        // Check if addon has "meta" resource
+        if (!AddonRepository::hasResource(manifest.resources(), "meta")) {
+            continue;
+        }
+        
+        // Check if it's AIOMetadata by ID or name
+        QString idLower = addon.id.toLower();
+        QString nameLower = addon.name.toLower();
+        if (idLower.contains("aiometadata") || nameLower.contains("aiometadata")) {
+            qDebug() << "[MediaMetadataService] Found AIOMetadata addon:" << addon.id;
+            return addon;
+        }
+    }
+    
+    qDebug() << "[MediaMetadataService] AIOMetadata addon not found";
+    return AddonConfig();
+}
+
+void MediaMetadataService::fetchMetadataFromAddon(const QString& contentId, const QString& type)
+{
+    AddonConfig addon = findAiometadataAddon();
+    if (addon.id.isEmpty()) {
+        emit error("AIOMetadata addon not found");
+        return;
+    }
+    
+    QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
+    AddonClient* client = new AddonClient(baseUrl, this);
+    
+    // Store cache key for this request
+    QString cacheKey = contentId + "|" + type;
+    m_pendingAddonRequests[client] = cacheKey;
+    
+    // Store pending request
+    PendingRequest request;
+    request.contentId = contentId;
+    request.type = type;
+    request.tmdbId = 0;
+    m_pendingDetailsByImdbId[cacheKey] = request;
+    
+    // Connect signals
+    connect(client, &AddonClient::metaFetched, this, &MediaMetadataService::onAddonMetaFetched);
+    connect(client, &AddonClient::error, this, &MediaMetadataService::onAddonMetaError);
+    
+    // Normalize type for Stremio (use "series" instead of "tv")
+    QString stremioType = (type == "tv") ? "series" : type;
+    
+    qDebug() << "[MediaMetadataService] Fetching metadata from addon - type:" << stremioType << "id:" << contentId;
+    client->getMeta(stremioType, contentId);
+}
+
+void MediaMetadataService::onAddonMetaFetched(const QString& type, const QString& id, const QJsonObject& response)
+{
+    Q_UNUSED(id);
+    
+    AddonClient* client = qobject_cast<AddonClient*>(sender());
+    if (!client) {
+        qWarning() << "[MediaMetadataService] Received meta from unknown client";
+        return;
+    }
+    
+    if (!m_pendingAddonRequests.contains(client)) {
+        qWarning() << "[MediaMetadataService] Received meta for unknown request";
+        client->deleteLater();
+        return;
+    }
+    
+    QString cacheKey = m_pendingAddonRequests.take(client);
+    
+    if (!m_pendingDetailsByImdbId.contains(cacheKey)) {
+        qWarning() << "[MediaMetadataService] No pending request found for cache key:" << cacheKey;
+        client->deleteLater();
+        return;
+    }
+    
+    PendingRequest& request = m_pendingDetailsByImdbId[cacheKey];
+    
+    // Normalize type back (Stremio uses "series", we use "tv")
+    QString normalizedType = (type == "series") ? "tv" : type;
+    
+    qDebug() << "[MediaMetadataService] Addon metadata fetched - type:" << normalizedType << "contentId:" << request.contentId;
+    
+    // Extract the "meta" object from the response
+    // AIOMetadata wraps metadata in a "meta" key: {"meta": {...}}
+    QJsonObject meta;
+    if (response.contains("meta") && response["meta"].isObject()) {
+        meta = response["meta"].toObject();
+        qDebug() << "[MediaMetadataService] Extracted meta object from response";
+    } else {
+        // Fallback: use the response directly if it doesn't have a "meta" wrapper
+        qDebug() << "[MediaMetadataService] No 'meta' wrapper found, using response directly";
+        meta = response;
+    }
+    
+    // Map Stremio metadata format to our detail format
+    QVariantMap details = FrontendDataMapper::mapAddonMetaToDetailVariantMap(meta, request.contentId, normalizedType);
+    
+    if (details.isEmpty()) {
+        emit error("Failed to convert addon metadata to detail map");
+        m_pendingDetailsByImdbId.remove(cacheKey);
+        client->deleteLater();
+        return;
+    }
+    
+    // Extract episodes from videos array for series (AIOMetadata stores episodes in videos)
+    if (normalizedType == "tv" || normalizedType == "series") {
+        QVariantList episodes;
+        if (meta.contains("videos") && meta["videos"].isArray()) {
+            QJsonArray videosArray = meta["videos"].toArray();
+            for (const QJsonValue& value : videosArray) {
+                if (value.isObject()) {
+                    QJsonObject videoObj = value.toObject();
+                    // Check if it's an episode (has season and episode numbers)
+                    if (videoObj.contains("season") && videoObj.contains("episode")) {
+                        QVariantMap episode;
+                        episode["season"] = videoObj["season"].toInt();
+                        episode["episodeNumber"] = videoObj["episode"].toInt();
+                        episode["title"] = videoObj["title"].toString();
+                        episode["description"] = videoObj["overview"].toString();
+                        episode["airDate"] = videoObj["released"].toString();
+                        episode["thumbnailUrl"] = videoObj["thumbnail"].toString();
+                        // Extract duration if available
+                        if (videoObj.contains("runtime")) {
+                            episode["duration"] = videoObj["runtime"].toInt();
+                        }
+                        episodes.append(episode);
+                    }
+                }
+            }
+        }
+        // Store episodes for this series
+        m_seriesEpisodes[request.contentId] = episodes;
+        qDebug() << "[MediaMetadataService] Extracted" << episodes.size() << "episodes for series" << request.contentId;
+        
+        // Store mapping from TMDB ID to contentId for episode lookups
+        QString tmdbIdStr = details["tmdbId"].toString();
+        if (!tmdbIdStr.isEmpty()) {
+            bool ok;
+            int tmdbId = tmdbIdStr.toInt(&ok);
+            if (ok && tmdbId > 0) {
+                m_tmdbIdToContentId[tmdbId] = request.contentId;
+                qDebug() << "[MediaMetadataService] Mapped TMDB ID" << tmdbId << "to contentId" << request.contentId;
+            }
+        }
+    }
+    
+    // Cache and emit metadata
+    CachedMetadata cached;
+    cached.data = details;
+    cached.timestamp = QDateTime::currentDateTime();
+    m_metadataCache[cacheKey] = cached;
+    qDebug() << "[MediaMetadataService] Cached metadata from addon for:" << cacheKey;
+    
+    emit metadataLoaded(details);
+    
+    // Clean up
+    m_pendingDetailsByImdbId.remove(cacheKey);
+    client->deleteLater();
+}
+
+void MediaMetadataService::onAddonMetaError(const QString& errorMessage)
+{
+    AddonClient* client = qobject_cast<AddonClient*>(sender());
+    if (!client) {
+        qWarning() << "[MediaMetadataService] Received error from unknown client";
+        return;
+    }
+    
+    if (!m_pendingAddonRequests.contains(client)) {
+        qWarning() << "[MediaMetadataService] Received error for unknown request";
+        client->deleteLater();
+        return;
+    }
+    
+    QString cacheKey = m_pendingAddonRequests.take(client);
+    m_pendingDetailsByImdbId.remove(cacheKey);
+    
+    qWarning() << "[MediaMetadataService] Addon metadata error:" << errorMessage;
+    emit error(QString("Failed to fetch metadata from AIOMetadata: %1").arg(errorMessage));
+    
+    client->deleteLater();
 }
 
 

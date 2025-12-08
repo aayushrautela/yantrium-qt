@@ -77,17 +77,6 @@ ApplicationWindow {
 
                         stackLayout.currentIndex = 3  // Search screen is at index 3
                         console.warn("[MainApp] Current stackLayout index after:", stackLayout.currentIndex)
-
-                        // Try to trigger search immediately if loader is ready
-                        if (searchLoader.item && query) {
-                            console.warn("[MainApp] Search loader ready, triggering search immediately")
-                            searchLoader.item.searchQuery = query
-                            searchLoader.item.performSearch()
-                        } else {
-                            console.warn("[MainApp] Search loader not ready yet, will trigger when loaded")
-                            console.warn("[MainApp] searchLoader.item:", searchLoader.item)
-                            console.warn("[MainApp] searchLoader.status:", searchLoader.status)
-                        }
                     }
                 }
                 
@@ -296,12 +285,6 @@ ApplicationWindow {
 
                     onStatusChanged: {
                         console.warn("[MainApp] Search loader status changed:", status)
-                        if (status === Loader.Ready && item && pendingQuery && pendingQuery.length > 0) {
-                            console.warn("[MainApp] Search loader ready, triggering search with pending query:", pendingQuery)
-                            item.searchQuery = pendingQuery
-                            item.performSearch()
-                            pendingQuery = ""
-                        }
                     }
                 }
                 

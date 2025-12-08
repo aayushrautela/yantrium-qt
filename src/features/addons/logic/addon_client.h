@@ -32,6 +32,9 @@ public:
     // Fetch streams
     void getStreams(const QString& type, const QString& id);
     
+    // Search for content
+    void search(const QString& type, const QString& query);
+    
     // Static helper methods
     static QString extractBaseUrl(const QString& manifestUrl);
     static bool validateManifest(const AddonManifest& manifest);
@@ -41,6 +44,7 @@ signals:
     void catalogFetched(const QString& type, const QJsonArray& metas);
     void metaFetched(const QString& type, const QString& id, const QJsonObject& meta);
     void streamsFetched(const QString& type, const QString& id, const QJsonArray& streams);
+    void searchResultsFetched(const QString& type, const QJsonArray& metas);
     void error(const QString& errorMessage);
 
 private:
