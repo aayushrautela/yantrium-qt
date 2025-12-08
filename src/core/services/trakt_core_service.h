@@ -147,23 +147,8 @@ private:
     // Cleanup timer
     std::unique_ptr<QTimer> m_cleanupTimer;
     
-    // Caching
-    struct CachedTraktData {
-        QJsonObject data;
-        QDateTime timestamp;
-        int ttlSeconds;
-        
-        CachedTraktData() : ttlSeconds(300) {}
-        
-        bool isExpired() const {
-            return QDateTime::currentDateTime().secsTo(timestamp) < -ttlSeconds;
-        }
-    };
-    QMap<QString, CachedTraktData> m_cache;
-    
+    // Caching (using CacheService)
     QString getCacheKey(const QString& endpoint, const QUrlQuery& query = QUrlQuery()) const;
-    QJsonObject getCachedResponse(const QString& cacheKey) const;
-    void cacheResponse(const QString& cacheKey, const QJsonObject& data, int ttlSeconds);
     int getTtlForEndpoint(const QString& endpoint) const;
     
     // Sync tracking and watch history

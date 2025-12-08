@@ -545,13 +545,14 @@ QVariantMap FrontendDataMapper::mapAddonMetaToDetailVariantMap(const QJsonObject
         map["videos"] = videos;
         
         // Runtime - AIOMetadata uses "runtime" as string like "2h22min" or integer
-        if (addonMeta.contains("runtime")) {
-            QVariant runtimeVar = addonMeta["runtime"];
+        // Only extract runtime for movies (TV shows have episode runtimes, not a single runtime)
+        if (type == "movie" && addonMeta.contains("runtime")) {
+            QJsonValue runtimeValue = addonMeta["runtime"];
             int runtime = 0;
             
-            if (runtimeVar.typeId() == QMetaType::QString) {
+            if (runtimeValue.isString()) {
                 // Parse string format like "2h22min" or "142min"
-                QString runtimeStr = runtimeVar.toString();
+                QString runtimeStr = runtimeValue.toString();
                 // Remove "min" suffix
                 runtimeStr = runtimeStr.replace("min", "");
                 // Extract hours and minutes
@@ -569,8 +570,8 @@ QVariantMap FrontendDataMapper::mapAddonMetaToDetailVariantMap(const QJsonObject
                     minutes = runtimeStr.toInt();
                 }
                 runtime = hours * 60 + minutes;
-            } else {
-                runtime = runtimeVar.toInt();
+            } else if (runtimeValue.isDouble()) {
+                runtime = runtimeValue.toInt();
             }
             
             if (runtime > 0) {
@@ -587,11 +588,23 @@ QVariantMap FrontendDataMapper::mapAddonMetaToDetailVariantMap(const QJsonObject
         }
         
         // Content rating
-        if (addonMeta.contains("certification") || addonMeta.contains("contentRating")) {
-            QString rating = addonMeta["certification"].toString();
-            if (rating.isEmpty()) {
+        // Check app_extras first (AIOMetadata format)
+        QString rating;
+        if (addonMeta.contains("app_extras") && addonMeta["app_extras"].isObject()) {
+            QJsonObject appExtras = addonMeta["app_extras"].toObject();
+            if (appExtras.contains("certification")) {
+                rating = appExtras["certification"].toString();
+            }
+        }
+        // Fallback to direct fields
+        if (rating.isEmpty()) {
+            if (addonMeta.contains("certification")) {
+                rating = addonMeta["certification"].toString();
+            } else if (addonMeta.contains("contentRating")) {
                 rating = addonMeta["contentRating"].toString();
             }
+        }
+        if (!rating.isEmpty()) {
             map["contentRating"] = rating;
         }
         

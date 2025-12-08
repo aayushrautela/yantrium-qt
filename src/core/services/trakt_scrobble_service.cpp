@@ -1,4 +1,5 @@
 #include "trakt_scrobble_service.h"
+#include "error_service.h"
 #include "../database/database_manager.h"
 #include "configuration.h"
 #include <QUrlQuery>
@@ -24,11 +25,13 @@ bool TraktScrobbleService::validateContentData(const QJsonObject& contentData)
 {
     QString type = contentData["type"].toString();
     if (type != "movie" && type != "episode") {
+        ErrorService::report("Invalid content type: " + type, "INVALID_PARAMS", "TraktScrobbleService");
         emit error("Invalid content type: " + type);
         return false;
     }
     
     if (contentData["title"].toString().trimmed().isEmpty()) {
+        ErrorService::report("Missing or empty title", "MISSING_PARAMS", "TraktScrobbleService");
         emit error("Missing or empty title");
         return false;
     }

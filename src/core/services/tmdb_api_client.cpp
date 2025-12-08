@@ -1,6 +1,8 @@
 #include "tmdb_api_client.h"
 #include "configuration.h"
-#include <QDebug>
+#include "cache_service.h"
+#include "logging_service.h"
+#include "error_service.h"
 #include <QJsonParseError>
 #include <QEventLoop>
 
@@ -86,39 +88,10 @@ void TmdbApiClient::recordRequest()
 
 QString TmdbApiClient::getCacheKey(const QString& path, const QUrlQuery& query) const
 {
-    // Create a cache key from path and sorted query parameters
-    QString key = path;
-    if (!query.isEmpty()) {
-        QStringList items;
-        for (const auto& item : query.queryItems()) {
-            items << QString("%1=%2").arg(item.first, item.second);
-        }
-        items.sort();
-        key += "?" + items.join("&");
-    }
-    return key;
+    return CacheService::generateKeyFromQuery("tmdb", path, query);
 }
 
-QJsonObject TmdbApiClient::getCachedResponse(const QString& cacheKey) const
-{
-    if (m_cache.contains(cacheKey)) {
-        const CachedMetadata& cached = m_cache[cacheKey];
-        if (!cached.isExpired()) {
-            return cached.data;
-        }
-    }
-    return QJsonObject();
-}
-
-void TmdbApiClient::cacheResponse(const QString& cacheKey, const QJsonObject& data, int ttlSeconds)
-{
-    CachedMetadata cached;
-    cached.data = data;
-    cached.timestamp = QDateTime::currentDateTime();
-    cached.ttlSeconds = ttlSeconds;
-    m_cache[cacheKey] = cached;
-    qDebug() << "[TmdbApiClient] Cached response for:" << cacheKey << "TTL:" << ttlSeconds << "seconds";
-}
+// Caching now handled by CacheService - methods removed
 
 int TmdbApiClient::getTtlForEndpoint(const QString& path) const
 {
@@ -175,11 +148,11 @@ QNetworkReply* TmdbApiClient::executeRequest(const QString& path, const QUrlQuer
 QNetworkReply* TmdbApiClient::get(const QString& path, const QUrlQuery& query)
 {
     QString cacheKey = getCacheKey(path, query);
-    QJsonObject cached = getCachedResponse(cacheKey);
+    QJsonObject cached = CacheService::getJsonCache(cacheKey);
     
     if (!cached.isEmpty()) {
         // Cache hit - emit cached response asynchronously and skip network request
-        qDebug() << "[TmdbApiClient] Cache hit for:" << cacheKey;
+        LoggingService::logDebug("TmdbApiClient", QString("Cache hit for: %1").arg(cacheKey));
         QTimer::singleShot(0, this, [this, path, query, cached]() {
             emit cachedResponseReady(path, query, cached);
         });
@@ -312,7 +285,7 @@ void TmdbApiClient::onReplyFinished()
             if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
                 QString cacheKey = getCacheKey(path, query);
                 int ttlSeconds = getTtlForEndpoint(path);
-                cacheResponse(cacheKey, doc.object(), ttlSeconds);
+                CacheService::setJsonCache(cacheKey, doc.object(), ttlSeconds);
             }
         }
     }
@@ -389,25 +362,23 @@ void TmdbApiClient::handleError(QNetworkReply* reply, const QString& context)
 
 void TmdbApiClient::clearCache()
 {
-    m_cache.clear();
+    // Clear all tmdb cache entries
+    CacheService::instance().clear();
+    LoggingService::logInfo("TmdbApiClient", "Cache cleared");
 }
 
 void TmdbApiClient::clearCacheForEndpoint(const QString& endpoint)
 {
-    QStringList keysToRemove;
-    for (auto it = m_cache.begin(); it != m_cache.end(); ++it) {
-        if (it.key().contains(endpoint)) {
-            keysToRemove << it.key();
-        }
-    }
-    for (const QString& key : keysToRemove) {
-        m_cache.remove(key);
-    }
+    // Clear cache entries for specific endpoint
+    // Note: CacheService doesn't support prefix-based clearing yet
+    // For now, we'll clear all cache (can be optimized later)
+    CacheService::instance().clear();
+    LoggingService::logInfo("TmdbApiClient", QString("Cleared cache for endpoint: %1").arg(endpoint));
 }
 
 int TmdbApiClient::getCacheSize() const
 {
-    return m_cache.size();
+    return CacheService::instance().size();
 }
 
 void TmdbApiClient::setRequestTimeout(int timeoutMs)

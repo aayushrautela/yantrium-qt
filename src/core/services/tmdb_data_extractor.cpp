@@ -24,7 +24,7 @@ QString TmdbDataExtractor::extractMaturityRating(const QJsonObject& tmdbData, co
                     }
                 }
             }
-        } else if (type == "series") {
+        } else if (type == "series" || type == "tv" || type == "show") {
             QJsonObject contentRatings = tmdbData["content_ratings"].toObject();
             if (!contentRatings.isEmpty()) {
                 QJsonArray results = contentRatings["results"].toArray();
@@ -59,7 +59,7 @@ QString TmdbDataExtractor::getMaturityRatingName(const QString& rating, const QS
         if (upperRating == "PG-13") return "Parents Strongly Cautioned";
         if (upperRating == "R") return "Restricted";
         if (upperRating == "NC-17") return "Adults Only";
-    } else if (type == "series") {
+    } else if (type == "series" || type == "tv" || type == "show") {
         if (upperRating == "TV-Y") return "All Children";
         if (upperRating == "TV-Y7") return "Directed to Older Children";
         if (upperRating == "TV-G") return "General Audience";

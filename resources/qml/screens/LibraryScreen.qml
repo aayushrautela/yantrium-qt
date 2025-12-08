@@ -17,6 +17,8 @@ Item {
     property LocalLibraryService localLibrary: LocalLibraryService
     property LibraryService libraryService: LibraryService
     property MediaMetadataService metadataService: MediaMetadataService
+    property NavigationService navigationService: NavigationService
+    property LoggingService loggingService: LoggingService
     
     signal itemClicked(string contentId, string type, string addonId)
     
@@ -61,7 +63,7 @@ Item {
         var title = content.title || content["title"] || ""
         var year = content.year || content["year"] || 0
         
-        console.log("[LibraryScreen] Mapping item - title:", title, "imdbId:", imdbId, "posterUrl:", posterUrl, "type:", type)
+        // Removed debug log - unnecessary
         
         return {
             contentId: contentId,
@@ -340,7 +342,8 @@ Item {
                         onClicked: {
                             var contentId = model.contentId || ""
                             var type = model.type || ""
-                            root.itemClicked(contentId, type, "")
+                            navigationService.navigateToDetail(contentId, type, "")
+                            root.itemClicked(contentId, type, "")  // Keep for backward compatibility
                         }
                         cursorShape: Qt.PointingHandCursor
                     }

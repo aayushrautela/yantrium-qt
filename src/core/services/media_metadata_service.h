@@ -79,17 +79,7 @@ private:
     AddonConfig findAiometadataAddon();
     void fetchMetadataFromAddon(const QString& contentId, const QString& type);
     
-    // Metadata cache
-    struct CachedMetadata {
-        QVariantMap data;
-        QDateTime timestamp;
-        static constexpr int ttlSeconds = 3600; // 1 hour
-        
-        bool isExpired() const {
-            return QDateTime::currentDateTime().secsTo(timestamp) < -ttlSeconds;
-        }
-    };
-    QMap<QString, CachedMetadata> m_metadataCache;
+    // Metadata cache (using CacheService)
     
     void processPendingRequest(const QString& imdbId);
 };

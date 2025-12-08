@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 
 Rectangle {
     id: root
@@ -175,15 +174,6 @@ Rectangle {
                         width: 48
                         height: 48
                         fillMode: Image.PreserveAspectFit
-                        visible: false
-                    }
-                    
-                    ColorOverlay {
-                        anchors.fill: leftArrowIcon
-                        source: leftArrowIcon
-                        color: "#ffffff"
-                        cached: true
-                        antialiasing: true
                     }
                 }
                 
@@ -233,15 +223,6 @@ Rectangle {
                         width: 48
                         height: 48
                         fillMode: Image.PreserveAspectFit
-                        visible: false
-                    }
-                    
-                    ColorOverlay {
-                        anchors.fill: rightArrowIcon
-                        source: rightArrowIcon
-                        color: "#ffffff"
-                        cached: true
-                        antialiasing: true
                     }
                 }
                 

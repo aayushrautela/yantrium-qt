@@ -5,8 +5,10 @@ Rectangle {
     id: root
     
     property int currentIndex: 0
+    property bool showBackButton: false
     signal tabClicked(int index)
     signal searchClicked(string query)
+    signal backClicked()
     
     onTabClicked: function(index) {
         currentIndex = index
@@ -21,6 +23,44 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         anchors.leftMargin: 20
         spacing: 40
+        
+        // Back Button (with reserved space to prevent content shifting)
+        Item {
+            width: 48
+            height: 48
+            anchors.verticalCenter: parent.verticalCenter
+            
+            property bool isHovered: false
+            
+            Image {
+                id: backIcon
+                anchors.centerIn: parent
+                width: 24
+                height: 24
+                source: "qrc:/assets/icons/back.svg"
+                sourceSize.width: 48
+                sourceSize.height: 48
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                antialiasing: true
+                opacity: parent.isHovered ? 1.0 : (root.showBackButton ? 0.7 : 0.0)
+                visible: root.showBackButton
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+            }
+            
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                enabled: root.showBackButton
+                onEntered: parent.isHovered = true
+                onExited: parent.isHovered = false
+                onClicked: {
+                    if (root.showBackButton) {
+                        root.backClicked()
+                    }
+                }
+            }
+        }
         
         // Logo
         Text {
@@ -71,8 +111,7 @@ Rectangle {
         anchors.rightMargin: 20
         
         onSearchRequested: function(query) {
-            console.warn("[NavigationBar] ===== SEARCH REQUESTED =====")
-            console.warn("[NavigationBar] Query:", query)
+            // Logging handled by MainApp
             root.searchClicked(query)
         }
     }

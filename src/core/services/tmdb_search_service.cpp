@@ -1,4 +1,5 @@
 #include "tmdb_search_service.h"
+#include "error_service.h"
 #include "configuration.h"
 #include <QUrlQuery>
 #include <QNetworkRequest>
@@ -33,6 +34,7 @@ void TmdbSearchService::searchMovies(const QString& query, int page)
     
     if (query.trimmed().isEmpty()) {
         qWarning() << "[TmdbSearchService] Empty query, emitting error";
+        ErrorService::report("Search query cannot be empty", "MISSING_PARAMS", "TmdbSearchService");
         emit error("Search query cannot be empty");
         return;
     }
@@ -72,6 +74,7 @@ void TmdbSearchService::searchTv(const QString& query, int page)
     
     if (query.trimmed().isEmpty()) {
         qWarning() << "[TmdbSearchService] Empty query, emitting error";
+        ErrorService::report("Search query cannot be empty", "MISSING_PARAMS", "TmdbSearchService");
         emit error("Search query cannot be empty");
         return;
     }

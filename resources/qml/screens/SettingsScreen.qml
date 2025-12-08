@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
-import Qt5Compat.GraphicalEffects
 import Yantrium.Components 1.0
 import Yantrium.Services 1.0
 
@@ -143,15 +142,6 @@ Item {
                                             
                                             anchors.centerIn: parent
                                             fillMode: Image.PreserveAspectFit
-                                            visible: false 
-                                        }
-
-                                        ColorOverlay {
-                                            anchors.fill: installIcon
-                                            source: installIcon
-                                            color: "#ffffff"
-                                            cached: true
-                                            antialiasing: true
                                         }
                                     }
                                     
@@ -231,14 +221,6 @@ Item {
                                                     height: 36
                                                     anchors.centerIn: parent
                                                     fillMode: Image.PreserveAspectFit
-                                                    visible: false
-                                                }
-                                                ColorOverlay {
-                                                    anchors.fill: deleteIcon
-                                                    source: deleteIcon
-                                                    color: "#ffffff"
-                                                    cached: true
-                                                    antialiasing: true
                                                 }
                                             }
                                             onClicked: { deleteConfirmDialog.addonName = model.name || model.id || "Unknown"; deleteConfirmDialog.addonId = model.id; deleteConfirmDialog.open() }
@@ -313,14 +295,6 @@ Item {
                                         height: 36
                                         anchors.centerIn: parent
                                         fillMode: Image.PreserveAspectFit
-                                        visible: false
-                                    }
-                                    ColorOverlay {
-                                        anchors.fill: resyncIcon
-                                        source: resyncIcon
-                                        color: "#ffffff"
-                                        cached: true
-                                        antialiasing: true
                                     }
                                 }
                                 onClicked: { traktSection.startResync() }
@@ -386,14 +360,6 @@ Item {
                                         height: 36
                                         anchors.centerIn: parent
                                         fillMode: Image.PreserveAspectFit
-                                        visible: false
-                                    }
-                                    ColorOverlay {
-                                        anchors.fill: refreshCatalogIcon
-                                        source: refreshCatalogIcon
-                                        color: "#ffffff"
-                                        cached: true
-                                        antialiasing: true
                                     }
                                 }
                                 onClicked: { refreshCatalogList() }

@@ -119,6 +119,16 @@ set(PROJECT_SOURCES
     src/core/services/local_library_service.h
     src/core/services/stream_service.cpp
     src/core/services/stream_service.h
+    src/core/services/navigation_service.cpp
+    src/core/services/navigation_service.h
+    src/core/services/screen_manager.cpp
+    src/core/services/screen_manager.h
+    src/core/services/error_service.cpp
+    src/core/services/error_service.h
+    src/core/services/logging_service.cpp
+    src/core/services/logging_service.h
+    src/core/services/cache_service.cpp
+    src/core/services/cache_service.h
     resources/qml.qrc
 )
 

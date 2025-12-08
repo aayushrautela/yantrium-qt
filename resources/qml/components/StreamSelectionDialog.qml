@@ -8,6 +8,7 @@ Dialog {
     
     // StreamService is a singleton, accessed directly
     property StreamService streamService: StreamService
+    property LoggingService loggingService: LoggingService
     
     property var streams: []
     property bool isLoading: false
@@ -166,7 +167,7 @@ Dialog {
         }
         function onError(message) {
             root.isLoading = false
-            console.error("[StreamSelectionDialog] Error:", message)
+            // Removed error log - unnecessary (errors handled by ErrorService)
         }
     }
     

@@ -677,30 +677,31 @@ Item {
                         }
                     }
 
-                    TraktScrobbleService {
-                        id: traktScrobble
-                        
-                        onScrobbleStarted: function(success) {
+                    property TraktScrobbleService traktScrobble: TraktScrobbleService
+                    
+                    Connections {
+                        target: traktScrobble
+                        function onScrobbleStarted(success) {
                             traktStatusText.text = success ? "✓ Scrobble started" : "✗ Failed to start scrobble"
                             traktStatusText.color = success ? "#4CAF50" : "#F44336"
                         }
                         
-                        onScrobblePaused: function(success) {
+                        function onScrobblePaused(success) {
                             traktStatusText.text = success ? "✓ Scrobble paused" : "✗ Failed to pause scrobble"
                             traktStatusText.color = success ? "#4CAF50" : "#F44336"
                         }
                         
-                        onScrobbleStopped: function(success) {
+                        function onScrobbleStopped(success) {
                             traktStatusText.text = success ? "✓ Scrobble stopped" : "✗ Failed to stop scrobble"
                             traktStatusText.color = success ? "#4CAF50" : "#F44336"
                         }
                         
-                        onHistoryFetched: function(history) {
+                        function onHistoryFetched(history) {
                             traktStatusText.text = "✓ Fetched " + history.length + " history items"
                             traktStatusText.color = "#4CAF50"
                         }
                         
-                        onError: function(errorMessage) {
+                        function onError(errorMessage) {
                             traktStatusText.text = "✗ Error: " + errorMessage
                             traktStatusText.color = "#F44336"
                         }

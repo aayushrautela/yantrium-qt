@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import Qt5Compat.GraphicalEffects
 
 Rectangle {
     id: root
@@ -35,13 +34,6 @@ Rectangle {
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 antialiasing: true
-                visible: false
-            }
-            
-            ColorOverlay {
-                anchors.fill: searchIcon
-                source: searchIcon
-                color: "#ffffff"
             }
         }
         

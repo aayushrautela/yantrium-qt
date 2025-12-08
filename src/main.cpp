@@ -30,6 +30,11 @@
 #include "core/services/tmdb_search_service.h"
 #include "core/services/stream_service.h"
 #include "core/services/omdb_service.h"
+#include "core/services/navigation_service.h"
+#include "core/services/screen_manager.h"
+#include "core/services/error_service.h"
+#include "core/services/logging_service.h"
+#include "core/services/cache_service.h"
 #include <memory>
 
 // Force logging to console
@@ -289,9 +294,19 @@ int main(int argc, char *argv[])
     qDebug() << "[MAIN] TraktAuthService registered";
     qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "TraktCoreService", &TraktCoreService::instance());
     qDebug() << "[MAIN] TraktCoreService registered";
-    qmlRegisterType<TraktScrobbleService>("Yantrium.Services", 1, 0, "TraktScrobbleService");
+    qmlRegisterSingletonType<TraktScrobbleService>("Yantrium.Services", 1, 0, "TraktScrobbleService", 
+        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
+            Q_UNUSED(engine)
+            Q_UNUSED(scriptEngine)
+            return new TraktScrobbleService();
+        });
     qDebug() << "[MAIN] TraktScrobbleService registered";
-    qmlRegisterType<TraktWatchlistService>("Yantrium.Services", 1, 0, "TraktWatchlistService");
+    qmlRegisterSingletonType<TraktWatchlistService>("Yantrium.Services", 1, 0, "TraktWatchlistService",
+        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
+            Q_UNUSED(engine)
+            Q_UNUSED(scriptEngine)
+            return new TraktWatchlistService();
+        });
     qDebug() << "[MAIN] TraktWatchlistService registered";
     
     // Register CatalogPreferencesService (depends on AddonRepository)
@@ -340,8 +355,62 @@ int main(int argc, char *argv[])
     
     // Register File Export service (no dependencies, can be instantiated directly)
     qDebug() << "[MAIN] Registering FileExportService...";
-    qmlRegisterType<FileExportService>("Yantrium.Services", 1, 0, "FileExportService");
+    qmlRegisterSingletonType<FileExportService>("Yantrium.Services", 1, 0, "FileExportService",
+        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
+            Q_UNUSED(engine)
+            Q_UNUSED(scriptEngine)
+            return new FileExportService();
+        });
     qDebug() << "[MAIN] FileExportService registered";
+    
+    // Register NavigationService and ScreenManager
+    qDebug() << "[MAIN] Registering NavigationService...";
+    qmlRegisterSingletonType<NavigationService>("Yantrium.Services", 1, 0, "NavigationService",
+        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
+            Q_UNUSED(engine)
+            Q_UNUSED(scriptEngine)
+            return new NavigationService();
+        });
+    qDebug() << "[MAIN] NavigationService registered";
+    
+    qDebug() << "[MAIN] Registering ScreenManager...";
+    qmlRegisterSingletonType<ScreenManager>("Yantrium.Services", 1, 0, "ScreenManager",
+        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
+            Q_UNUSED(engine)
+            Q_UNUSED(scriptEngine)
+            return new ScreenManager();
+        });
+    qDebug() << "[MAIN] ScreenManager registered";
+    
+    // Register ErrorService
+    qDebug() << "[MAIN] Registering ErrorService...";
+    qmlRegisterSingletonType<ErrorService>("Yantrium.Services", 1, 0, "ErrorService",
+        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
+            Q_UNUSED(engine)
+            Q_UNUSED(scriptEngine)
+            return new ErrorService();
+        });
+    qDebug() << "[MAIN] ErrorService registered";
+    
+    // Register LoggingService
+    qDebug() << "[MAIN] Registering LoggingService...";
+    qmlRegisterSingletonType<LoggingService>("Yantrium.Services", 1, 0, "LoggingService",
+        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
+            Q_UNUSED(engine)
+            Q_UNUSED(scriptEngine)
+            return new LoggingService();
+        });
+    qDebug() << "[MAIN] LoggingService registered";
+    
+    // Register CacheService
+    qDebug() << "[MAIN] Registering CacheService...";
+    qmlRegisterSingletonType<CacheService>("Yantrium.Services", 1, 0, "CacheService",
+        [](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject* {
+            Q_UNUSED(engine)
+            Q_UNUSED(scriptEngine)
+            return new CacheService();
+        });
+    qDebug() << "[MAIN] CacheService registered";
     
     qDebug() << "[MAIN] All QML types registered";
     qDebug() << "[MAIN] Creating QML engine...";

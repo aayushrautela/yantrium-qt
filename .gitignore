@@ -204,3 +204,4 @@ docs/_build/
 docs/.doctrees/
 *.pdf
 yantrium.flatpak
+fetch_aiometadata.py

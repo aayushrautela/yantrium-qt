@@ -14,11 +14,8 @@ Item {
     property LibraryService libraryService: LibraryService
     property TraktAuthService traktAuthService: TraktAuthService
     property LocalLibraryService localLibrary: LocalLibraryService
-    
-    // TraktWatchlistService is registered as a type, can be instantiated
-    property TraktWatchlistService traktWatchlist: TraktWatchlistService {
-        id: traktWatchlistService
-    }
+    property TraktWatchlistService traktWatchlist: TraktWatchlistService
+    property NavigationService navigationService: NavigationService
     
     property bool isInLibrary: false
     property var smartPlayState: ({})
@@ -431,40 +428,6 @@ Item {
                         }
                     }
                     
-                    // Back Button
-                    Item {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.margins: 20
-                        width: 48
-                        height: 48
-                        z: 10
-                        
-                        property bool isHovered: false
-                        
-                        Image {
-                            anchors.centerIn: parent
-                            width: 24
-                            height: 24
-                            source: "qrc:/assets/icons/left_catalog.svg"
-                            sourceSize.width: 48
-                            sourceSize.height: 48
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            antialiasing: true
-                            opacity: parent.isHovered ? 1.0 : 0.7
-                            Behavior on opacity { NumberAnimation { duration: 200 } }
-                        }
-                        
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onEntered: parent.isHovered = true
-                            onExited: parent.isHovered = false
-                            onClicked: root.closeRequested()
-                        }
-                    }
-                    
                     // Title and Info Section (overlay on backdrop)
                     Column {
                         id: backdropContent
@@ -540,7 +503,7 @@ Item {
                             wrapMode: Text.WordWrap
                         }
                         
-                        // Row 1: For episodes: Air Date • Runtime | For movies/shows: Release Date • Content Rating • Genres
+                        // Row 1: For episodes: Air Date • Runtime | For movies/shows: Release Date • Content Rating • Runtime • Genres
                         Row {
                             spacing: 8
 
@@ -587,7 +550,7 @@ Item {
                                 color: "#ffffff"
                                 font.pixelSize: 18
                                 visible: !root.isEpisodeMode && (root.itemData.releaseDate || root.itemData.firstAirDate) !== "" &&
-                                         (root.itemData.contentRating !== "" || (root.itemData.genres || []).length > 0)
+                                         (root.itemData.contentRating !== "" || (root.itemData.runtimeFormatted !== "" && root.itemData.type === "movie") || (root.itemData.genres || []).length > 0)
                             }
 
                             Text {
@@ -601,7 +564,22 @@ Item {
                                 text: "•"
                                 color: "#ffffff"
                                 font.pixelSize: 18
-                                visible: !root.isEpisodeMode && root.itemData.contentRating !== "" && (root.itemData.genres || []).length > 0
+                                visible: !root.isEpisodeMode && root.itemData.contentRating !== "" && 
+                                         ((root.itemData.runtimeFormatted !== "" && root.itemData.type === "movie") || (root.itemData.genres || []).length > 0)
+                            }
+
+                            Text {
+                                text: root.itemData.runtimeFormatted || ""
+                                color: "#ffffff"
+                                font.pixelSize: 18
+                                visible: !root.isEpisodeMode && root.itemData.type === "movie" && text !== ""
+                            }
+
+                            Text {
+                                text: "•"
+                                color: "#ffffff"
+                                font.pixelSize: 18
+                                visible: !root.isEpisodeMode && root.itemData.type === "movie" && root.itemData.runtimeFormatted !== "" && (root.itemData.genres || []).length > 0
                             }
 
                             Repeater {
@@ -645,42 +623,6 @@ Item {
                         Row {
                             spacing: 20
                             visible: !root.isEpisodeMode
-                            
-                            // TMDB Score
-                            Row {
-                                spacing: 6
-                                visible: !!(root.itemData.tmdbRating || root.itemData.imdbRating)
-                                
-                                Image {
-                                    id: tmdbImage
-                                    width: 50
-                                    height: 22
-                                    source: "qrc:/assets/icons/tmdb.svg"
-                                    sourceSize.width: 100
-                                    sourceSize.height: 44
-                                    mipmap: true
-                                    asynchronous: true
-                                    fillMode: Image.PreserveAspectFit
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    smooth: true
-                                    antialiasing: true
-                                    
-                                    onStatusChanged: {
-                                        if (status === Image.Error) {
-                                            console.error("[DetailScreen] Failed to load TMDB logo:", source)
-                                        } else if (status === Image.Ready) {
-                                            console.log("[DetailScreen] TMDB logo loaded successfully")
-                                        }
-                                    }
-                                }
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: root.itemData.tmdbRating || root.itemData.imdbRating || ""
-                                    color: "#ffffff"
-                                    font.pixelSize: 18
-                                    font.bold: true
-                                }
-                            }
                             
                             // IMDb Score
                             Row {
@@ -1470,15 +1412,6 @@ Item {
                                                     width: 48
                                                     height: 48
                                                     fillMode: Image.PreserveAspectFit
-                                                    visible: false
-                                                }
-                                                
-                                                ColorOverlay {
-                                                    anchors.fill: episodesLeftArrowIcon
-                                                    source: episodesLeftArrowIcon
-                                                    color: "#ffffff"
-                                                    cached: true
-                                                    antialiasing: true
                                                 }
                                             }
 
@@ -1530,15 +1463,6 @@ Item {
                                                     width: 48
                                                     height: 48
                                                     fillMode: Image.PreserveAspectFit
-                                                    visible: false
-                                                }
-                                                
-                                                ColorOverlay {
-                                                    anchors.fill: episodesRightArrowIcon
-                                                    source: episodesRightArrowIcon
-                                                    color: "#ffffff"
-                                                    cached: true
-                                                    antialiasing: true
                                                 }
                                             }
 
@@ -1647,15 +1571,6 @@ Item {
                                             width: 48
                                             height: 48
                                             fillMode: Image.PreserveAspectFit
-                                            visible: false
-                                        }
-                                        
-                                        ColorOverlay {
-                                            anchors.fill: castLeftArrowIcon
-                                            source: castLeftArrowIcon
-                                            color: "#ffffff"
-                                            cached: true
-                                            antialiasing: true
                                         }
                                     }
                                     
@@ -1706,15 +1621,6 @@ Item {
                                             width: 48
                                             height: 48
                                             fillMode: Image.PreserveAspectFit
-                                            visible: false
-                                        }
-                                        
-                                        ColorOverlay {
-                                            anchors.fill: castRightArrowIcon
-                                            source: castRightArrowIcon
-                                            color: "#ffffff"
-                                            cached: true
-                                            antialiasing: true
                                         }
                                     }
                                     
@@ -1890,15 +1796,6 @@ Item {
                                             width: 48
                                             height: 48
                                             fillMode: Image.PreserveAspectFit
-                                            visible: false
-                                        }
-                                        
-                                        ColorOverlay {
-                                            anchors.fill: similarLeftArrowIcon
-                                            source: similarLeftArrowIcon
-                                            color: "#ffffff"
-                                            cached: true
-                                            antialiasing: true
                                         }
                                     }
                                     
@@ -1949,15 +1846,6 @@ Item {
                                             width: 48
                                             height: 48
                                             fillMode: Image.PreserveAspectFit
-                                            visible: false
-                                        }
-                                        
-                                        ColorOverlay {
-                                            anchors.fill: similarRightArrowIcon
-                                            source: similarRightArrowIcon
-                                            color: "#ffffff"
-                                            cached: true
-                                            antialiasing: true
                                         }
                                     }
                                     
@@ -2045,7 +1933,8 @@ Item {
                     seasonNumber: seasonNum,
                     episodeNumber: episodeNum
                 }
-                root.playRequested(stream.url, contentData)
+                navigationService.navigateToPlayer(stream.url, contentData)
+                root.playRequested(stream.url, contentData)  // Keep for backward compatibility
             }
         }
     }

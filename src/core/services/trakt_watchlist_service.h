@@ -4,11 +4,14 @@
 #include <QObject>
 #include <QString>
 #include <QVariantList>
+#include <QtQmlIntegration/qqmlintegration.h>
 #include "../services/trakt_core_service.h"
 
 class TraktWatchlistService : public QObject
 {
     Q_OBJECT
+    QML_ELEMENT
+    QML_SINGLETON
 
 public:
     explicit TraktWatchlistService(QObject* parent = nullptr);

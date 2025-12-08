@@ -1,4 +1,5 @@
 #include "file_export_service.h"
+#include "error_service.h"
 #include <QFile>
 #include <QTextStream>
 #include <QStandardPaths>
@@ -21,7 +22,9 @@ bool FileExportService::writeTextFile(const QString& filePath, const QString& co
     if (!dir.exists()) {
         if (!dir.mkpath(".")) {
             qWarning() << "[FileExportService] Failed to create directory:" << dir.path();
-            emit error(QString("Failed to create directory: %1").arg(dir.path()));
+            QString errorMsg = QString("Failed to create directory: %1").arg(dir.path());
+            ErrorService::report(errorMsg, "FILE_ERROR", "FileExportService");
+            emit error(errorMsg);
             return false;
         }
     }

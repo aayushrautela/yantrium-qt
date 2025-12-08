@@ -1,4 +1,5 @@
 #include "omdb_service.h"
+#include "error_service.h"
 #include "configuration.h"
 #include <QUrlQuery>
 #include <QNetworkRequest>
@@ -27,6 +28,7 @@ QUrl OmdbService::buildUrl(const QString& imdbId)
 void OmdbService::getRatings(const QString& imdbId)
 {
     if (imdbId.isEmpty() || !imdbId.startsWith("tt")) {
+        ErrorService::report("Invalid IMDB ID", "INVALID_PARAMS", "OmdbService");
         emit error("Invalid IMDB ID");
         return;
     }

@@ -1,4 +1,5 @@
 #include "trakt_watchlist_service.h"
+#include "error_service.h"
 #include "../database/database_manager.h"
 #include <QJsonObject>
 #include <QJsonArray>
@@ -45,11 +46,13 @@ void TraktWatchlistService::getWatchlistShowsWithImages()
 void TraktWatchlistService::addToWatchlist(const QString& type, const QString& imdbId)
 {
     if (imdbId.trimmed().isEmpty()) {
+        ErrorService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
         emit error("IMDb ID is required");
         return;
     }
     
     if (type != "movie" && type != "show") {
+        ErrorService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
         emit error("Type must be either 'movie' or 'show'");
         return;
     }
@@ -75,11 +78,13 @@ void TraktWatchlistService::addToWatchlist(const QString& type, const QString& i
 void TraktWatchlistService::removeFromWatchlist(const QString& type, const QString& imdbId)
 {
     if (imdbId.trimmed().isEmpty()) {
+        ErrorService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
         emit error("IMDb ID is required");
         return;
     }
     
     if (type != "movie" && type != "show") {
+        ErrorService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
         emit error("Type must be either 'movie' or 'show'");
         return;
     }
@@ -158,11 +163,13 @@ void TraktWatchlistService::getCollectionShowsWithImages()
 void TraktWatchlistService::addToCollection(const QString& type, const QString& imdbId)
 {
     if (imdbId.trimmed().isEmpty()) {
+        ErrorService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
         emit error("IMDb ID is required");
         return;
     }
     
     if (type != "movie" && type != "show") {
+        ErrorService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
         emit error("Type must be either 'movie' or 'show'");
         return;
     }
@@ -188,11 +195,13 @@ void TraktWatchlistService::addToCollection(const QString& type, const QString& 
 void TraktWatchlistService::removeFromCollection(const QString& type, const QString& imdbId)
 {
     if (imdbId.trimmed().isEmpty()) {
+        ErrorService::report("IMDb ID is required", "MISSING_PARAMS", "TraktWatchlistService");
         emit error("IMDb ID is required");
         return;
     }
     
     if (type != "movie" && type != "show") {
+        ErrorService::report("Type must be either 'movie' or 'show'", "INVALID_PARAMS", "TraktWatchlistService");
         emit error("Type must be either 'movie' or 'show'");
         return;
     }

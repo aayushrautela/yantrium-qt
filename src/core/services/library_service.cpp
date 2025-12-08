@@ -1,4 +1,5 @@
 #include "library_service.h"
+#include "error_service.h"
 #include "core/database/database_manager.h"
 #include "core/services/id_parser.h"
 #include "core/services/configuration.h"
@@ -7,7 +8,6 @@
 #include "features/addons/logic/addon_client.h"
 #include "features/addons/models/addon_config.h"
 #include "features/addons/models/addon_manifest.h"
-#include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -88,10 +88,9 @@ void LibraryService::loadCatalogsRaw()
 
 void LibraryService::loadCatalogsRaw(bool rawMode)
 {
-    qDebug() << "[LibraryService] ===== loadCatalogs() called (rawMode:" << rawMode << ") =====";
+    // Removed verbose debug logs - unnecessary
     
     if (m_isLoadingCatalogs) {
-        qDebug() << "[LibraryService] Already loading catalogs, skipping";
         return;
     }
     
@@ -101,50 +100,35 @@ void LibraryService::loadCatalogsRaw(bool rawMode)
     m_rawCatalogData.clear();
     m_pendingCatalogRequests = 0;
     
-    qDebug() << "[LibraryService] Cleared catalog sections and reset pending requests (rawMode:" << rawMode << ")";
-    
     // Clean up old clients
     qDeleteAll(m_activeClients);
     m_activeClients.clear();
-    qDebug() << "[LibraryService] Cleared old clients";
     
     // Get enabled addons
     QList<AddonConfig> enabledAddons = m_addonRepository->getEnabledAddons();
-    qDebug() << "[LibraryService] Found" << enabledAddons.size() << "enabled addons";
     
     if (enabledAddons.isEmpty()) {
-        qDebug() << "[LibraryService] ERROR: No enabled addons found - cannot load catalogs";
         m_isLoadingCatalogs = false;
         emit catalogsLoaded(QVariantList());
         return;
     }
     
-    qDebug() << "[LibraryService] Loading catalogs from" << enabledAddons.size() << "enabled addons";
-    
     // For each enabled addon, fetch its catalogs
     for (const AddonConfig& addon : enabledAddons) {
-        qDebug() << "[LibraryService] Processing addon:" << addon.id << "(" << addon.name << ")";
-        
         AddonManifest manifest = m_addonRepository->getManifest(addon);
         if (manifest.id().isEmpty()) {
-            qDebug() << "[LibraryService] ERROR: Could not get manifest for addon:" << addon.id;
             continue;
         }
         
-            qDebug() << "[LibraryService] Got manifest for addon:" << addon.id;
-        
         // Get catalogs from manifest
         QList<CatalogDefinition> catalogs = manifest.catalogs();
-        qDebug() << "[LibraryService] Found" << catalogs.size() << "catalog definitions in manifest for addon:" << addon.id;
         
         if (catalogs.isEmpty()) {
-            qDebug() << "[LibraryService] WARNING: No catalogs found for addon:" << addon.id;
             continue;
         }
         
         // Get base URL for this addon
         QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
-        qDebug() << "[LibraryService] Extracted base URL:" << baseUrl << "for addon:" << addon.id;
         
         int enabledCatalogCount = 0;
         int disabledCatalogCount = 0;
@@ -157,25 +141,19 @@ void LibraryService::loadCatalogsRaw(bool rawMode)
             QString catalogId = catalog.id();
             QString catalogType = catalog.type();
             
-            qDebug() << "[LibraryService] Checking catalog:" << catalogName << "type:" << catalogType << "id:" << catalogId;
+            // Removed debug log - unnecessary
             
             // Check if this catalog is enabled (default to enabled if no preference exists)
             auto preference = m_catalogPreferencesDao->getPreference(addon.id, catalogType, catalogId);
             bool isEnabled = preference ? preference->enabled : true;
             
-            qDebug() << "[LibraryService] Catalog preference check - enabled:" << isEnabled 
-                     << "(preference exists:" << (preference != nullptr) << ")";
-            
             if (!isEnabled) {
                 disabledCatalogCount++;
-                qDebug() << "[LibraryService] SKIPPING disabled catalog:" << catalogName << "(" << catalogType << "," << catalogId << ") from addon:" << addon.id;
                 continue;
             }
             
             enabledCatalogCount++;
             m_pendingCatalogRequests++;
-            qDebug() << "[LibraryService] FETCHING catalog:" << catalogName << "(" << catalogType << "," << catalogId << ") from addon:" << addon.id;
-            qDebug() << "[LibraryService] Pending requests now:" << m_pendingCatalogRequests;
             
             // Create a NEW AddonClient for each catalog request
             // This is necessary because AddonClient only supports one concurrent request
@@ -193,25 +171,16 @@ void LibraryService::loadCatalogsRaw(bool rawMode)
             connect(client, &AddonClient::catalogFetched, this, &LibraryService::onCatalogFetched);
             connect(client, &AddonClient::error, this, &LibraryService::onClientError);
             
-            qDebug() << "[LibraryService] Created new client and calling getCatalog(" << catalogType << "," << catalogId << ")";
             client->getCatalog(catalogType, catalogId);
         }
-        
-        qDebug() << "[LibraryService] Addon" << addon.id << "- Enabled catalogs:" << enabledCatalogCount << "Disabled catalogs:" << disabledCatalogCount;
     }
     
-    qDebug() << "[LibraryService] Total pending catalog requests:" << m_pendingCatalogRequests;
-    
     // Also load continue watching
-    qDebug() << "[LibraryService] Requesting continue watching from Trakt";
     m_traktService->getPlaybackProgressWithImages();
     
     // If no requests were made, finish immediately
     if (m_pendingCatalogRequests == 0) {
-        qDebug() << "[LibraryService] WARNING: No catalog requests were made! Finishing immediately.";
         finishLoadingCatalogs();
-    } else {
-        qDebug() << "[LibraryService] Waiting for" << m_pendingCatalogRequests << "catalog responses...";
     }
 }
 
@@ -219,7 +188,9 @@ void LibraryService::loadCatalog(const QString& addonId, const QString& type, co
 {
     AddonConfig addon = m_addonRepository->getAddon(addonId);
     if (addon.id.isEmpty()) {
-        emit error(QString("Addon not found: %1").arg(addonId));
+        QString errorMsg = QString("Addon not found: %1").arg(addonId);
+        ErrorService::report(errorMsg, "ADDON_NOT_FOUND", "LibraryService");
+        emit error(errorMsg);
         return;
     }
 
@@ -235,10 +206,9 @@ void LibraryService::loadCatalog(const QString& addonId, const QString& type, co
 
 void LibraryService::loadHeroItems()
 {
-    qDebug() << "[LibraryService] ===== loadHeroItems() called =====";
+    // Removed verbose debug logs - unnecessary
     
     if (m_isLoadingHeroItems) {
-        qDebug() << "[LibraryService] Already loading hero items, skipping";
         return;
     }
     
@@ -250,22 +220,19 @@ void LibraryService::loadHeroItems()
     QList<CatalogPreferenceRecord> heroCatalogs = m_catalogPreferencesDao->getHeroCatalogs();
     
     if (heroCatalogs.isEmpty()) {
-        qDebug() << "[LibraryService] No hero catalogs configured, emitting empty list";
+        // Removed debug log - unnecessary
         m_isLoadingHeroItems = false;
         emit heroItemsLoaded(QVariantList());
         return;
     }
     
-    qDebug() << "[LibraryService] Found" << heroCatalogs.size() << "hero catalogs";
-    
     int itemsPerCatalog = qMax(1, 10 / heroCatalogs.size()); // Distribute items across catalogs
-    qDebug() << "[LibraryService] Will load" << itemsPerCatalog << "items per catalog";
     
     for (const CatalogPreferenceRecord& heroCatalog : heroCatalogs) {
         try {
             AddonConfig addon = m_addonRepository->getAddon(heroCatalog.addonId);
             if (addon.id.isEmpty()) {
-                qWarning() << "[LibraryService] Hero catalog addon not found:" << heroCatalog.addonId;
+                // Removed warning log - unnecessary
                 continue;
             }
 
@@ -285,7 +252,7 @@ void LibraryService::loadHeroItems()
             connect(client, &AddonClient::error, this, &LibraryService::onHeroClientError);
             
             // Request catalog
-            qDebug() << "[LibraryService] Requesting hero catalog:" << heroCatalog.catalogType << heroCatalog.catalogId;
+            // Removed debug log - unnecessary
             client->getCatalog(heroCatalog.catalogType, heroCatalog.catalogId);
             
         } catch (...) {
@@ -338,6 +305,7 @@ void LibraryService::searchTmdb(const QString& query)
     }
     
     if (!m_addonRepository) {
+        ErrorService::report("Addon repository not available", "SERVICE_UNAVAILABLE", "LibraryService");
         emit error("Addon repository not available");
         return;
     }
@@ -368,6 +336,7 @@ void LibraryService::searchTmdb(const QString& query)
     }
     
     if (searchAddons.isEmpty()) {
+        ErrorService::report("No addons with search support found", "ADDON_ERROR", "LibraryService");
         emit error("No addons with search support found");
         return;
     }
@@ -406,31 +375,31 @@ void LibraryService::searchTmdb(const QString& query)
             if (catalogType == "series") {
                 sectionName = "TV Shows"; // Normalize series to TV Shows
             }
-            
-            AddonClient* client = new AddonClient(baseUrl, this);
-            
+        
+        AddonClient* client = new AddonClient(baseUrl, this);
+        
             connect(client, &AddonClient::searchResultsFetched, this, [this, catalogType, sectionName, addon](const QString& responseType, const QJsonArray& metas) {
-                Q_UNUSED(responseType);
-                QVariantList results;
-                for (const QJsonValue& value : metas) {
-                    if (value.isObject()) {
-                        QJsonObject meta = value.toObject();
+            Q_UNUSED(responseType);
+            QVariantList results;
+            for (const QJsonValue& value : metas) {
+                if (value.isObject()) {
+                    QJsonObject meta = value.toObject();
                         QVariantMap map = FrontendDataMapper::mapCatalogItemToVariantMap(meta, addon.id);
                         // Normalize type: "series" -> "tv"
                         QString normalizedType = (catalogType == "series") ? "tv" : catalogType;
-                        map["type"] = normalizedType;
-                        results.append(map);
-                    }
+                    map["type"] = normalizedType;
+                    results.append(map);
                 }
+            }
                 
                 qDebug() << "[LibraryService] Search results received for" << catalogType << "from" << addon.name << ":" << results.size() << "results";
-                
+    
                 // Emit section immediately if we have results
-                if (!results.isEmpty()) {
-                    QVariantMap section;
-                    section["name"] = sectionName;
+            if (!results.isEmpty()) {
+                QVariantMap section;
+                section["name"] = sectionName;
                     section["type"] = (catalogType == "series") ? "tv" : catalogType;
-                    section["items"] = results;
+                section["items"] = results;
                     section["addonId"] = addon.id;
                     
                     qDebug() << "[LibraryService] Emitting searchSectionLoaded for" << sectionName << "with" << results.size() << "items from addon:" << addon.name;
@@ -921,7 +890,6 @@ void LibraryService::finishLoadingCatalogs()
     
     if (m_isRawExport) {
         // Emit raw data
-        qDebug() << "[LibraryService] Emitting rawCatalogsLoaded signal with" << m_rawCatalogData.size() << "sections";
         emit rawCatalogsLoaded(m_rawCatalogData);
         m_isRawExport = false;
         m_rawCatalogData.clear();
@@ -929,8 +897,6 @@ void LibraryService::finishLoadingCatalogs()
         // Convert sections to QVariantList
         QVariantList sections;
         int totalItems = 0;
-        
-        qDebug() << "[LibraryService] Total catalog sections:" << m_catalogSections.size();
         
         for (const CatalogSection& section : m_catalogSections) {
             QVariantMap sectionMap;
@@ -941,15 +907,11 @@ void LibraryService::finishLoadingCatalogs()
             sections.append(sectionMap);
             totalItems += section.items.size();
             
-            qDebug() << "[LibraryService] Section:" << section.name << "(" << section.type << ") from addon:" << section.addonId 
-                     << "has" << section.items.size() << "items";
+            // Removed debug log - unnecessary
         }
         
         qDebug() << "[LibraryService] Total items across all sections:" << totalItems;
-        qDebug() << "[LibraryService] Emitting catalogsLoaded signal with" << sections.size() << "sections";
-        qDebug() << "[LibraryService] Signal receivers count:" << receivers(SIGNAL(catalogsLoaded(QVariantList)));
         emit catalogsLoaded(sections);
-        qDebug() << "[LibraryService] Signal emitted";
     }
     
     qDebug() << "[LibraryService] ✓ Catalog loading finished!";
@@ -994,10 +956,6 @@ void LibraryService::onHeroCatalogFetched(const QString& type, const QJsonArray&
     // Enrich when we have enough items OR all requests are complete
     if (m_pendingHeroRequests == 0 || m_heroItems.size() >= 10) {
         QVariantList itemsToEmit = m_heroItems.mid(0, 10); // Limit to 10 items
-        qCritical() << "[LibraryService] ========== STARTING HERO TMDB ENRICHMENT ==========";
-        qCritical() << "[LibraryService] Trigger condition: pendingRequests=" << m_pendingHeroRequests << ", totalItems=" << m_heroItems.size();
-        qCritical() << "[LibraryService] Starting TMDB enrichment for" << itemsToEmit.size() << "hero items";
-
         // Enrich hero items with TMDB data
         enrichHeroItemsWithTmdbData(itemsToEmit);
     }
@@ -1005,11 +963,9 @@ void LibraryService::onHeroCatalogFetched(const QString& type, const QJsonArray&
 
 void LibraryService::enrichHeroItemsWithTmdbData(const QVariantList& heroItems)
 {
-    qCritical() << "[LibraryService] ========== HERO ENRICHMENT START ==========";
-    qCritical() << "[LibraryService] Enriching" << heroItems.size() << "hero items with TMDB data";
+    // Removed verbose debug logs - unnecessary
 
     if (heroItems.isEmpty()) {
-        qCritical() << "[LibraryService] No hero items to enrich, emitting empty list";
         m_isLoadingHeroItems = false;
         emit heroItemsLoaded(QVariantList());
         return;
@@ -1043,22 +999,19 @@ void LibraryService::enrichHeroItemsWithTmdbData(const QVariantList& heroItems)
         if (tmdbId == 0) {
             QString imdbId = item["imdbId"].toString();
             if (!imdbId.isEmpty()) {
-                qWarning() << "[LibraryService] No TMDB ID for hero item, trying IMDB lookup:" << imdbId
-                           << "for item:" << item["title"].toString();
+            // Removed warning log - unnecessary
                 m_pendingHeroTmdbRequests++;
                 m_tmdbService->getTmdbIdFromImdb(imdbId);
                 continue;
             } else {
-                qWarning() << "[LibraryService] No TMDB or IMDB ID for hero item:" << item["title"].toString()
-                           << "- SKIPPING";
+                // Removed warning log - unnecessary
                 continue;
             }
         }
 
         // We have TMDB ID, fetch metadata
         QString type = item["type"].toString();
-        qWarning() << "[LibraryService] Fetching TMDB metadata for" << type << "ID:" << tmdbId
-                   << "Title:" << item["title"].toString();
+        // Removed warning log - unnecessary
 
         if (type == "movie") {
             m_pendingHeroTmdbRequests++;
@@ -1219,7 +1172,7 @@ void LibraryService::onTmdbIdFound(const QString& imdbId, int tmdbId)
     }
 
     if (!m_pendingContinueWatchingItems.contains(imdbId)) {
-        qWarning() << "[LibraryService] Received TMDB ID for unknown IMDB ID:" << imdbId;
+            // Removed warning log - unnecessary
         m_pendingTmdbRequests--;
         if (m_pendingTmdbRequests == 0) {
             finishContinueWatchingLoading();
@@ -1409,6 +1362,8 @@ void LibraryService::loadItemDetails(const QString& contentId, const QString& ty
     qDebug() << "[LibraryService] loadItemDetails called - contentId:" << contentId << "type:" << type << "addonId:" << addonId;
     
     if (contentId.isEmpty() || type.isEmpty()) {
+        ErrorService::report("Missing contentId or type", "MISSING_PARAMS", "LibraryService");
+        ErrorService::report("Missing contentId or type", "MISSING_PARAMS", "LibraryService");
         emit error("Missing contentId or type");
         return;
     }
@@ -1430,7 +1385,7 @@ void LibraryService::onMediaMetadataLoaded(const QVariantMap& details)
 
 void LibraryService::onMediaMetadataError(const QString& message)
 {
-    qWarning() << "[LibraryService] MediaMetadataService error:" << message;
+    ErrorService::report(message, "LIBRARY_ERROR", "LibraryService");
     emit error(message);
 }
 
@@ -1551,9 +1506,6 @@ void LibraryService::onWatchProgressLoaded(const QVariantMap& progress)
         }
     }
 
-    qDebug() << "[LibraryService] Smart play state:" << smartPlayState["buttonText"].toString()
-             << "action:" << smartPlayState["action"].toString();
-
     emit smartPlayStateLoaded(smartPlayState);
 }
 
@@ -1566,6 +1518,7 @@ void LibraryService::loadSimilarItems(int tmdbId, const QString& type)
     } else if (type == "series" || type == "tv") {
         m_tmdbService->getSimilarTv(tmdbId);
     } else {
+        ErrorService::report(QString("Unknown type for similar items: %1").arg(type), "INVALID_PARAMS", "LibraryService");
         emit error(QString("Unknown type for similar items: %1").arg(type));
     }
 }

@@ -1,4 +1,5 @@
 #include "tmdb_service.h"
+#include "error_service.h"
 #include "configuration.h"
 #include "tmdb_data_extractor.h"
 #include <QUrlQuery>

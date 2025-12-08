@@ -9,12 +9,15 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <memory>
+#include <QtQmlIntegration/qqmlintegration.h>
 #include "../models/trakt_models.h"
 #include "../services/trakt_core_service.h"
 
 class TraktScrobbleService : public QObject
 {
     Q_OBJECT
+    QML_ELEMENT
+    QML_SINGLETON
 
 public:
     explicit TraktScrobbleService(QObject* parent = nullptr);

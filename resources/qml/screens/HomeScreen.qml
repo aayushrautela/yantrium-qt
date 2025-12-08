@@ -13,10 +13,9 @@ Item {
     property LocalLibraryService localLibraryService: LocalLibraryService
     property TraktAuthService traktAuthService: TraktAuthService
     property StreamService streamService: StreamService
-    
-    property TraktWatchlistService traktWatchlistService: TraktWatchlistService {
-        id: traktWatchlistService
-    }
+    property TraktWatchlistService traktWatchlistService: TraktWatchlistService
+    property NavigationService navigationService: NavigationService
+    property LoggingService loggingService: LoggingService
 
     Connections {
         target: libraryService
@@ -32,6 +31,7 @@ Item {
     property var heroItems: []
     property int currentHeroIndex: 0
     
+    // Navigation is now handled via NavigationService - signals kept for backward compatibility
     signal itemClicked(string contentId, string type, string addonId)
 
     // Cycle hero carousel, wrapping around at ends
@@ -244,7 +244,8 @@ Item {
         if (type === "tv" || type === "series") type = "show"
         else type = "movie"
 
-        root.itemClicked(contentId, type, addonId)
+        navigationService.navigateToDetail(contentId, type, addonId || "")
+        root.itemClicked(contentId, type, addonId)  // Keep for backward compatibility
     }
 
     Rectangle {
@@ -313,15 +314,6 @@ Item {
                                 width: 48
                                 height: 48
                                 fillMode: Image.PreserveAspectFit
-                                visible: false
-                            }
-
-                            ColorOverlay {
-                                anchors.fill: leftArrowIcon1
-                                source: leftArrowIcon1
-                                color: "#ffffff"
-                                cached: true
-                                antialiasing: true
                             }
                         }
 
@@ -368,15 +360,6 @@ Item {
                                 width: 48
                                 height: 48
                                 fillMode: Image.PreserveAspectFit
-                                visible: false
-                            }
-
-                            ColorOverlay {
-                                anchors.fill: rightArrowIcon1
-                                source: rightArrowIcon1
-                                color: "#ffffff"
-                                cached: true
-                                antialiasing: true
                             }
                         }
 
@@ -407,7 +390,8 @@ Item {
                         item.itemHeight = 270 
                         item.model = continueWatchingModel
                         item.itemClicked.connect(function(contentId, type, addonId) {
-                            root.itemClicked(contentId, type, addonId)
+                            navigationService.navigateToDetail(contentId, type, addonId || "")
+        root.itemClicked(contentId, type, addonId)  // Keep for backward compatibility
                         })
                     }
                 }
@@ -584,15 +568,6 @@ Item {
                                         width: 48
                                         height: 48
                                         fillMode: Image.PreserveAspectFit
-                                        visible: false
-                                    }
-
-                                    ColorOverlay {
-                                        anchors.fill: leftArrowIcon2
-                                        source: leftArrowIcon2
-                                        color: "#ffffff"
-                                        cached: true
-                                        antialiasing: true
                                     }
                                 }
                                 
@@ -641,15 +616,6 @@ Item {
                                         width: 48
                                         height: 48
                                         fillMode: Image.PreserveAspectFit
-                                        visible: false
-                                    }
-
-                                    ColorOverlay {
-                                        anchors.fill: rightArrowIcon2
-                                        source: rightArrowIcon2
-                                        color: "#ffffff"
-                                        cached: true
-                                        antialiasing: true
                                     }
                                 }
                                 
@@ -700,7 +666,8 @@ Item {
         onStreamSelected: function(stream) {
             console.log("[HomeScreen] Stream selected:", JSON.stringify(stream))
             if (stream.url) {
-                root.playRequested(stream.url)
+                navigationService.navigateToPlayer(stream.url, {})
+                root.playRequested(stream.url)  // Keep for backward compatibility
             }
         }
     }

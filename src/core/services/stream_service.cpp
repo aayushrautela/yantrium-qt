@@ -1,4 +1,5 @@
 #include "stream_service.h"
+#include "error_service.h"
 #include "features/addons/logic/addon_repository.h"
 #include "features/addons/logic/addon_client.h"
 #include "features/addons/models/addon_config.h"
@@ -88,6 +89,7 @@ void StreamService::getStreamsForItem(const QVariantMap& itemData, const QString
     m_waitingForImdbId = false;
     
     if (!m_addonRepository || !m_tmdbDataService) {
+        ErrorService::report("Services not initialized", "SERVICE_UNAVAILABLE", "StreamService");
         emit error("Services not initialized");
         return;
     }
@@ -95,6 +97,7 @@ void StreamService::getStreamsForItem(const QVariantMap& itemData, const QString
     // Get IMDB ID
     QString imdbId = extractImdbId(itemData);
     if (imdbId.isEmpty() && !m_waitingForImdbId) {
+        ErrorService::report("Could not get IMDB ID for item", "ID_EXTRACTION_ERROR", "StreamService");
         emit error("Could not get IMDB ID for item");
         return;
     }
@@ -111,6 +114,7 @@ void StreamService::getStreamsForItem(const QVariantMap& itemData, const QString
 void StreamService::fetchStreamsFromAddons()
 {
     if (!m_addonRepository || !m_tmdbDataService) {
+        ErrorService::report("Services not initialized", "SERVICE_UNAVAILABLE", "StreamService");
         emit error("Services not initialized");
         return;
     }

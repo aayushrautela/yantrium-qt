@@ -1,4 +1,5 @@
 #include "trakt_auth_service.h"
+#include "error_service.h"
 #include "../database/database_manager.h"
 #include "../database/trakt_auth_dao.h"
 #include <QUrlQuery>
@@ -66,6 +67,7 @@ void TraktAuthService::checkAuthentication()
 void TraktAuthService::generateDeviceCode()
 {
     if (!isConfigured()) {
+        ErrorService::report("Trakt API not configured. Please set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET", "CONFIG_ERROR", "TraktAuthService");
         emit error("Trakt API not configured. Please set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET");
         return;
     }

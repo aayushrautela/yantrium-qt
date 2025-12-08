@@ -1,4 +1,5 @@
 #include "tmdb_data_service.h"
+#include "error_service.h"
 #include <QUrlQuery>
 #include <QNetworkReply>
 #include <QJsonDocument>
@@ -27,6 +28,7 @@ void TmdbDataService::onApiClientError(const TmdbErrorInfo& errorInfo)
     } else {
         errorMessage = errorInfo.message.isEmpty() ? "TMDB API error" : errorInfo.message;
     }
+    ErrorService::report(errorMessage, "TMDB_ERROR", "TmdbDataService");
     emit error(errorMessage);
 }
 

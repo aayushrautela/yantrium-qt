@@ -15,18 +15,6 @@
 #include <QQueue>
 #include <QTimer>
 
-struct CachedMetadata {
-    QJsonObject data;
-    QDateTime timestamp;
-    int ttlSeconds;
-    
-    CachedMetadata() : ttlSeconds(300) {} // Default 5 minutes
-    
-    bool isExpired() const {
-        return QDateTime::currentDateTime().secsTo(timestamp) < -ttlSeconds;
-    }
-};
-
 enum class TmdbError {
     None,
     NetworkError,
@@ -99,7 +87,10 @@ private:
     static constexpr int MIN_API_INTERVAL_MS = (WINDOW_SECONDS * 1000) / MAX_REQUESTS_PER_WINDOW; // 250ms
     
     QNetworkAccessManager* m_networkManager;
-    QMap<QString, CachedMetadata> m_cache;
+    
+    // Cache management (using CacheService)
+    QString getCacheKey(const QString& path, const QUrlQuery& query) const;
+    int getTtlForEndpoint(const QString& path) const;
     QQueue<QueuedRequest> m_requestQueue;
     QTimer* m_queueTimer;
     
@@ -111,12 +102,6 @@ private:
     // Rate limiting
     bool canMakeRequest();
     void recordRequest();
-    
-    // Caching
-    QString getCacheKey(const QString& path, const QUrlQuery& query) const;
-    QJsonObject getCachedResponse(const QString& cacheKey) const;
-    void cacheResponse(const QString& cacheKey, const QJsonObject& data, int ttlSeconds);
-    int getTtlForEndpoint(const QString& path) const;
     
     // Error handling
     TmdbErrorInfo createErrorInfo(QNetworkReply* reply, const QString& context) const;

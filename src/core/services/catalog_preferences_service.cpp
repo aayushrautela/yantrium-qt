@@ -1,4 +1,5 @@
 #include "catalog_preferences_service.h"
+#include "error_service.h"
 #include "core/database/database_manager.h"
 #include "features/addons/models/addon_manifest.h"
 #include <QDebug>
@@ -66,7 +67,9 @@ QVariantList CatalogPreferencesService::getAvailableCatalogs()
         }
     } catch (const std::exception& e) {
         qWarning() << "Error getting available catalogs:" << e.what();
-        emit error(QString("Failed to get catalogs: %1").arg(e.what()));
+        QString errorMsg = QString("Failed to get catalogs: %1").arg(e.what());
+        ErrorService::report(errorMsg, "DATABASE_ERROR", "CatalogPreferencesService");
+        emit error(errorMsg);
     }
     
     return catalogs;

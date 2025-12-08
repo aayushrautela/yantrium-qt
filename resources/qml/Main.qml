@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Yantrium.Components 1.0
+import Yantrium.Services 1.0
 
 ApplicationWindow {
     id: root
@@ -10,8 +11,7 @@ ApplicationWindow {
     title: "Yantrium Player"
     
     Component.onCompleted: {
-        console.log("[QML] ApplicationWindow completed")
-        console.log("[QML] Window size:", width, "x", height)
+        // Logging handled by services
     }
 
     Rectangle {
