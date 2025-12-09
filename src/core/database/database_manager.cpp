@@ -173,7 +173,9 @@ bool DatabaseManager::createTables()
                 watchedAt TEXT NOT NULL,
                 progress REAL DEFAULT 0,
                 tmdbId TEXT,
-                imdbId TEXT
+                imdbId TEXT,
+                tvdbId TEXT,
+                traktId TEXT
             ))"
         },
         {

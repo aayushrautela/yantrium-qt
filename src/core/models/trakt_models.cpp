@@ -10,6 +10,7 @@ TraktIds TraktIds::fromJson(const QJsonObject& json)
     obj.slug = json["slug"].toString();
     obj.imdb = json["imdb"].toString();
     obj.tmdb = json["tmdb"].toString();
+    obj.tvdb = json["tvdb"].toString();  // TVDB ID (for shows)
     return obj;
 }
 
@@ -20,6 +21,7 @@ QJsonObject TraktIds::toJson() const
     if (!slug.isEmpty())  obj["slug"] = slug;
     if (!imdb.isEmpty())  obj["imdb"] = imdb;
     if (!tmdb.isEmpty())  obj["tmdb"] = tmdb;
+    if (!tvdb.isEmpty())  obj["tvdb"] = tvdb;
     return obj;
 }
 

@@ -33,10 +33,12 @@ QVariantList CatalogPreferencesService::getAvailableCatalogs()
             
             // Process each catalog definition
             for (const CatalogDefinition& catalogDef : manifest.catalogs()) {
-                // Skip internal-only catalog types
-                // (You might want to add a helper method to check this)
-                
                 QString catalogId = catalogDef.id().isEmpty() ? QString() : catalogDef.id();
+                
+                // Skip search catalogs - they are only used for search functionality, not catalog management
+                if (catalogId == "search") {
+                    continue;
+                }
                 
                 // Get preference (or default to enabled)
                 auto preference = m_dao->getPreference(addon.id, catalogDef.type(), catalogId);

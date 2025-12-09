@@ -65,8 +65,8 @@ private:
     QMap<QString, QVariantList> m_seriesEpisodes; // contentId -> episodes list (for series)
     
     // Helper methods
-    AddonConfig findAiometadataAddon();
-    void fetchMetadataFromAddon(const QString& contentId, const QString& type);
+    AddonConfig findMetadataAddon();  // Prefers AIOMetadata, falls back to any addon with meta resource
+    void fetchMetadataFromAddon(const AddonConfig& addon, const QString& contentId, const QString& type);
 };
 
 #endif // MEDIA_METADATA_SERVICE_H

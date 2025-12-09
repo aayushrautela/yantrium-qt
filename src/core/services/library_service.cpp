@@ -465,16 +465,12 @@ void LibraryService::onSearchResultsFetched(const QString& type, const QJsonArra
         return;
     }
     
-    // Map type to section name
-    QString sectionName;
-    if (type == "movie") {
-        sectionName = "Movies";
-    } else if (type == "series") {
-        sectionName = "TV Shows";
-    } else if (type == "anime") {
-        sectionName = "Anime Series";
-    } else {
-        sectionName = type;
+    // Use the actual catalog name from the addon, or fall back to a capitalized type
+    // Don't hardcode section names - use what the addon provides
+    QString sectionName = type;
+    // Capitalize first letter
+    if (!sectionName.isEmpty()) {
+        sectionName[0] = sectionName[0].toUpper();
     }
     
     // Get base URL for image mapping
@@ -482,8 +478,8 @@ void LibraryService::onSearchResultsFetched(const QString& type, const QJsonArra
     
     // Create a section map for the search results
     QVariantMap section;
-    section["name"] = sectionName;
-    section["type"] = type;
+    section["name"] = sectionName;  // Use actual type-based name, not hardcoded
+    section["type"] = type;  // Keep the actual catalog type (movie, series, anime, etc.)
     section["addonId"] = addonId;
     
     // Convert QJsonArray to QVariantList using FrontendDataMapper
@@ -1254,18 +1250,24 @@ void LibraryService::onWatchProgressLoaded(const QVariantMap& progress)
 
 void LibraryService::getSmartPlayState(const QVariantMap& itemData)
 {
-    LoggingService::logWarning("LibraryService", "===== getSmartPlayState CALLED =====");
+    LoggingService::logDebug("LibraryService", "===== getSmartPlayState CALLED =====");
     
-    // Use TMDB ID as primary identifier
-    QString tmdbId = itemData["tmdbId"].toString();
-    if (tmdbId.isEmpty()) {
-        // Fallback to id if it's a number (likely TMDB ID)
-        QString idStr = itemData["id"].toString();
-        bool ok;
-        idStr.toInt(&ok);
-        if (ok) {
-            tmdbId = idStr;
-        }
+    // Extract any available ID from itemData (addons can provide any ID type)
+    QString idToMatch;
+    
+    // Try different ID fields in order of preference
+    if (!itemData["imdbId"].toString().isEmpty()) {
+        idToMatch = itemData["imdbId"].toString();
+    } else if (!itemData["tmdbId"].toString().isEmpty()) {
+        idToMatch = itemData["tmdbId"].toString();
+    } else if (!itemData["tvdbId"].toString().isEmpty()) {
+        idToMatch = itemData["tvdbId"].toString();
+    } else if (!itemData["traktId"].toString().isEmpty()) {
+        idToMatch = itemData["traktId"].toString();
+    } else if (!itemData["contentId"].toString().isEmpty()) {
+        idToMatch = itemData["contentId"].toString();
+    } else if (!itemData["id"].toString().isEmpty()) {
+        idToMatch = itemData["id"].toString();
     }
 
     QString type = itemData["type"].toString();
@@ -1280,15 +1282,15 @@ void LibraryService::getSmartPlayState(const QVariantMap& itemData)
         type = "movie";
     } else {
         // If type is empty or unknown, try to infer from itemData
-        LoggingService::logWarning("LibraryService", QString("getSmartPlayState: Unknown type: %1, defaulting to movie").arg(type));
+        LoggingService::logDebug("LibraryService", QString("getSmartPlayState: Unknown type: %1, defaulting to movie").arg(type));
         type = "movie";
     }
     
-    LoggingService::logWarning("LibraryService", QString("getSmartPlayState - tmdbId: %1 type: %2").arg(tmdbId, type));
-    LoggingService::logWarning("LibraryService", QString("getSmartPlayState - itemData keys: %1").arg(QStringList(itemData.keys()).join(", ")));
+    LoggingService::logDebug("LibraryService", QString("getSmartPlayState - idToMatch: %1 type: %2").arg(idToMatch, type));
+    LoggingService::logDebug("LibraryService", QString("getSmartPlayState - itemData keys: %1").arg(QStringList(itemData.keys()).join(", ")));
 
-    if (tmdbId.isEmpty()) {
-        LoggingService::logWarning("LibraryService", "getSmartPlayState: No TMDB ID found in itemData, cannot check watch history");
+    if (idToMatch.isEmpty()) {
+        LoggingService::logDebug("LibraryService", "getSmartPlayState: No ID found in itemData (checked imdbId, tmdbId, tvdbId, traktId, contentId, id), cannot check watch history");
         // Emit default state
         QVariantMap defaultState;
         defaultState["buttonText"] = "Play";
@@ -1299,32 +1301,20 @@ void LibraryService::getSmartPlayState(const QVariantMap& itemData)
         return;
     }
 
-    // Use contentId as key (fallback to id if contentId not available)
+    // Use contentId as key for pending items (fallback to idToMatch)
     QString contentId = itemData["contentId"].toString();
     if (contentId.isEmpty()) {
-        contentId = itemData["id"].toString();
-    }
-    
-    if (contentId.isEmpty()) {
-        LoggingService::logWarning("LibraryService", "getSmartPlayState: No contentId or id found in itemData, cannot check watch history");
-        // Emit default state
-        QVariantMap defaultState;
-        defaultState["buttonText"] = "Play";
-        defaultState["action"] = "play";
-        defaultState["season"] = -1;
-        defaultState["episode"] = -1;
-        emit smartPlayStateLoaded(defaultState);
-        return;
+        contentId = idToMatch;
     }
     
     // Store the item data for processing when progress is received (use contentId as key)
     m_pendingSmartPlayItems[contentId] = itemData;
-    LoggingService::logWarning("LibraryService", QString("Stored pending item for contentId: %1 pending keys: %2")
-        .arg(contentId).arg(QStringList(m_pendingSmartPlayItems.keys()).join(", ")));
+    LoggingService::logDebug("LibraryService", QString("Stored pending item for contentId: %1").arg(contentId));
 
-    // Get watch progress from local library service using contentId
-    LoggingService::logWarning("LibraryService", QString("Calling getWatchProgress with contentId: %1 type: %2").arg(contentId, type));
-    m_localLibraryService->getWatchProgress(contentId, type);
+    // Get watch progress from local library service using any ID
+    // LocalLibraryService will use getWatchHistoryByAnyId to match against all stored IDs
+    LoggingService::logDebug("LibraryService", QString("Calling getWatchProgress with id: %1 type: %2").arg(idToMatch, type));
+    m_localLibraryService->getWatchProgress(idToMatch, type);
 }
 
 

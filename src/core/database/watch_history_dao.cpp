@@ -14,8 +14,8 @@ bool WatchHistoryDao::insertWatchHistory(const WatchHistoryRecord& item)
     query.prepare(R"(
         INSERT INTO watch_history (
             contentId, type, title, year, posterUrl, season, episode,
-            episodeTitle, watchedAt, progress, tmdbId, imdbId
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            episodeTitle, watchedAt, progress, tmdbId, imdbId, tvdbId, traktId
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     )");
     
     query.addBindValue(item.contentId);
@@ -30,6 +30,8 @@ bool WatchHistoryDao::insertWatchHistory(const WatchHistoryRecord& item)
     query.addBindValue(item.progress);
     query.addBindValue(item.tmdbId.isEmpty() ? QVariant() : QVariant(item.tmdbId));
     query.addBindValue(item.imdbId.isEmpty() ? QVariant() : QVariant(item.imdbId));
+    query.addBindValue(item.tvdbId.isEmpty() ? QVariant() : QVariant(item.tvdbId));
+    query.addBindValue(item.traktId.isEmpty() ? QVariant() : QVariant(item.traktId));
     
     if (!query.exec()) {
         qWarning() << "Failed to insert watch history:" << query.lastError().text();
@@ -143,6 +145,35 @@ QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByTmdbId(std::string_v
     return items;
 }
 
+QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByAnyId(const QString& id, std::string_view type)
+{
+    QList<WatchHistoryRecord> items;
+    if (id.isEmpty()) {
+        return items;
+    }
+    
+    QSqlQuery query(getDatabase());
+    // Match against any ID field: tmdbId, imdbId, tvdbId, traktId, or contentId
+    query.prepare("SELECT * FROM watch_history WHERE type = ? AND (tmdbId = ? OR imdbId = ? OR tvdbId = ? OR traktId = ? OR contentId = ?) ORDER BY watchedAt DESC");
+    query.addBindValue(QString::fromUtf8(type.data(), static_cast<int>(type.size())));
+    query.addBindValue(id);
+    query.addBindValue(id);
+    query.addBindValue(id);
+    query.addBindValue(id);
+    query.addBindValue(id);
+
+    if (!query.exec()) {
+        qWarning() << "Failed to get watch history by any ID:" << query.lastError().text();
+        return items;
+    }
+
+    while (query.next()) {
+        items.append(recordFromQuery(query));
+    }
+
+    return items;
+}
+
 QList<WatchHistoryRecord> WatchHistoryDao::getWatchHistoryByContentAndDate(std::string_view contentId, std::string_view type, const QDateTime& watchedAt)
 {
     QList<WatchHistoryRecord> items;
@@ -208,6 +239,8 @@ WatchHistoryRecord WatchHistoryDao::recordFromQuery(const QSqlQuery& query) cons
     record.progress = query.value("progress").toDouble();
     record.tmdbId = query.value("tmdbId").toString();
     record.imdbId = query.value("imdbId").toString();
+    record.tvdbId = query.value("tvdbId").toString();
+    record.traktId = query.value("traktId").toString();
     return record;
 }
 

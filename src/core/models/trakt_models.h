@@ -18,6 +18,7 @@ struct TraktIds
     QString slug;
     QString imdb;
     QString tmdb;
+    QString tvdb;  // TVDB ID for shows
 
     static TraktIds fromJson(const QJsonObject& json);
     QJsonObject toJson() const;

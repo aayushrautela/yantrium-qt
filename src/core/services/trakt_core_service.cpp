@@ -679,12 +679,17 @@ int TraktCoreService::processAndStoreWatchedMovies(const QVariantList& movies)
         
         // Convert trakt data to watch history record
         WatchHistoryRecord record;
-        record.contentId = QString::number(ids["trakt"].toInt());
+        record.contentId = ids["imdb"].toString();  // Prefer IMDb as contentId (more universal)
+        if (record.contentId.isEmpty()) {
+            record.contentId = ids.contains("tmdb") ? QString::number(ids["tmdb"].toInt()) : QString::number(ids["trakt"].toInt());
+        }
         record.type = "movie";
         record.title = movie["title"].toString();
         record.year = movie["year"].toInt();
         record.imdbId = ids["imdb"].toString();
         record.tmdbId = ids.contains("tmdb") ? QString::number(ids["tmdb"].toInt()) : QString();
+        record.traktId = ids.contains("trakt") ? QString::number(ids["trakt"].toInt()) : QString();
+        record.tvdbId = QString();  // Movies don't have TVDB ID
         record.watchedAt = watchedAt;
         record.progress = 1.0; // trakt watched items are 100% watched
         record.season = 0;
@@ -755,7 +760,9 @@ int TraktCoreService::processAndStoreWatchedShows(const QVariantList& shows)
             int showYear = showObj["year"].toInt();
             QString showImdbId = showIds["imdb"].toString();
             QString showTmdbId = showIds.contains("tmdb") ? QString::number(showIds["tmdb"].toInt()) : QString();
-            QString showContentId = QString::number(showIds["trakt"].toInt());
+            QString showTvdbId = showIds.contains("tvdb") ? QString::number(showIds["tvdb"].toInt()) : QString();
+            QString showTraktId = showIds.contains("trakt") ? QString::number(showIds["trakt"].toInt()) : QString();
+            QString showContentId = showImdbId.isEmpty() ? (showTmdbId.isEmpty() ? showTraktId : showTmdbId) : showImdbId;
             
             // Process seasons and episodes
             QVariantList seasons = showData["seasons"].toList();
@@ -800,6 +807,8 @@ int TraktCoreService::processAndStoreWatchedShows(const QVariantList& shows)
                 record.year = showYear;
                 record.imdbId = showImdbId;
                 record.tmdbId = showTmdbId;
+                record.tvdbId = showTvdbId;
+                record.traktId = showTraktId;
                 record.watchedAt = epWatchedAt;
                 record.progress = 1.0; // trakt watched episodes are 100% watched
                 record.season = seasonNum;
@@ -849,7 +858,9 @@ int TraktCoreService::processAndStoreWatchedShows(const QVariantList& shows)
         int showYear = show["year"].toInt();
         QString showImdbId = showIds["imdb"].toString();
         QString showTmdbId = showIds.contains("tmdb") ? QString::number(showIds["tmdb"].toInt()) : QString();
-        QString showContentId = QString::number(showIds["trakt"].toInt());
+        QString showTvdbId = showIds.contains("tvdb") ? QString::number(showIds["tvdb"].toInt()) : QString();
+        QString showTraktId = showIds.contains("trakt") ? QString::number(showIds["trakt"].toInt()) : QString();
+        QString showContentId = showImdbId.isEmpty() ? (showTmdbId.isEmpty() ? showTraktId : showTmdbId) : showImdbId;
         
         int seasonNum = episode["season"].toInt();
         int episodeNum = episode["number"].toInt();
@@ -863,6 +874,8 @@ int TraktCoreService::processAndStoreWatchedShows(const QVariantList& shows)
         record.year = showYear;
         record.imdbId = showImdbId;
         record.tmdbId = showTmdbId;
+        record.tvdbId = showTvdbId;
+        record.traktId = showTraktId;
         record.watchedAt = watchedAt;
         record.progress = 1.0; // trakt watched episodes are 100% watched
         record.season = seasonNum;

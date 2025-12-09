@@ -16,7 +16,7 @@ Item {
     property bool isLoading: false
     property string currentQuery: ""
     property string searchQuery: ""
-    property string selectedFilter: "All"  // Filter by catalog type: "All", "Movies", "TV Shows", "Anime Series", "Anime Movies"
+    property string selectedFilter: "All"  // Filter by catalog type - dynamically determined
 
     // Store sections (like HomeScreen data flow)
     ListModel { 
@@ -27,52 +27,115 @@ Item {
     ListModel {
         id: combinedResultsModel
     }
-
-    // Map section names to filter types
+    
+    // Dynamically collect available filter types from sections
+    function getAvailableFilterTypes() {
+        var types = new Set()
+        for (var i = 0; i < searchSectionsModel.count; i++) {
+            var section = searchSectionsModel.get(i)
+            var sectionName = section.sectionTitle || ""
+            if (sectionName && sectionName !== "All") {
+                types.add(sectionName)
+            }
+        }
+        var typeArray = Array.from(types)
+        typeArray.sort()  // Sort alphabetically for consistent ordering
+        return ["All"].concat(typeArray)  // Always have "All" first
+    }
+    
+    // Use section name directly as filter type (no hardcoded mapping)
     function getFilterType(sectionName) {
-        if (sectionName === "Movies") return "Movies"
-        if (sectionName === "TV Shows") return "TV Shows"
-        if (sectionName === "Anime Series") return "Anime Series"
-        if (sectionName === "Anime Movies") return "Anime Movies"
-        return "All"
+        return sectionName || "All"
     }
 
     // Update combined model from all sections
     function updateCombinedModel() {
         combinedResultsModel.clear()
         
-        for (var i = 0; i < searchSectionsModel.count; i++) {
-            var section = searchSectionsModel.get(i)
-            var sectionTitle = section.sectionTitle || ""
-            var itemsModel = section.itemsModel
+        if (selectedFilter === "All") {
+            // For "All" filter, group items by section name and add in section order
+            var itemsBySection = {}
+            var sectionOrder = []  // Preserve order of sections as they appear
             
-            if (!itemsModel) continue
-            
-            var filterType = getFilterType(sectionTitle)
-            
-            // Apply filter
-            if (selectedFilter !== "All" && selectedFilter !== filterType) {
-                continue
+            // First, collect all items grouped by section
+            for (var i = 0; i < searchSectionsModel.count; i++) {
+                var section = searchSectionsModel.get(i)
+                var sectionTitle = section.sectionTitle || ""
+                var itemsModel = section.itemsModel
+                
+                if (!itemsModel) continue
+                
+                // Use section name directly (no hardcoded mapping)
+                var sectionKey = sectionTitle || "Unknown"
+                
+                // Track section order
+                if (!itemsBySection[sectionKey]) {
+                    itemsBySection[sectionKey] = []
+                    sectionOrder.push(sectionKey)
+                }
+                
+                // Limit items per catalog (max 15 per catalog)
+                var maxItems = 15
+                
+                // Add items from this section
+                for (var j = 0; j < Math.min(itemsModel.count, maxItems); j++) {
+                    var item = itemsModel.get(j)
+                    itemsBySection[sectionKey].push({
+                        posterUrl: item.posterUrl || item.poster || "",
+                        title: item.title || item.name || "Unknown",
+                        year: item.year || 0,
+                        rating: item.rating || item.imdbRating || "",
+                        id: item.id || item.imdbId || item.tmdbId || "",
+                        imdbId: item.imdbId || "",
+                        tmdbId: item.tmdbId || "",
+                        type: item.type || "",
+                        addonId: item.addonId || section.addonId || "",
+                        filterType: sectionKey
+                    })
+                }
             }
             
-            // Limit items per catalog when "All" is selected (max 15 per catalog)
-            var maxItems = (selectedFilter === "All") ? 15 : itemsModel.count
-            
-            // Add items from this section (limited if "All" filter)
-            for (var j = 0; j < Math.min(itemsModel.count, maxItems); j++) {
-                var item = itemsModel.get(j)
-                combinedResultsModel.append({
-                    posterUrl: item.posterUrl || item.poster || "",
-                    title: item.title || item.name || "Unknown",
-                    year: item.year || 0,
-                    rating: item.rating || item.imdbRating || "",
-                    id: item.id || item.imdbId || item.tmdbId || "",
-                    imdbId: item.imdbId || "",
-                    tmdbId: item.tmdbId || "",
-                    type: item.type || "",
-                    addonId: item.addonId || section.addonId || "",
-                    filterType: filterType
-                })
+            // Add items in section order (as they appear from addons)
+            for (var k = 0; k < sectionOrder.length; k++) {
+                var sectionKey = sectionOrder[k]
+                if (itemsBySection[sectionKey]) {
+                    for (var l = 0; l < itemsBySection[sectionKey].length; l++) {
+                        combinedResultsModel.append(itemsBySection[sectionKey][l])
+                    }
+                }
+            }
+        } else {
+            // For specific filter, add items in the order they appear
+            for (var i = 0; i < searchSectionsModel.count; i++) {
+                var section = searchSectionsModel.get(i)
+                var sectionTitle = section.sectionTitle || ""
+                var itemsModel = section.itemsModel
+                
+                if (!itemsModel) continue
+                
+                var filterType = getFilterType(sectionTitle)
+                
+                // Apply filter
+                if (selectedFilter !== filterType) {
+                    continue
+                }
+                
+                // Add all items for this filter
+                for (var j = 0; j < itemsModel.count; j++) {
+                    var item = itemsModel.get(j)
+                    combinedResultsModel.append({
+                        posterUrl: item.posterUrl || item.poster || "",
+                        title: item.title || item.name || "Unknown",
+                        year: item.year || 0,
+                        rating: item.rating || item.imdbRating || "",
+                        id: item.id || item.imdbId || item.tmdbId || "",
+                        imdbId: item.imdbId || "",
+                        tmdbId: item.tmdbId || "",
+                        type: item.type || "",
+                        addonId: item.addonId || section.addonId || "",
+                        filterType: filterType
+                    })
+                }
             }
         }
     }
@@ -117,13 +180,13 @@ Item {
                     }
                 }
 
-                // Filter Buttons (like catalog filtering)
+                // Filter Buttons (dynamically generated from available sections)
                 Row {
                     spacing: 12
                     visible: searchSectionsModel.count > 0
 
                     Repeater {
-                        model: ["All", "Movies", "TV Shows", "Anime Series", "Anime Movies"]
+                        model: getAvailableFilterTypes()
                         delegate: Rectangle {
                             width: filterText.width + 24
                             height: 36

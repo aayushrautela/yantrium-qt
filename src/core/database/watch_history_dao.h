@@ -26,6 +26,8 @@ struct WatchHistoryRecord
     double progress = 0.0;  // 0-100 for episodes
     QString tmdbId;
     QString imdbId;
+    QString tvdbId;  // TVDB ID (for shows)
+    QString traktId;  // Trakt ID
 
     // Default constructor with modern initialization
     WatchHistoryRecord() = default;
@@ -76,6 +78,7 @@ public:
     [[nodiscard]] QList<WatchHistoryRecord> getWatchHistoryByContentId(std::string_view contentId);
     [[nodiscard]] QList<WatchHistoryRecord> getWatchHistoryForContent(std::string_view contentId, std::string_view type);
     [[nodiscard]] QList<WatchHistoryRecord> getWatchHistoryByTmdbId(std::string_view tmdbId, std::string_view type);
+    [[nodiscard]] QList<WatchHistoryRecord> getWatchHistoryByAnyId(const QString& id, std::string_view type);
     [[nodiscard]] QList<WatchHistoryRecord> getWatchHistoryByContentAndDate(std::string_view contentId, std::string_view type, const QDateTime& watchedAt);
     [[nodiscard]] bool clearWatchHistory();
     [[nodiscard]] bool removeWatchHistory(std::string_view contentId);

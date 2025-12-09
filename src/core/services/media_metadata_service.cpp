@@ -54,19 +54,18 @@ void MediaMetadataService::getCompleteMetadata(const QString& contentId, const Q
         return;
     }
     
-    // Try to fetch from AIOMetadata addon first
+    // Try to fetch from addon - prefer AIOMetadata if available, otherwise use any addon with meta resource
     if (m_addonRepository) {
-        AddonConfig aiometadataAddon = findAiometadataAddon();
-        if (!aiometadataAddon.id.isEmpty()) {
-            // Removed debug log - unnecessary
-            fetchMetadataFromAddon(contentId, type);
+        AddonConfig metadataAddon = findMetadataAddon();
+        if (!metadataAddon.id.isEmpty()) {
+            fetchMetadataFromAddon(metadataAddon, contentId, type);
             return;
         }
     }
     
-    // If AIOMetadata not available, emit error
-    LoggingService::report("AIOMetadata addon not installed or not enabled", "ADDON_ERROR", "MediaMetadataService");
-    emit error("AIOMetadata addon not installed or not enabled");
+    // If no metadata addon available, emit error
+    LoggingService::report("No metadata addon available (addon with 'meta' resource not installed or not enabled)", "ADDON_ERROR", "MediaMetadataService");
+    emit error("No metadata addon available");
 }
 
 void MediaMetadataService::onOmdbRatingsFetched(const QString& imdbId, const QJsonObject& data)
@@ -161,13 +160,16 @@ QVariantList MediaMetadataService::getSeriesEpisodes(const QString& contentId, i
 }
 
 
-AddonConfig MediaMetadataService::findAiometadataAddon()
+AddonConfig MediaMetadataService::findMetadataAddon()
 {
     if (!m_addonRepository) {
         return AddonConfig();
     }
     
     QList<AddonConfig> enabledAddons = m_addonRepository->getEnabledAddons();
+    AddonConfig aiometadataAddon;  // Prefer AIOMetadata if available
+    AddonConfig fallbackAddon;     // Fall back to any addon with meta resource
+    
     for (const AddonConfig& addon : enabledAddons) {
         AddonManifest manifest = m_addonRepository->getManifest(addon);
         
@@ -180,21 +182,23 @@ AddonConfig MediaMetadataService::findAiometadataAddon()
         QString idLower = addon.id.toLower();
         QString nameLower = addon.name.toLower();
         if (idLower.contains("aiometadata") || nameLower.contains("aiometadata")) {
-            // Removed debug log - unnecessary
-            return addon;
+            aiometadataAddon = addon;
+            break;  // Found AIOMetadata, prefer it
+        } else if (fallbackAddon.id.isEmpty()) {
+            // Store first addon with meta resource as fallback
+            fallbackAddon = addon;
         }
     }
     
-    // Removed debug log - unnecessary
-    return AddonConfig();
+    // Return AIOMetadata if available, otherwise fallback to any metadata addon
+    return !aiometadataAddon.id.isEmpty() ? aiometadataAddon : fallbackAddon;
 }
 
-void MediaMetadataService::fetchMetadataFromAddon(const QString& contentId, const QString& type)
+void MediaMetadataService::fetchMetadataFromAddon(const AddonConfig& addon, const QString& contentId, const QString& type)
 {
-    AddonConfig addon = findAiometadataAddon();
     if (addon.id.isEmpty()) {
-        LoggingService::report("AIOMetadata addon not found", "ADDON_ERROR", "MediaMetadataService");
-        emit error("AIOMetadata addon not found");
+        LoggingService::report("Metadata addon not found", "ADDON_ERROR", "MediaMetadataService");
+        emit error("Metadata addon not found");
         return;
     }
     
@@ -252,7 +256,7 @@ void MediaMetadataService::onAddonMetaFetched(const QString& type, const QString
     QString normalizedType = (type == "series") ? "tv" : type;
     
     // Extract the "meta" object from the response
-    // AIOMetadata wraps metadata in a "meta" key: {"meta": {...}}
+    // Some addons wrap metadata in a "meta" key: {"meta": {...}}
     QJsonObject meta;
     if (response.contains("meta") && response["meta"].isObject()) {
         meta = response["meta"].toObject();
@@ -274,7 +278,7 @@ void MediaMetadataService::onAddonMetaFetched(const QString& type, const QString
         return;
     }
     
-    // Extract episodes from videos array for series (AIOMetadata stores episodes in videos)
+    // Extract episodes from videos array for series (some addons store episodes in videos)
     if (normalizedType == "tv" || normalizedType == "series") {
         QVariantList episodes;
         if (meta.contains("videos") && meta["videos"].isArray()) {
@@ -337,7 +341,7 @@ void MediaMetadataService::onAddonMetaError(const QString& errorMessage)
         m_pendingDetailsByContentId.remove(cacheKey);
     }
     
-    QString errorMsg = QString("Failed to fetch metadata from AIOMetadata: %1").arg(errorMessage);
+    QString errorMsg = QString("Failed to fetch metadata from addon: %1").arg(errorMessage);
     LoggingService::report(errorMsg, "ADDON_ERROR", "MediaMetadataService");
     emit error(errorMsg);
     

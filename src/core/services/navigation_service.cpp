@@ -79,8 +79,22 @@ void NavigationService::navigateToIndex(int screenIndex)
         return;
     }
 
-    if (screenIndex == m_currentScreen) {
+    // Special case: Allow navigating to Detail from Detail (different content items)
+    // For Detail screen, we should still push to history even if we're already on Detail
+    // This allows proper back navigation when viewing different detail items
+    if (screenIndex == m_currentScreen && screenIndex != Detail) {
         LoggingService::logDebug("NavigationService", QString("Already on screen: %1").arg(screenIndex));
+        return;
+    }
+    
+    // If navigating to Detail from Detail, push current Detail to history
+    // This allows going back to the previous detail item
+    if (screenIndex == Detail && m_currentScreen == Detail) {
+        LoggingService::logDebug("NavigationService", "Navigating to different Detail item - pushing current Detail to history");
+        pushToHistory(m_currentScreen);
+        // Don't change m_currentScreen - we're still on Detail, just different content
+        emit screenChangeRequested(screenIndex);
+        emit screenRequested(screenIndex);
         return;
     }
 
@@ -130,12 +144,19 @@ int NavigationService::popFromHistory()
         return -1;
     }
 
-    // Remove current screen from history
-    if (!m_navigationHistory.isEmpty()) {
+    // Remove the last entry from history (which should be the screen we came from)
+    // The history structure is: [previous screens..., screen we came from]
+    // When we navigate to a screen, we push the previous screen to history
+    // So to go back, we pop the last entry which is where we came from
+    m_navigationHistory.removeLast();
+
+    // If the popped screen is the same as current, keep popping until we find a different one
+    // This handles cases where the same screen was added to history multiple times
+    while (!m_navigationHistory.isEmpty() && m_navigationHistory.last() == m_currentScreen) {
         m_navigationHistory.removeLast();
     }
 
-    // Return the previous screen (now the last in history)
+    // Return the previous screen (now the last in history, or Home if empty)
     if (m_navigationHistory.isEmpty()) {
         return Home; // Default to home if history is empty
     }

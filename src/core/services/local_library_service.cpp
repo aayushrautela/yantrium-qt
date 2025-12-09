@@ -150,18 +150,32 @@ void LocalLibraryService::getWatchProgress(const QString& contentId, const QStri
     progress["lastWatchedEpisode"] = -1;
     progress["lastWatchedAt"] = "";
     progress["isWatched"] = false;
-
-    QList<WatchHistoryRecord> records = m_historyDao->getWatchHistoryForContent(std::string_view(contentId.toUtf8().constData(), contentId.toUtf8().size()), std::string_view(type.toUtf8().constData(), type.toUtf8().size()));
+    
+    if (contentId.isEmpty()) {
+        qDebug() << "[LocalLibraryService] Empty contentId, no watch history";
+        emit watchProgressLoaded(progress);
+        return;
+    }
+    
+    // Normalize type for database lookup - database uses "tv", not "series"
+    QString dbType = type;
+    if (type == "series") {
+        dbType = "tv";
+    }
+    
+    // Use getWatchHistoryByAnyId to match against any stored ID (tmdb, imdb, tvdb, trakt, contentId)
+    QList<WatchHistoryRecord> records = m_historyDao->getWatchHistoryByAnyId(contentId, std::string_view(dbType.toUtf8().constData(), dbType.toUtf8().size()));
+    qDebug() << "[LocalLibraryService] Database query result - Found" << records.size() << "watch history records for ID" << contentId << "type" << dbType;
 
     if (records.isEmpty()) {
-        qDebug() << "[LocalLibraryService] No watch history found for:" << contentId;
+        qDebug() << "[LocalLibraryService] No watch history found for ID:" << contentId << "type:" << dbType;
         emit watchProgressLoaded(progress);
         return;
     }
 
     progress["hasProgress"] = true;
 
-    if (type == "movie") {
+    if (dbType == "movie") {
         // For movies, find the most recent watch record
         WatchHistoryRecord latestRecord = records.first();
         for (const WatchHistoryRecord& record : records) {
@@ -176,7 +190,7 @@ void LocalLibraryService::getWatchProgress(const QString& contentId, const QStri
 
         qDebug() << "[LocalLibraryService] Movie progress:" << latestRecord.progress << "watched:" << progress["isWatched"];
 
-    } else if (type == "tv" || type == "show") {
+    } else if (dbType == "tv" || type == "show") {
         // For TV shows, analyze episode progress
         int maxSeason = -1;
         int maxEpisode = -1;
@@ -281,7 +295,7 @@ void LocalLibraryService::getWatchProgressByTmdbId(const QString& tmdbId, const 
 
         qDebug() << "[LocalLibraryService] Movie progress:" << latestRecord.progress << "watched:" << progress["isWatched"];
 
-    } else if (type == "tv" || type == "show") {
+    } else if (dbType == "tv" || type == "show") {
         // For TV shows, analyze episode progress
         int maxSeason = -1;
         int maxEpisode = -1;
