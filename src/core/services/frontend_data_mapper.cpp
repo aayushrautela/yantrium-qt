@@ -795,8 +795,9 @@ QVariantMap FrontendDataMapper::mapCatalogItemToVariantMap(const QJsonObject& it
     if (item.contains("imdb_id")) {
         QString imdbId = item["imdb_id"].toString();
         map["imdbId"] = imdbId;
-        // If ID is not set or is tmdb format, use imdb_id as the main ID
-        if (map["id"].toString().isEmpty() || map["id"].toString().startsWith("tmdb:")) {
+        // Only use imdb_id as main ID if no ID is set at all
+        // Preserve original ID format (e.g., "tmdb:123") as-is for Stremio compatibility
+        if (map["id"].toString().isEmpty()) {
             if (!imdbId.isEmpty()) {
                 map["id"] = imdbId;
             }

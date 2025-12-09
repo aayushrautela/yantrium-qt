@@ -521,72 +521,44 @@ Item {
                                 visible: root.isEpisodeMode && text !== ""
                             }
 
-                            // Movie/Show mode: Release Date • Content Rating • Genres
-                            Text {
-                                text: root.itemData.releaseDate || root.itemData.firstAirDate || ""
-                                color: "#ffffff"
-                                font.pixelSize: 18
-                                visible: !root.isEpisodeMode && text !== ""
-                            }
-
-                            Text {
-                                text: "•"
-                                color: "#ffffff"
-                                font.pixelSize: 18
-                                visible: !root.isEpisodeMode && (root.itemData.releaseDate || root.itemData.firstAirDate) !== "" &&
-                                         (root.itemData.contentRating !== "" || (root.itemData.runtimeFormatted !== "" && root.itemData.type === "movie") || (root.itemData.genres || []).length > 0)
-                            }
-
-                            Text {
-                                text: root.itemData.contentRating || ""
-                                color: "#ffffff"
-                                font.pixelSize: 18
-                                visible: !root.isEpisodeMode && text !== ""
-                            }
-
-                            Text {
-                                text: "•"
-                                color: "#ffffff"
-                                font.pixelSize: 18
-                                visible: !root.isEpisodeMode && root.itemData.contentRating !== "" && 
-                                         ((root.itemData.runtimeFormatted !== "" && root.itemData.type === "movie") || (root.itemData.genres || []).length > 0)
-                            }
-
-                            Text {
-                                text: root.itemData.runtimeFormatted || ""
-                                color: "#ffffff"
-                                font.pixelSize: 18
-                                visible: !root.isEpisodeMode && root.itemData.type === "movie" && text !== ""
-                            }
-
-                            Text {
-                                text: "•"
-                                color: "#ffffff"
-                                font.pixelSize: 18
-                                visible: !root.isEpisodeMode && root.itemData.type === "movie" && root.itemData.runtimeFormatted !== "" && (root.itemData.genres || []).length > 0
-                            }
-
+                            // Movie/Show mode: Build metadata with dots only between non-empty items
                             Repeater {
-                                id: genresRepeater
                                 model: {
-                                    if (!root.isEpisodeMode) {
-                                        var genres = root.itemData.genres || []
+                                    if (root.isEpisodeMode) return []
+                                    
+                                    var parts = []
+                                    var date = root.itemData.releaseDate || root.itemData.firstAirDate || ""
+                                    var rating = root.itemData.contentRating || ""
+                                    var runtime = (root.itemData.type === "movie") ? (root.itemData.runtimeFormatted || "") : ""
+                                    var genres = root.itemData.genres || []
+                                    
+                                    if (date !== "") parts.push({text: date, isDot: false})
+                                    if (rating !== "") parts.push({text: rating, isDot: false})
+                                    if (runtime !== "") parts.push({text: runtime, isDot: false})
+                                    if (genres.length > 0) {
                                         var limitedGenres = []
-                                        var maxGenres = Math.min(3, genres.length)
-                                        for (var i = 0; i < maxGenres; i++) {
-                                            if (genres[i]) {
-                                                limitedGenres.push(genres[i])
-                                            }
+                                        for (var i = 0; i < Math.min(3, genres.length); i++) {
+                                            if (genres[i]) limitedGenres.push(genres[i])
                                         }
-                                        return limitedGenres
+                                        if (limitedGenres.length > 0) {
+                                            parts.push({text: limitedGenres.join(" "), isDot: false})
+                                        }
                                     }
-                                    return []
+                                    
+                                    // Insert dots between items
+                                    var result = []
+                                    for (var j = 0; j < parts.length; j++) {
+                                        if (j > 0) result.push({text: "•", isDot: true})
+                                        result.push(parts[j])
+                                    }
+                                    return result
                                 }
+                                
                                 Text {
-                                    text: modelData + (index < genresRepeater.count - 1 ? " " : "")
+                                    text: modelData.text || ""
                                     color: "#ffffff"
                                     font.pixelSize: 18
-                                    visible: modelData !== ""
+                                    visible: text !== ""
                                 }
                             }
                         }

@@ -23,7 +23,7 @@ set(CMAKE_AUTOUIC ON)
 # 2. Find Qt6 Packages
 # ADDED: 'Svg' (Fixes "Unsupported image format" for icons)
 # CHANGED: 'Qt5Compat' -> 'Core5Compat' (Correct CMake name)
-find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql Core5Compat Svg)
+find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql Core5Compat Svg HttpServer)
 
 # 3. Add Source Files
 set(PROJECT_SOURCES
@@ -115,6 +115,10 @@ set(PROJECT_SOURCES
     src/core/services/logging_service.h
     src/core/services/cache_service.cpp
     src/core/services/cache_service.h
+    src/core/services/torrent_service.cpp
+    src/core/services/torrent_service.h
+    src/core/services/torrent_stream_server.cpp
+    src/core/services/torrent_stream_server.h
     resources/qml.qrc
 )
 
@@ -162,6 +166,7 @@ target_link_libraries(Yantrium PRIVATE
     Qt6::Sql
     Qt6::Core5Compat
     Qt6::Svg
+    Qt6::HttpServer
 )
 
 # =========================================================
@@ -191,6 +196,74 @@ elseif(UNIX AND NOT APPLE)
         BUILD_RPATH "\$ORIGIN"
         INSTALL_RPATH "\$ORIGIN"
     )
+endif()
+
+# =========================================================
+# 7. LIBTORRENT INTEGRATION
+# =========================================================
+set(LIBTORRENT_DIR "${CMAKE_SOURCE_DIR}/vendor/libtorrent")
+
+if(WIN32)
+    # Check if libtorrent is available in vendor directory
+    if(EXISTS "${LIBTORRENT_DIR}/lib/x64/libtorrent-rasterbar.lib" OR 
+       EXISTS "${LIBTORRENT_DIR}/lib/x64/torrent-rasterbar.lib")
+        message(STATUS "Found bundled libtorrent for Windows")
+        target_include_directories(Yantrium PRIVATE ${LIBTORRENT_DIR}/include)
+        
+        # Find the actual library file
+        file(GLOB LIBTORRENT_LIBS "${LIBTORRENT_DIR}/lib/x64/*torrent*.lib")
+        if(LIBTORRENT_LIBS)
+            target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIBS})
+            target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
+            
+            # Copy libtorrent DLLs to build directory
+            add_custom_command(TARGET Yantrium POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${LIBTORRENT_DIR}/bin/x64/ $<TARGET_FILE_DIR:Yantrium>)
+        endif()
+    else()
+        message(STATUS "libtorrent not found in vendor directory - torrent support disabled")
+    endif()
+    
+elseif(UNIX AND NOT APPLE)
+    # Check if libtorrent is available in vendor directory
+    file(GLOB LIBTORRENT_SO "${LIBTORRENT_DIR}/lib/amd64/libtorrent-rasterbar.so*")
+    if(LIBTORRENT_SO)
+        message(STATUS "Found bundled libtorrent for Linux")
+        target_include_directories(Yantrium PRIVATE ${LIBTORRENT_DIR}/include)
+        
+        # Link against the main .so file (not versioned)
+        find_file(LIBTORRENT_MAIN_SO 
+            NAMES libtorrent-rasterbar.so
+            PATHS ${LIBTORRENT_DIR}/lib/amd64
+            NO_DEFAULT_PATH
+        )
+        if(LIBTORRENT_MAIN_SO)
+            target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_MAIN_SO})
+            target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
+            
+            # Copy all libtorrent .so files to build directory
+            add_custom_command(TARGET Yantrium POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${LIBTORRENT_DIR}/lib/amd64/ $<TARGET_FILE_DIR:Yantrium>)
+        else()
+            # Fallback: link against first found .so file
+            list(GET LIBTORRENT_SO 0 FIRST_SO)
+            target_link_libraries(Yantrium PRIVATE ${FIRST_SO})
+            target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
+            
+            add_custom_command(TARGET Yantrium POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${LIBTORRENT_DIR}/lib/amd64/ $<TARGET_FILE_DIR:Yantrium>)
+        endif()
+        
+        set_target_properties(Yantrium PROPERTIES
+            BUILD_RPATH "\$ORIGIN"
+            INSTALL_RPATH "\$ORIGIN"
+        )
+    else()
+        message(STATUS "libtorrent not found in vendor directory - torrent support disabled")
+    endif()
 endif()
 
 qt_import_qml_plugins(Yantrium)

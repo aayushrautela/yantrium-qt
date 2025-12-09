@@ -457,18 +457,8 @@ Item {
                                             var addonId = model.addonId || sectionColumn.sectionAddonId || ""
                                             var contentId = ""
                                             
-                                            // Prefer TMDB ID (1 API call) -> IMDB ID (Canonical) -> Generic ID
-                                            if (model.tmdbId && model.tmdbId !== "") {
-                                                contentId = model.tmdbId
-                                            }
-                                            else if (model.imdbId && model.imdbId.startsWith("tt")) {
-                                                contentId = model.imdbId
-                                            }
-                                            else if (model.id && model.id !== "") {
-                                                if (model.id.startsWith("tt")) contentId = model.id
-                                                else if (model.id.startsWith("tmdb:")) contentId = model.id.substring(5)
-                                                else if (!isNaN(model.id) && parseInt(model.id) > 0) contentId = model.id
-                                            }
+                                            // Use ID as-is from catalog (preserves formats like "tmdb:123" for Stremio compatibility)
+                                            contentId = model.id || model.tmdbId || model.imdbId || ""
                                             
                                             if (!contentId) {
                                                 console.error("[HomeScreen] No contentId found for item:", model.title)

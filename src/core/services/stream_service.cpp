@@ -1,12 +1,12 @@
 #include "stream_service.h"
 #include "logging_service.h"
-#include "logging_service.h"
 #include "features/addons/logic/addon_repository.h"
 #include "features/addons/logic/addon_client.h"
 #include "features/addons/models/addon_config.h"
 #include "features/addons/models/addon_manifest.h"
 #include "core/services/library_service.h"
 #include "core/services/id_parser.h"
+#include "core/services/torrent_service.h"
 #include "core/models/stream_info.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -21,9 +21,15 @@ StreamService::StreamService(
     : QObject(parent)
     , m_addonRepository(std::move(addonRepository))
     , m_libraryService(libraryService)
+    , m_torrentService(nullptr)
     , m_completedRequests(0)
     , m_totalRequests(0)
 {
+    // Initialize torrent service if available
+    m_torrentService = new TorrentService(this);
+    if (!m_torrentService->isAvailable()) {
+        LoggingService::logInfo("StreamService", "Torrent support not available");
+    }
 }
 
 QString StreamService::extractImdbId(const QVariantMap& itemData)
@@ -198,6 +204,33 @@ void StreamService::processStreamsFromAddon(const QString& addonId, const QStrin
                 continue;
             }
             
+            // Check if it's a magnet link
+            if (m_torrentService && m_torrentService->isMagnetLink(streamUrl)) {
+                if (!m_torrentService->isAvailable()) {
+                    // Torrent support not available - skip this stream
+                    LoggingService::logWarning("StreamService", 
+                        "Skipping magnet link stream - torrent support not available. Install libtorrent-rasterbar to enable torrent streaming.");
+                    continue;
+                }
+                
+                // Convert magnet link to streamable URL
+                int fileIndex = -1;
+                if (streamObj.contains("fileIdx") && streamObj["fileIdx"].isDouble()) {
+                    fileIndex = streamObj["fileIdx"].toInt();
+                }
+                
+                QString convertedUrl = convertMagnetToStreamUrl(streamUrl, fileIndex);
+                if (!convertedUrl.isEmpty()) {
+                    streamUrl = convertedUrl;
+                    LoggingService::logInfo("StreamService", 
+                        QString("Converted magnet link to streamable URL: %1").arg(streamUrl));
+                } else {
+                    LoggingService::logWarning("StreamService", 
+                        "Failed to convert magnet link to streamable URL");
+                    continue; // Skip this stream if conversion failed
+                }
+            }
+            
             // Update streamObj with extracted URL if it was missing
             if (!streamObj.contains("url") || streamObj["url"].isNull()) {
                 streamObj["url"] = streamUrl;
@@ -266,6 +299,15 @@ void StreamService::onAddonError(const QString& errorMessage)
     }
     m_completedRequests++;
     checkAllRequestsComplete();
+}
+
+QString StreamService::convertMagnetToStreamUrl(const QString& url, int fileIndex)
+{
+    if (!m_torrentService || !m_torrentService->isAvailable()) {
+        return QString();
+    }
+    
+    return m_torrentService->getStreamUrl(url, fileIndex);
 }
 
 

@@ -181,27 +181,26 @@ Item {
                 text: {
                     if (root.metadata.length === 0) return "";
 
-                    // Format: rating • year • runtime • genre1 genre2 •
-                    var result = "";
-                    if (root.metadata.length >= 1) result += root.metadata[0]; // rating
-                    if (root.metadata.length >= 2) result += " • " + root.metadata[1]; // year
-                    if (root.metadata.length >= 3) result += " • " + root.metadata[2]; // runtime
-
-                    // Add genres separated by spaces, max 2 genres
-                    if (root.metadata.length >= 4) {
-                        result += " • ";
-                        var genres = [];
-                        for (var i = 3; i < Math.min(root.metadata.length, 5); i++) { // genres start at index 3, max 2
-                            genres.push(root.metadata[i]);
+                    // Only include non-empty items and add dots between them
+                    var parts = []
+                    for (var i = 0; i < root.metadata.length; i++) {
+                        if (root.metadata[i] && root.metadata[i] !== "") {
+                            parts.push(root.metadata[i])
                         }
-                        result += genres.join(" ");
                     }
-
-                    return result;
+                    
+                    // Join with dots only if we have parts
+                    return parts.length > 0 ? parts.join(" • ") : ""
                 }
                 font.pixelSize: 14
                 color: "#ffffff"
-                visible: root.metadata.length > 0
+                visible: {
+                    // Only show if we have at least one non-empty metadata item
+                    for (var i = 0; i < root.metadata.length; i++) {
+                        if (root.metadata[i] && root.metadata[i] !== "") return true
+                    }
+                    return false
+                }
             }
             
             // Description

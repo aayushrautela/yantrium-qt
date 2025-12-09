@@ -12,6 +12,7 @@
 
 class AddonRepository;
 class LibraryService;
+class TorrentService;
 
 class StreamService : public QObject, public IStreamService
 {
@@ -51,9 +52,11 @@ private:
     void fetchStreamsFromAddons();
     void processStreamsFromAddon(const QString& addonId, const QString& addonName, const QJsonArray& streams);
     void checkAllRequestsComplete();
+    QString convertMagnetToStreamUrl(const QString& url, int fileIndex = -1);
     
     std::shared_ptr<AddonRepository> m_addonRepository;
     LibraryService* m_libraryService;
+    TorrentService* m_torrentService;
     
     QVariantList m_allStreams;
     QList<PendingRequest> m_pendingRequests;

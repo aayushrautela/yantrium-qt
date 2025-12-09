@@ -33,6 +33,38 @@ modules:
       - type: dir
         path: vendor/mdk-sdk
 
+  - name: boost
+    buildsystem: simple
+    build-commands:
+      - ./bootstrap.sh --prefix=/app --with-libraries=system,filesystem,thread,chrono,date_time,random
+      - ./b2 -j$(nproc) variant=release link=shared threading=multi install
+    sources:
+      - type: archive
+        url: https://archives.boost.io/release/1.84.0/source/boost_1_84_0.tar.bz2
+        sha256: cc4b893acf645c9d4b698e9a0f08ca8846aa5d6c68275c14c3e7949c24109454
+
+  - name: libtorrent-rasterbar
+    buildsystem: cmake-ninja
+    build-options:
+      cflags: -O2 -g
+      cxxflags: -O2 -g
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/app
+      - -DCMAKE_INSTALL_LIBDIR=/app/lib
+      - -DCMAKE_PREFIX_PATH=/app
+      - -DBOOST_ROOT=/app
+      - -DBoost_INCLUDE_DIR=/app/include
+      - -DBoost_LIBRARY_DIR=/app/lib
+      - -DBoost_NO_BOOST_CMAKE=ON
+      - -Ddeprecated-functions=OFF
+      - -Dpython-bindings=OFF
+      - -Dpython-egg-info=OFF
+    sources:
+      - type: git
+        url: https://github.com/arvidn/libtorrent.git
+        tag: v2.0.10
+
   - name: yantrium
     buildsystem: cmake-ninja
     build-options:
@@ -68,6 +100,11 @@ modules:
         # Rename executable to lowercase
         if [ -f /app/bin/Yantrium ]; then
           mv /app/bin/Yantrium /app/bin/yantrium
+        fi
+      - |
+        # Copy libtorrent libraries (built by libtorrent-rasterbar module)
+        if [ -f /app/lib/libtorrent-rasterbar.so ]; then
+          echo "libtorrent-rasterbar.so found in /app/lib"
         fi
     sources:
       - type: dir

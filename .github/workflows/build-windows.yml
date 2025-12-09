@@ -36,6 +36,38 @@ jobs:
       uses: jwlawson/actions-setup-cmake@v1.14
       with:
         cmake-version: '3.31'
+    
+    - name: Build libtorrent with vcpkg
+      shell: powershell
+      run: |
+        Write-Host "Setting up vcpkg..."
+        git clone https://github.com/Microsoft/vcpkg.git vcpkg
+        cd vcpkg
+        .\bootstrap-vcpkg.bat
+        
+        Write-Host "Installing libtorrent..."
+        .\vcpkg install libtorrent:x64-windows
+        
+        Write-Host "Copying libtorrent files to vendor directory..."
+        $vendorDir = "..\vendor\libtorrent"
+        New-Item -ItemType Directory -Force -Path "$vendorDir\bin\x64" | Out-Null
+        New-Item -ItemType Directory -Force -Path "$vendorDir\lib\x64" | Out-Null
+        New-Item -ItemType Directory -Force -Path "$vendorDir\include" | Out-Null
+        
+        # Copy DLLs
+        Copy-Item -Path "installed\x64-windows\bin\*.dll" -Destination "$vendorDir\bin\x64\" -Force
+        
+        # Copy library files
+        Copy-Item -Path "installed\x64-windows\lib\*.lib" -Destination "$vendorDir\lib\x64\" -Force
+        
+        # Copy headers
+        Copy-Item -Path "installed\x64-windows\include\*" -Destination "$vendorDir\include\" -Recurse -Force
+        
+        Write-Host "libtorrent build complete!"
+        Write-Host "DLLs:"
+        Get-ChildItem "$vendorDir\bin\x64\*.dll" | ForEach-Object { Write-Host "  $($_.Name)" }
+        Write-Host "Libs:"
+        Get-ChildItem "$vendorDir\lib\x64\*.lib" | ForEach-Object { Write-Host "  $($_.Name)" }
         
     - name: Configure CMake
       shell: cmd
@@ -172,6 +204,13 @@ jobs:
       run: |
         if exist "vendor\mdk-sdk\bin\x64\*.dll" (
           copy /Y vendor\mdk-sdk\bin\x64\*.dll build\${{ inputs.build_type }}\
+        )
+    
+    - name: Copy libtorrent DLLs
+      shell: cmd
+      run: |
+        if exist "vendor\libtorrent\bin\x64\*.dll" (
+          copy /Y vendor\libtorrent\bin\x64\*.dll build\${{ inputs.build_type }}\
         )
         
     - name: List build artifacts
