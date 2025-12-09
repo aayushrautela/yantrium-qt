@@ -25,7 +25,7 @@
 #include <libtorrent/read_resume_data.hpp>
 #include <libtorrent/write_resume_data.hpp>
 #include <libtorrent/error_code.hpp>
-#include <libtorrent/hex.hpp>
+// #include <libtorrent/hex.hpp> // Removed to prevent usage of deprecated/unlinked header
 #include <libtorrent/string_view.hpp>
 #include <algorithm>
 #include <fstream>
@@ -177,7 +177,8 @@ QString TorrentStreamServer::addMagnetLink(const QString& magnetLink, int fileIn
     
     // Generate stream URL
     libtorrent::sha1_hash hash = handle.info_hash();
-    QString torrentId = QString::fromStdString(libtorrent::to_hex(hash.to_string()));
+    // FIX: Replaced libtorrent::to_hex with Qt's native hex conversion to avoid LNK2019
+    QString torrentId = QByteArray::fromStdString(hash.to_string()).toHex();
     QString streamPath = generateStreamPath(torrentId, fileIndex);
     QString streamUrl = m_baseUrl + streamPath;
     
@@ -276,7 +277,8 @@ void TorrentStreamServer::processTorrentAlerts()
         if (auto* ta = libtorrent::alert_cast<libtorrent::add_torrent_alert>(alert)) {
             // Torrent metadata downloaded
             libtorrent::sha1_hash hash = ta->handle.info_hash();
-            QString torrentId = QString::fromStdString(libtorrent::to_hex(hash.to_string()));
+            // FIX: Replaced libtorrent::to_hex
+            QString torrentId = QByteArray::fromStdString(hash.to_string()).toHex();
 
             // Find stream URL for this torrent
             QString streamUrl;
@@ -296,7 +298,8 @@ void TorrentStreamServer::processTorrentAlerts()
             // Update torrent states
             for (const auto& status : sa->status) {
                 libtorrent::sha1_hash hash = status.handle.info_hash();
-                QString torrentId = QString::fromStdString(libtorrent::to_hex(hash.to_string()));
+                // FIX: Replaced libtorrent::to_hex
+                QString torrentId = QByteArray::fromStdString(hash.to_string()).toHex();
 
                 // Find stream URL
                 QString streamUrl;
@@ -330,7 +333,8 @@ void TorrentStreamServer::processTorrentAlerts()
         }
         else if (auto* ea = libtorrent::alert_cast<libtorrent::torrent_error_alert>(alert)) {
             libtorrent::sha1_hash hash = ea->handle.info_hash();
-            QString torrentId = QString::fromStdString(libtorrent::to_hex(hash.to_string()));
+            // FIX: Replaced libtorrent::to_hex
+            QString torrentId = QByteArray::fromStdString(hash.to_string()).toHex();
             
             QString streamUrl;
             for (auto torrentIt = m_torrents.cbegin(); torrentIt != m_torrents.cend(); ++torrentIt) {
@@ -373,7 +377,8 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     
     for (auto it = m_torrents.begin(); it != m_torrents.end(); ++it) {
         libtorrent::sha1_hash hash = it.value().handle.info_hash();
-        QString id = QString::fromStdString(libtorrent::to_hex(hash.to_string()));
+        // FIX: Replaced libtorrent::to_hex
+        QString id = QByteArray::fromStdString(hash.to_string()).toHex();
         if (id == torrentId) {
             handle = it.value().handle;
             info = &it.value();
@@ -496,10 +501,9 @@ QString TorrentStreamServer::getTorrentId(const QString& streamUrl) const
 {
     if (m_torrents.contains(streamUrl)) {
         libtorrent::sha1_hash hash = m_torrents.value(streamUrl).handle.info_hash();
-        return QString::fromStdString(libtorrent::to_hex(hash.to_string()));
+        // FIX: Replaced libtorrent::to_hex
+        return QByteArray::fromStdString(hash.to_string()).toHex();
     }
     return QString();
 }
 #endif
-
-
