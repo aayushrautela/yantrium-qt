@@ -23,7 +23,16 @@ set(CMAKE_AUTOUIC ON)
 # 2. Find Qt6 Packages
 # ADDED: 'Svg' (Fixes "Unsupported image format" for icons)
 # CHANGED: 'Qt5Compat' -> 'Core5Compat' (Correct CMake name)
-find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql Core5Compat Svg HttpServer)
+find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql Core5Compat Svg)
+
+# HttpServer is optional (only needed for torrent streaming)
+find_package(Qt6HttpServer QUIET)
+if(Qt6HttpServer_FOUND)
+    message(STATUS "Qt6HttpServer found - torrent streaming enabled")
+    add_compile_definitions(HAVE_QHTTPSERVER)
+else()
+    message(STATUS "Qt6HttpServer not found - torrent streaming disabled")
+endif()
 
 # 3. Add Source Files
 set(PROJECT_SOURCES
@@ -166,8 +175,12 @@ target_link_libraries(Yantrium PRIVATE
     Qt6::Sql
     Qt6::Core5Compat
     Qt6::Svg
-    Qt6::HttpServer
 )
+
+# Link HttpServer only if available
+if(Qt6HttpServer_FOUND)
+    target_link_libraries(Yantrium PRIVATE Qt6::HttpServer)
+endif()
 
 # =========================================================
 # 6. MDK-SDK INTEGRATION

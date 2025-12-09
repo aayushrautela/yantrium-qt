@@ -3,13 +3,15 @@
 
 #include <QObject>
 #include <QString>
-#include <QHttpServer>
-#include <QHttpServerRequest>
-#include <QHttpServerResponse>
 #include <memory>
 #include <QtQmlIntegration/qqmlintegration.h>
 
 #ifdef TORRENT_SUPPORT_ENABLED
+#ifdef HAVE_QHTTPSERVER
+#include <QHttpServer>
+#include <QHttpServerRequest>
+#include <QHttpServerResponse>
+#endif
 #include <libtorrent/session.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/read_resume_data.hpp>
@@ -94,12 +96,13 @@ private:
     };
 
     void processTorrentAlerts();
+#ifdef HAVE_QHTTPSERVER
     QHttpServerResponse handleRequest(const QHttpServerRequest& request);
+    std::unique_ptr<QHttpServer> m_server;
+#endif
     QString generateStreamPath(const QString& torrentId, int fileIndex);
     libtorrent::torrent_handle findTorrentByStreamUrl(const QString& streamUrl) const;
     QString getTorrentId(const QString& streamUrl) const;
-    
-    std::unique_ptr<QHttpServer> m_server;
     libtorrent::session m_session;
     QMap<QString, TorrentInfo> m_torrents; // streamUrl -> TorrentInfo
     QMap<QString, QString> m_streamUrlToMagnet; // streamUrl -> magnetLink

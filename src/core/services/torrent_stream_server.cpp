@@ -1,8 +1,5 @@
 #include "torrent_stream_server.h"
 #include "logging_service.h"
-#include <QHttpServer>
-#include <QHttpServerRequest>
-#include <QHttpServerResponse>
 #include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
@@ -15,6 +12,11 @@
 #include <QHostAddress>
 
 #ifdef TORRENT_SUPPORT_ENABLED
+#ifdef HAVE_QHTTPSERVER
+#include <QHttpServer>
+#include <QHttpServerRequest>
+#include <QHttpServerResponse>
+#endif
 #include <libtorrent/session.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/magnet_uri.hpp>
@@ -69,6 +71,7 @@ TorrentStreamServer::~TorrentStreamServer()
 bool TorrentStreamServer::startServer(quint16 port)
 {
 #ifdef TORRENT_SUPPORT_ENABLED
+#ifdef HAVE_QHTTPSERVER
     if (m_server) {
         LoggingService::logWarning("TorrentStreamServer", "Server already running");
         return true;
@@ -99,6 +102,11 @@ bool TorrentStreamServer::startServer(quint16 port)
     return true;
 #else
     Q_UNUSED(port);
+    LoggingService::logWarning("TorrentStreamServer", "Qt6HttpServer not available - torrent streaming disabled");
+    return false;
+#endif
+#else
+    Q_UNUSED(port);
     LoggingService::logWarning("TorrentStreamServer", "Torrent support not available");
     return false;
 #endif
@@ -118,9 +126,11 @@ void TorrentStreamServer::stopServer()
     m_torrents.clear();
     m_streamUrlToMagnet.clear();
     
+#ifdef HAVE_QHTTPSERVER
     if (m_server) {
         m_server.reset();
     }
+#endif
     
     m_port = 0;
     m_baseUrl.clear();
@@ -135,6 +145,7 @@ QString TorrentStreamServer::getBaseUrl() const
 QString TorrentStreamServer::addMagnetLink(const QString& magnetLink, int fileIndex)
 {
 #ifdef TORRENT_SUPPORT_ENABLED
+#ifdef HAVE_QHTTPSERVER
     if (!m_server) {
         LoggingService::logError("TorrentStreamServer", "Server not started");
         return QString();
@@ -186,6 +197,12 @@ QString TorrentStreamServer::addMagnetLink(const QString& magnetLink, int fileIn
     
     emit torrentAdded(streamUrl);
     return streamUrl;
+#else
+    Q_UNUSED(magnetLink);
+    Q_UNUSED(fileIndex);
+    LoggingService::logError("TorrentStreamServer", "Qt6HttpServer not available - torrent streaming disabled");
+    return QString();
+#endif
 #else
     Q_UNUSED(magnetLink);
     Q_UNUSED(fileIndex);
@@ -329,6 +346,7 @@ void TorrentStreamServer::processTorrentAlerts()
     }
 }
 
+#ifdef HAVE_QHTTPSERVER
 QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest& request)
 {
     QString path = request.url().path();
@@ -451,6 +469,7 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     
     return response;
 }
+#endif
 
 QString TorrentStreamServer::generateStreamPath(const QString& torrentId, int fileIndex)
 {
