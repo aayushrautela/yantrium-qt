@@ -27,7 +27,6 @@
 #include <libtorrent/error_code.hpp>
 #include <libtorrent/hex.hpp>
 #include <libtorrent/string_view.hpp>
-#include <libtorrent/aux_/to_hex.hpp>
 #include <algorithm>
 #include <fstream>
 #endif
@@ -177,7 +176,7 @@ QString TorrentStreamServer::addMagnetLink(const QString& magnetLink, int fileIn
     }
     
     // Generate stream URL
-    QString torrentId = QString::fromStdString(libtorrent::aux::to_hex(handle.info_hash()));
+    QString torrentId = QString::fromStdString(libtorrent::to_hex(handle.info_hash()));
     QString streamPath = generateStreamPath(torrentId, fileIndex);
     QString streamUrl = m_baseUrl + streamPath;
     
@@ -275,7 +274,7 @@ void TorrentStreamServer::processTorrentAlerts()
     for (libtorrent::alert* alert : alerts) {
         if (auto* ta = libtorrent::alert_cast<libtorrent::add_torrent_alert>(alert)) {
             // Torrent metadata downloaded
-            QString torrentId = QString::fromStdString(libtorrent::aux::to_hex(ta->handle.info_hash()));
+            QString torrentId = QString::fromStdString(libtorrent::to_hex(ta->handle.info_hash()));
 
             // Find stream URL for this torrent
             QString streamUrl;
@@ -294,7 +293,7 @@ void TorrentStreamServer::processTorrentAlerts()
         else if (auto* sa = libtorrent::alert_cast<libtorrent::state_update_alert>(alert)) {
             // Update torrent states
             for (const auto& status : sa->status) {
-                QString torrentId = QString::fromStdString(libtorrent::aux::to_hex(status.handle.info_hash()));
+                QString torrentId = QString::fromStdString(libtorrent::to_hex(status.handle.info_hash()));
 
                 // Find stream URL
                 QString streamUrl;
@@ -327,7 +326,7 @@ void TorrentStreamServer::processTorrentAlerts()
             }
         }
         else if (auto* ea = libtorrent::alert_cast<libtorrent::torrent_error_alert>(alert)) {
-            QString torrentId = QString::fromStdString(libtorrent::aux::to_hex(ea->handle.info_hash()));
+            QString torrentId = QString::fromStdString(libtorrent::to_hex(ea->handle.info_hash()));
             
             QString streamUrl;
             for (auto torrentIt = m_torrents.cbegin(); torrentIt != m_torrents.cend(); ++torrentIt) {
@@ -369,7 +368,7 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     TorrentInfo* info = nullptr;
     
     for (auto it = m_torrents.begin(); it != m_torrents.end(); ++it) {
-        QString id = QString::fromStdString(libtorrent::aux::to_hex(it.value().handle.info_hash()));
+        QString id = QString::fromStdString(libtorrent::to_hex(it.value().handle.info_hash()));
         if (id == torrentId) {
             handle = it.value().handle;
             info = &it.value();
@@ -492,7 +491,7 @@ QString TorrentStreamServer::getTorrentId(const QString& streamUrl) const
 {
     if (m_torrents.contains(streamUrl)) {
         return QString::fromStdString(
-            libtorrent::aux::to_hex(m_torrents.value(streamUrl).handle.info_hash()));
+            libtorrent::to_hex(m_torrents.value(streamUrl).handle.info_hash()));
     }
     return QString();
 }
