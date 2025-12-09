@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Compiler warnings
 if(MSVC)
     add_compile_options(/W4 /WX-)
+    add_compile_definitions(_WIN32_WINNT=0x0601)  # Windows 7 minimum
 else()
     add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 endif()

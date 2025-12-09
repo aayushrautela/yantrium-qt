@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QMap>
 #include <memory>
 #include <QtQmlIntegration/qqmlintegration.h>
 

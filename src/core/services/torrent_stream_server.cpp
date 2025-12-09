@@ -27,6 +27,7 @@
 #include <libtorrent/error_code.hpp>
 #include <libtorrent/hex.hpp>
 #include <libtorrent/string_view.hpp>
+#include <libtorrent/aux_/to_hex.hpp>
 #include <algorithm>
 #include <fstream>
 #endif
@@ -120,8 +121,8 @@ void TorrentStreamServer::stopServer()
     }
     
     // Remove all torrents
-    for (auto it = m_torrents.begin(); it != m_torrents.end(); ++it) {
-        m_session.remove_torrent(it.value().handle);
+    for (auto torrentIt = m_torrents.cbegin(); torrentIt != m_torrents.cend(); ++torrentIt) {
+        m_session.remove_torrent(torrentIt.value().handle);
     }
     m_torrents.clear();
     m_streamUrlToMagnet.clear();
@@ -176,7 +177,7 @@ QString TorrentStreamServer::addMagnetLink(const QString& magnetLink, int fileIn
     }
     
     // Generate stream URL
-    QString torrentId = QString::fromStdString(libtorrent::to_hex(handle.info_hash().to_string()));
+    QString torrentId = QString::fromStdString(libtorrent::aux::to_hex(handle.info_hash()));
     QString streamPath = generateStreamPath(torrentId, fileIndex);
     QString streamUrl = m_baseUrl + streamPath;
     
@@ -214,7 +215,7 @@ void TorrentStreamServer::removeTorrent(const QString& streamUrl)
 {
 #ifdef TORRENT_SUPPORT_ENABLED
     if (m_torrents.contains(streamUrl)) {
-        m_session.remove_torrent(m_torrents[streamUrl].handle);
+        m_session.remove_torrent(m_torrents.value(streamUrl).handle);
         m_torrents.remove(streamUrl);
         m_streamUrlToMagnet.remove(streamUrl);
         LoggingService::logInfo("TorrentStreamServer", 
@@ -229,7 +230,7 @@ double TorrentStreamServer::getProgress(const QString& streamUrl) const
 {
 #ifdef TORRENT_SUPPORT_ENABLED
     if (m_torrents.contains(streamUrl)) {
-        return m_torrents[streamUrl].progress;
+        return m_torrents.value(streamUrl).progress;
     }
 #endif
     Q_UNUSED(streamUrl);
@@ -240,7 +241,7 @@ qint64 TorrentStreamServer::getDownloadSpeed(const QString& streamUrl) const
 {
 #ifdef TORRENT_SUPPORT_ENABLED
     if (m_torrents.contains(streamUrl)) {
-        return m_torrents[streamUrl].downloadSpeed;
+        return m_torrents.value(streamUrl).downloadSpeed;
     }
 #endif
     Q_UNUSED(streamUrl);
@@ -251,7 +252,7 @@ bool TorrentStreamServer::isReady(const QString& streamUrl) const
 {
 #ifdef TORRENT_SUPPORT_ENABLED
     if (m_torrents.contains(streamUrl)) {
-        return m_torrents[streamUrl].isReady;
+        return m_torrents.value(streamUrl).isReady;
     }
 #endif
     Q_UNUSED(streamUrl);
@@ -272,66 +273,66 @@ void TorrentStreamServer::processTorrentAlerts()
     m_session.pop_alerts(&alerts);
     
     for (libtorrent::alert* alert : alerts) {
-        if (auto* ta = libtorrent::alert_cast<libtorrent::torrent_added_alert>(alert)) {
+        if (auto* ta = libtorrent::alert_cast<libtorrent::add_torrent_alert>(alert)) {
             // Torrent metadata downloaded
-            QString torrentId = QString::fromStdString(libtorrent::to_hex(ta->handle.info_hash().to_string()));
-            
+            QString torrentId = QString::fromStdString(libtorrent::aux::to_hex(ta->handle.info_hash()));
+
             // Find stream URL for this torrent
             QString streamUrl;
-            for (auto it = m_torrents.begin(); it != m_torrents.end(); ++it) {
-                if (it.value().handle.info_hash() == ta->handle.info_hash()) {
-                    streamUrl = it.key();
+            for (auto torrentIt = m_torrents.cbegin(); torrentIt != m_torrents.cend(); ++torrentIt) {
+                if (torrentIt.value().handle.info_hash() == ta->handle.info_hash()) {
+                    streamUrl = torrentIt.key();
                     break;
                 }
             }
-            
+
             if (!streamUrl.isEmpty()) {
-                LoggingService::logInfo("TorrentStreamServer", 
+                LoggingService::logInfo("TorrentStreamServer",
                     QString("Torrent metadata downloaded: %1").arg(streamUrl));
             }
         }
         else if (auto* sa = libtorrent::alert_cast<libtorrent::state_update_alert>(alert)) {
             // Update torrent states
             for (const auto& status : sa->status) {
-                QString torrentId = QString::fromStdString(libtorrent::to_hex(status.info_hash.to_string()));
-                
+                QString torrentId = QString::fromStdString(libtorrent::aux::to_hex(status.handle.info_hash()));
+
                 // Find stream URL
                 QString streamUrl;
                 for (auto it = m_torrents.begin(); it != m_torrents.end(); ++it) {
-                    if (it.value().handle.info_hash() == status.info_hash) {
+                    if (it.value().handle.info_hash() == status.handle.info_hash()) {
                         streamUrl = it.key();
                         TorrentInfo& info = it.value();
-                        
+
                         // Update progress
                         double progress = status.progress;
                         if (progress != info.progress) {
                             info.progress = progress;
                             emit progressChanged(streamUrl, progress);
                         }
-                        
+
                         // Update download speed
                         info.downloadSpeed = status.download_payload_rate;
-                        
+
                         // Check if ready (have enough pieces to start streaming)
                         bool wasReady = info.isReady;
                         info.isReady = (progress > 0.01); // 1% downloaded
-                        
+
                         if (!wasReady && info.isReady) {
                             emit torrentReady(streamUrl);
                         }
-                        
+
                         break;
                     }
                 }
             }
         }
         else if (auto* ea = libtorrent::alert_cast<libtorrent::torrent_error_alert>(alert)) {
-            QString torrentId = QString::fromStdString(libtorrent::to_hex(ea->handle.info_hash().to_string()));
+            QString torrentId = QString::fromStdString(libtorrent::aux::to_hex(ea->handle.info_hash()));
             
             QString streamUrl;
-            for (auto it = m_torrents.begin(); it != m_torrents.end(); ++it) {
-                if (it.value().handle.info_hash() == ea->handle.info_hash()) {
-                    streamUrl = it.key();
+            for (auto torrentIt = m_torrents.cbegin(); torrentIt != m_torrents.cend(); ++torrentIt) {
+                if (torrentIt.value().handle.info_hash() == ea->handle.info_hash()) {
+                    streamUrl = torrentIt.key();
                     break;
                 }
             }
@@ -368,7 +369,7 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     TorrentInfo* info = nullptr;
     
     for (auto it = m_torrents.begin(); it != m_torrents.end(); ++it) {
-        QString id = QString::fromStdString(libtorrent::to_hex(it.value().handle.info_hash().to_string()));
+        QString id = QString::fromStdString(libtorrent::aux::to_hex(it.value().handle.info_hash()));
         if (id == torrentId) {
             handle = it.value().handle;
             info = &it.value();
@@ -482,7 +483,7 @@ QString TorrentStreamServer::generateStreamPath(const QString& torrentId, int fi
 libtorrent::torrent_handle TorrentStreamServer::findTorrentByStreamUrl(const QString& streamUrl) const
 {
     if (m_torrents.contains(streamUrl)) {
-        return m_torrents[streamUrl].handle;
+        return m_torrents.value(streamUrl).handle;
     }
     return libtorrent::torrent_handle();
 }
@@ -491,7 +492,7 @@ QString TorrentStreamServer::getTorrentId(const QString& streamUrl) const
 {
     if (m_torrents.contains(streamUrl)) {
         return QString::fromStdString(
-            libtorrent::to_hex(m_torrents[streamUrl].handle.info_hash().to_string()));
+            libtorrent::aux::to_hex(m_torrents.value(streamUrl).handle.info_hash()));
     }
     return QString();
 }

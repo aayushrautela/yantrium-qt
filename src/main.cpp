@@ -468,9 +468,9 @@ int main(int argc, char *argv[])
                 qDebug() << "[MAIN] Window shown, visible:" << window->isVisible();
             } else if (auto *item = qobject_cast<QQuickItem*>(obj)) {
                 qDebug() << "[MAIN] Root item found";
-                if (auto *window = item->window()) {
-                    qDebug() << "[MAIN] Item window found, visible:" << window->isVisible();
-                    window->show();
+                if (auto *itemWindow = item->window()) {
+                    qDebug() << "[MAIN] Item window found, visible:" << itemWindow->isVisible();
+                    itemWindow->show();
                 }
             }
         }

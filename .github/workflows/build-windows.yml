@@ -15,11 +15,11 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup Qt6
       uses: jurplel/install-qt-action@v4
       with:
@@ -28,48 +28,51 @@ jobs:
         cache: 'true'
         set-env: 'true'
         modules: 'qt5compat qtshadertools'
-        
+
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.1
-      
+
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v1.14
       with:
         cmake-version: '3.31'
     
+    # Cache libtorrent build since it takes forever
+    - name: Cache vcpkg and libtorrent
+      uses: actions/cache@v4
+      id: vcpkg-cache
+      with:
+        path: |
+          vcpkg/
+          vendor/libtorrent/
+        key: vcpkg-libtorrent-${{ runner.os }}-v2
+
     - name: Build libtorrent with vcpkg
+      if: steps.vcpkg-cache.outputs.cache-hit != 'true'
       shell: powershell
       run: |
-        Write-Host "Setting up vcpkg..."
+        echo "Setting up vcpkg..."
         git clone https://github.com/Microsoft/vcpkg.git vcpkg
         cd vcpkg
         .\bootstrap-vcpkg.bat
-        
-        Write-Host "Installing libtorrent..."
+
+        echo "Installing libtorrent..."
         .\vcpkg install libtorrent:x64-windows
-        
-        Write-Host "Copying libtorrent files to vendor directory..."
+
+        echo "Copying libtorrent files to vendor directory..."
         $vendorDir = "..\vendor\libtorrent"
         New-Item -ItemType Directory -Force -Path "$vendorDir\bin\x64" | Out-Null
         New-Item -ItemType Directory -Force -Path "$vendorDir\lib\x64" | Out-Null
         New-Item -ItemType Directory -Force -Path "$vendorDir\include" | Out-Null
-        
-        # Copy DLLs
+
         Copy-Item -Path "installed\x64-windows\bin\*.dll" -Destination "$vendorDir\bin\x64\" -Force
-        
-        # Copy library files
         Copy-Item -Path "installed\x64-windows\lib\*.lib" -Destination "$vendorDir\lib\x64\" -Force
-        
-        # Copy headers
         Copy-Item -Path "installed\x64-windows\include\*" -Destination "$vendorDir\include\" -Recurse -Force
+
+        echo "libtorrent setup complete"
         
-        Write-Host "libtorrent build complete!"
-        Write-Host "DLLs:"
-        Get-ChildItem "$vendorDir\bin\x64\*.dll" | ForEach-Object { Write-Host "  $($_.Name)" }
-        Write-Host "Libs:"
-        Get-ChildItem "$vendorDir\lib\x64\*.lib" | ForEach-Object { Write-Host "  $($_.Name)" }
-        
-    - name: Configure CMake
+    # Build the main application
+    - name: Configure and build
       shell: cmd
       env:
         TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
@@ -85,36 +88,31 @@ jobs:
           -DTRAKT_CLIENT_ID="%TRAKT_CLIENT_ID%" ^
           -DTRAKT_CLIENT_SECRET="%TRAKT_CLIENT_SECRET%" ^
           -DOMDB_API_KEY="%OMDB_API_KEY%"
-          
-    - name: Build
-      shell: cmd
-      run: |
+
         cmake --build build --config ${{ inputs.build_type }}
         
-    - name: Check for MDK SDK Windows binaries
+    - name: Check MDK SDK
       shell: cmd
       run: |
         if not exist "vendor\mdk-sdk\lib\x64\mdk.lib" (
           echo "Warning: MDK SDK Windows library not found."
         )
 
-    - name: Deploy Qt dependencies and TLS
+    # Package Qt libraries and plugins
+    - name: Deploy Qt
       shell: powershell
       run: |
         $buildDir = "build\${{ inputs.build_type }}"
         $exePath = "$buildDir\Yantrium.exe"
-        
+
         if (-not (Test-Path $exePath)) {
           Write-Host "FATAL: Executable not found at $exePath"
           exit 1
         }
 
-        # 1. Run windeployqt
-        Write-Host "Running windeployqt..."
-        # windeployqt will now detect the installed qtsvg module and deploy qsvg.dll
         windeployqt.exe --qmldir resources/qml --network --compiler-runtime $exePath
 
-        # 2. Manually copy TLS plugins
+        # Copy TLS plugins
         $windeployqt = Get-Command windeployqt
         $binDir = Split-Path -Parent $windeployqt.Path
         $qtRootDir = Split-Path -Parent $binDir
@@ -122,102 +120,66 @@ jobs:
         $destTlsDir = Join-Path $buildDir "tls"
 
         if (Test-Path $qtTlsSrc) {
-           Write-Host "Found Qt TLS plugins. Copying to $destTlsDir..."
-           if (-not (Test-Path $destTlsDir)) {
-             New-Item -ItemType Directory -Path $destTlsDir | Out-Null
-           }
+           New-Item -ItemType Directory -Path $destTlsDir -Force | Out-Null
            Copy-Item -Path "$qtTlsSrc\*" -Destination $destTlsDir -Force -Recurse
         } else {
            Write-Host "ERROR: Could not find TLS plugins at $qtTlsSrc"
            exit 1
         }
 
-        # 3. Verify
-        if (Test-Path "$destTlsDir\qopensslbackend.dll") {
-            Write-Host " [OK] qopensslbackend.dll found."
-        } else {
-            Write-Host " [FAIL] qopensslbackend.dll missing!"
-        }
-
-    - name: Setup and Copy OpenSSL
+    - name: Setup OpenSSL
       shell: powershell
       run: |
-        Write-Host "Installing OpenSSL 3 via Chocolatey..."
+        echo "Installing OpenSSL..."
         choco install openssl --no-progress
-        
-        $possiblePaths = @(
-          "C:\Program Files\OpenSSL\bin",
-          "C:\Program Files\OpenSSL-Win64\bin"
-        )
-        
+
+        $possiblePaths = @("C:\Program Files\OpenSSL\bin", "C:\Program Files\OpenSSL-Win64\bin")
         $opensslPath = $null
         foreach ($path in $possiblePaths) {
-          if (Test-Path $path) {
-            $opensslPath = $path
-            break
-          }
+          if (Test-Path $path) { $opensslPath = $path; break }
         }
-        
+
         if (-not $opensslPath) {
           Write-Host "FATAL: Could not find OpenSSL bin directory."
           exit 1
         }
-        
-        Write-Host "Found OpenSSL at: $opensslPath"
+
         $targetDir = "build\${{ inputs.build_type }}"
-        
         $libs = Get-ChildItem -Path $opensslPath -Include "libcrypto*.dll", "libssl*.dll" -Recurse
-        
+
         if ($libs) {
           foreach ($lib in $libs) {
             Copy-Item -Path $lib.FullName -Destination $targetDir -Force
-            Write-Host "SUCCESS: Copied $($lib.Name)"
           }
         } else {
-           Write-Host "FATAL: No libcrypto/libssl DLLs found in $opensslPath"
-           exit 1
+          Write-Host "FATAL: No libcrypto/libssl DLLs found in $opensslPath"
+          exit 1
         }
 
     - name: Copy SQL plugins
       shell: powershell
       run: |
-        Write-Host "Copying SQL plugins..."
-        $windeployqt = Get-Command windeployqt -ErrorAction SilentlyContinue
-        
+        $windeployqt = Get-Command windeployqt
         $qtBinDir = Split-Path -Parent $windeployqt.Path
         $qtRootDir = Split-Path -Parent $qtBinDir
         $sqlPluginsDir = Join-Path $qtRootDir "plugins\sqldrivers"
-        
         $sqliteDll = Join-Path $sqlPluginsDir "qsqlite.dll"
+
         if (Test-Path $sqliteDll) {
           $targetDir = "build\${{ inputs.build_type }}\sqldrivers"
-          if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir | Out-Null }
+          New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
           Copy-Item -Path $sqliteDll -Destination $targetDir -Force
-          Write-Host "SUCCESS: SQLite plugin copied."
         } else {
           Write-Host "ERROR: qsqlite.dll not found."
           exit 1
         }
         
-    - name: Copy MDK DLLs
+    # Copy MDK and libtorrent runtime libraries
+    - name: Copy dependencies
       shell: cmd
       run: |
-        if exist "vendor\mdk-sdk\bin\x64\*.dll" (
-          copy /Y vendor\mdk-sdk\bin\x64\*.dll build\${{ inputs.build_type }}\
-        )
-    
-    - name: Copy libtorrent DLLs
-      shell: cmd
-      run: |
-        if exist "vendor\libtorrent\bin\x64\*.dll" (
-          copy /Y vendor\libtorrent\bin\x64\*.dll build\${{ inputs.build_type }}\
-        )
-        
-    - name: List build artifacts
-      shell: cmd
-      run: |
-        echo "Build artifacts:"
-        dir /B build\${{ inputs.build_type }}\
+        if exist "vendor\mdk-sdk\bin\x64\*.dll" copy /Y vendor\mdk-sdk\bin\x64\*.dll build\${{ inputs.build_type }}\
+        if exist "vendor\libtorrent\bin\x64\*.dll" copy /Y vendor\libtorrent\bin\x64\*.dll build\${{ inputs.build_type }}\
         
     - name: Upload artifacts
       uses: actions/upload-artifact@v4

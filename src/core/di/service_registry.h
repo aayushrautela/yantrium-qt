@@ -90,12 +90,12 @@ public:
             auto typeIndex = std::type_index(typeid(T));
             
             // Try singleton first
-            if (auto it = m_singletonFactories.find(typeIndex); it != m_singletonFactories.end()) {
-                factory = it->second;
+            if (auto singletonIt = m_singletonFactories.find(typeIndex); singletonIt != m_singletonFactories.end()) {
+                factory = singletonIt->second;
             }
             // Try transient
-            else if (auto it = m_transientFactories.find(typeIndex); it != m_transientFactories.end()) {
-                factory = it->second;
+            else if (auto transientIt = m_transientFactories.find(typeIndex); transientIt != m_transientFactories.end()) {
+                factory = transientIt->second;
             } else {
                 return nullptr;
             }
