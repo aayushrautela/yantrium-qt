@@ -51,7 +51,8 @@ public:
     Q_INVOKABLE void loadItemDetails(const QString& contentId, const QString& type, const QString& addonId = QString());
     Q_INVOKABLE void getSmartPlayState(const QVariantMap& itemData);
     void loadSimilarItems(int tmdbId, const QString& type) override;
-    void loadSeasonEpisodes(int tmdbId, int seasonNumber) override;
+    Q_INVOKABLE void loadSeasonEpisodes(const QString& contentId, int seasonNumber) override;
+    Q_INVOKABLE void loadSeasonEpisodes(int tmdbId, int seasonNumber); // Legacy overload for QML compatibility (TMDB ID)
 
     // Cache management
     Q_INVOKABLE void clearMetadataCache();
@@ -131,6 +132,9 @@ private:
     QString m_pendingDetailsContentId;
     QString m_pendingDetailsType;
     QString m_pendingDetailsAddonId;
+    
+    // Season episodes loading
+    QMap<QString, int> m_pendingSeasonEpisodesRequests; // contentId -> seasonNumber
 };
 
 #endif // LIBRARY_SERVICE_H

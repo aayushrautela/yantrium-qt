@@ -27,7 +27,7 @@ public:
     virtual void loadItemDetails(const QString& contentId, const QString& type, const QString& addonId = QString()) = 0;
     virtual void loadSimilarItems(int tmdbId, const QString& type) = 0;
     virtual void getSmartPlayState(const QVariantMap& itemData) = 0;
-    virtual void loadSeasonEpisodes(int tmdbId, int seasonNumber) = 0;
+    virtual void loadSeasonEpisodes(const QString& contentId, int seasonNumber) = 0;
     
     // Cache management
     virtual void clearMetadataCache() = 0;

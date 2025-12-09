@@ -14,6 +14,9 @@
 #include "features/addons/models/addon_manifest.h"
 #include <QJsonObject>
 #include <QDateTime>
+#include <QDate>
+#include <QRegularExpression>
+#include <QStringList>
 #include <algorithm>
 
 MediaMetadataService::MediaMetadataService(
@@ -50,7 +53,17 @@ void MediaMetadataService::getCompleteMetadata(const QString& contentId, const Q
     QVariant cached = CacheService::instance().get(cacheKey);
     if (cached.isValid() && cached.canConvert<QVariantMap>()) {
         LoggingService::logDebug("MediaMetadataService", QString("Cache hit for: %1").arg(cacheKey));
-        emit metadataLoaded(cached.toMap());
+        QVariantMap cachedDetails = cached.toMap();
+        
+        // Even if metadata is cached, check if we have episodes stored
+        // Episodes might not have been extracted if this was cached before episode extraction was implemented
+        if ((type == "tv" || type == "series") && !m_seriesEpisodes.contains(contentId)) {
+            LoggingService::logDebug("MediaMetadataService", QString("Metadata cached but no episodes found, will try to extract from cached data"));
+            // Try to extract episodes from cached metadata if available
+            // This is a fallback - normally episodes should be extracted during initial fetch
+        }
+        
+        emit metadataLoaded(cachedDetails);
         return;
     }
     
@@ -124,14 +137,16 @@ int MediaMetadataService::getMetadataCacheSize() const
 
 QVariantList MediaMetadataService::getSeriesEpisodes(const QString& contentId, int seasonNumber)
 {
-    // Removed debug log - unnecessary
+    LoggingService::logDebug("MediaMetadataService", QString("getSeriesEpisodes called: contentId=%1, season=%2").arg(contentId).arg(seasonNumber));
+    LoggingService::logDebug("MediaMetadataService", QString("Available episode keys: %1").arg(QStringList(m_seriesEpisodes.keys()).join(", ")));
     
     if (!m_seriesEpisodes.contains(contentId)) {
-        // Removed debug log - unnecessary
+        LoggingService::logWarning("MediaMetadataService", QString("No episodes found for contentId: %1").arg(contentId));
         return QVariantList();
     }
     
     QVariantList allEpisodes = m_seriesEpisodes[contentId];
+    LoggingService::logDebug("MediaMetadataService", QString("Found %1 total episodes for contentId: %2").arg(allEpisodes.size()).arg(contentId));
     
     // If seasonNumber is -1, return all episodes
     if (seasonNumber < 0) {
@@ -281,31 +296,183 @@ void MediaMetadataService::onAddonMetaFetched(const QString& type, const QString
     // Extract episodes from videos array for series (some addons store episodes in videos)
     if (normalizedType == "tv" || normalizedType == "series") {
         QVariantList episodes;
+        LoggingService::logDebug("MediaMetadataService", QString("Checking for episodes in metadata - has videos: %1").arg(meta.contains("videos")));
+        
+        // Extract show runtime as fallback for episodes that don't have individual runtime
+        int showRuntime = 0;
+        if (meta.contains("runtime")) {
+            QJsonValue runtimeValue = meta["runtime"];
+            if (runtimeValue.isDouble()) {
+                showRuntime = runtimeValue.toInt();
+            } else if (runtimeValue.isString()) {
+                // Parse runtime string like "49 min"
+                QString runtimeStr = runtimeValue.toString();
+                QRegularExpression rx("(\\d+)");
+                QRegularExpressionMatch match = rx.match(runtimeStr);
+                if (match.hasMatch()) {
+                    showRuntime = match.captured(1).toInt();
+                }
+            }
+        }
+        
         if (meta.contains("videos") && meta["videos"].isArray()) {
             QJsonArray videosArray = meta["videos"].toArray();
+            LoggingService::logDebug("MediaMetadataService", QString("Found videos array with %1 items").arg(videosArray.size()));
             for (const QJsonValue& value : videosArray) {
                 if (value.isObject()) {
                     QJsonObject videoObj = value.toObject();
                     // Check if it's an episode (has season and episode numbers)
-                    if (videoObj.contains("season") && videoObj.contains("episode")) {
+                    // Episodes can have "episode" or "number" field for episode number
+                    bool hasEpisodeNumber = videoObj.contains("episode") || videoObj.contains("number");
+                    if (videoObj.contains("season") && hasEpisodeNumber) {
                         QVariantMap episode;
                         episode["season"] = videoObj["season"].toInt();
-                        episode["episodeNumber"] = videoObj["episode"].toInt();
-                        episode["title"] = videoObj["title"].toString();
-                        episode["description"] = videoObj["overview"].toString();
-                        episode["airDate"] = videoObj["released"].toString();
-                        episode["thumbnailUrl"] = videoObj["thumbnail"].toString();
-                        // Extract duration if available
-                        if (videoObj.contains("runtime")) {
-                            episode["duration"] = videoObj["runtime"].toInt();
+                        
+                        // Get episode number - prefer "episode", fallback to "number"
+                        int episodeNum = 0;
+                        if (videoObj.contains("episode")) {
+                            episodeNum = videoObj["episode"].toInt();
+                        } else if (videoObj.contains("number")) {
+                            episodeNum = videoObj["number"].toInt();
                         }
+                        episode["episodeNumber"] = episodeNum;
+                        
+                        // Get title - prefer "name", fallback to "title"
+                        QString title = videoObj["name"].toString();
+                        if (title.isEmpty()) {
+                            title = videoObj["title"].toString();
+                        }
+                        episode["title"] = title;
+                        
+                        // Get description - prefer "overview", fallback to "description"
+                        QString description = videoObj["overview"].toString();
+                        if (description.isEmpty()) {
+                            description = videoObj["description"].toString();
+                        }
+                        episode["description"] = description;
+                        
+                        // Get air date - prefer "released", fallback to "firstAired"
+                        QString airDate = videoObj["released"].toString();
+                        if (airDate.isEmpty()) {
+                            airDate = videoObj["firstAired"].toString();
+                        }
+                        episode["airDate"] = airDate;
+                        
+                        // Get thumbnail
+                        episode["thumbnailUrl"] = videoObj["thumbnail"].toString();
+                        
+                        // Extract duration if available (from runtime field, may be string like "49 min")
+                        // Fallback to show runtime if episode doesn't have individual runtime
+                        int duration = 0;
+                        if (videoObj.contains("runtime")) {
+                            QJsonValue runtimeValue = videoObj["runtime"];
+                            if (runtimeValue.isDouble()) {
+                                duration = runtimeValue.toInt();
+                            } else if (runtimeValue.isString()) {
+                                // Try to extract number from string like "49 min"
+                                QString runtimeStr = runtimeValue.toString();
+                                // Simple regex to extract first number
+                                QRegularExpression rx("(\\d+)");
+                                QRegularExpressionMatch match = rx.match(runtimeStr);
+                                if (match.hasMatch()) {
+                                    duration = match.captured(1).toInt();
+                                }
+                            }
+                        }
+                        // Use show runtime as fallback if episode doesn't have runtime
+                        if (duration == 0 && showRuntime > 0) {
+                            duration = showRuntime;
+                        }
+                        episode["duration"] = duration;
+                        
+                        // Format metadata line: "Release Date • Runtime" (e.g., "Jan 21, 2008 • 49m")
+                        QString metadataLine = "";
+                        if (!airDate.isEmpty()) {
+                            LoggingService::logDebug("MediaMetadataService", "Parsing airDate: " + airDate);
+                            // Extract just the date part (YYYY-MM-DD) from the ISO string
+                            QString datePart = airDate.left(10); // "YYYY-MM-DD"
+                            
+                            // Parse the date part
+                            QDate date = QDate::fromString(datePart, "yyyy-MM-dd");
+                            
+                            if (date.isValid()) {
+                                // Format as "Jan 21, 2008"
+                                metadataLine = date.toString("MMM d, yyyy");
+                                LoggingService::logDebug("MediaMetadataService", "Formatted date: " + metadataLine);
+                            } else {
+                                // Fallback to just showing the date part if parsing fails for some reason
+                                metadataLine = datePart;
+                                LoggingService::logWarning("MediaMetadataService", "Date parsing failed for: " + datePart + ". Using fallback.");
+                            }
+                        }
+                        
+                        // Add runtime if available
+                        if (duration > 0) {
+                            if (!metadataLine.isEmpty()) {
+                                metadataLine += " • " + QString::number(duration) + "m";
+                            } else {
+                                metadataLine = QString::number(duration) + "m";
+                            }
+                        }
+                        
+                        episode["metadataLine"] = metadataLine;
+                        
+                        // Store additional fields that might be useful
+                        if (videoObj.contains("rating")) {
+                            episode["rating"] = videoObj["rating"].toString();
+                        }
+                        if (videoObj.contains("id")) {
+                            episode["id"] = videoObj["id"].toString();
+                        }
+                        if (videoObj.contains("tvdb_id")) {
+                            episode["tvdbId"] = videoObj["tvdb_id"].toInt();
+                        }
+                        
                         episodes.append(episode);
+                        LoggingService::logDebug("MediaMetadataService", QString("Extracted episode S%1E%2: %3")
+                            .arg(episode["season"].toInt()).arg(episode["episodeNumber"].toInt()).arg(episode["title"].toString()));
+                    } else {
+                        LoggingService::logDebug("MediaMetadataService", "Skipping video - missing season or episode number");
                     }
                 }
             }
+        } else {
+            LoggingService::logWarning("MediaMetadataService", "No videos array found in metadata for series");
         }
-        // Store episodes for this series
+        // Store episodes for this series under multiple ID formats for easier lookup
+        // Store under the requested contentId
         m_seriesEpisodes[request.contentId] = episodes;
+        
+        // Also store under IMDB ID if available (from the metadata)
+        // Try to get from meta object first, then from details
+        QString imdbId;
+        if (meta.contains("imdb_id") && meta["imdb_id"].isString()) {
+            imdbId = meta["imdb_id"].toString();
+        } else if (meta.contains("id") && meta["id"].isString() && meta["id"].toString().startsWith("tt")) {
+            imdbId = meta["id"].toString();
+        } else {
+            imdbId = details["imdbId"].toString();
+        }
+        
+        if (!imdbId.isEmpty() && imdbId != request.contentId) {
+            m_seriesEpisodes[imdbId] = episodes;
+            LoggingService::logDebug("MediaMetadataService", QString("Also stored episodes under IMDB ID: %1").arg(imdbId));
+        }
+        
+        // Also store under TMDB ID format if we have TMDB ID
+        QString tmdbId = details["tmdbId"].toString();
+        if (tmdbId.isEmpty() && meta.contains("tmdb_id")) {
+            tmdbId = meta["tmdb_id"].toString();
+        }
+        if (!tmdbId.isEmpty()) {
+            QString tmdbKey = "tmdb:" + tmdbId;
+            if (tmdbKey != request.contentId && tmdbKey != imdbId) {
+                m_seriesEpisodes[tmdbKey] = episodes;
+                LoggingService::logDebug("MediaMetadataService", QString("Also stored episodes under TMDB key: %1").arg(tmdbKey));
+            }
+        }
+        
+        LoggingService::logDebug("MediaMetadataService", QString("Extracted %1 episodes for series %2").arg(episodes.size()).arg(request.contentId));
     }
     
     // Cache and emit metadata

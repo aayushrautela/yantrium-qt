@@ -61,7 +61,7 @@ Item {
             libraryService.getSmartPlayState(details)
             
             // Initialize seasons list for TV shows
-            if (details.type === "tv" && details.tmdbId) {
+            if (details.type === "tv") {
                 var numSeasons = details.numberOfSeasons || 1
                 var seasons = []
                 for (var i = 1; i <= numSeasons; i++) {
@@ -69,9 +69,15 @@ Item {
                 }
                 root.availableSeasons = seasons
                 root.selectedSeasonNumber = 1
-                // Load first season episodes
-                var tmdbId = parseInt(details.tmdbId) || details.tmdbId
-                libraryService.loadSeasonEpisodes(tmdbId, 1)
+                // Load first season episodes - use whatever ID is available (prefer IMDB, then TMDB, then contentId)
+                var contentId = details.imdbId || details.id || ""
+                if (!contentId && details.tmdbId) {
+                    // Fallback to TMDB ID if no IMDB/contentId available
+                    var tmdbId = parseInt(details.tmdbId) || details.tmdbId
+                    libraryService.loadSeasonEpisodes(tmdbId, 1)
+                } else if (contentId) {
+                    libraryService.loadSeasonEpisodes(contentId, 1)
+                }
             }
         }
         function onSimilarItemsLoaded(items) {
@@ -507,34 +513,12 @@ Item {
                         Row {
                             spacing: 8
 
-                            // Episode mode: Air Date • Runtime
+                            // Episode mode: Formatted Metadata Line
                             Text {
-                                text: root.itemData.airDate || ""
+                                text: root.itemData.metadataLine || ""
                                 color: "#ffffff"
                                 font.pixelSize: 18
                                 visible: root.isEpisodeMode && text !== ""
-                            }
-
-                            Text {
-                                text: "•"
-                                color: "#ffffff"
-                                font.pixelSize: 18
-                                visible: root.isEpisodeMode && root.itemData.airDate !== "" && root.itemData.duration > 0
-                            }
-
-                            Text {
-                                text: {
-                                    if (root.isEpisodeMode && root.itemData.duration > 0) {
-                                        var minutes = root.itemData.duration;
-                                        var hours = Math.floor(minutes / 60);
-                                        var mins = minutes % 60;
-                                        return hours > 0 ? hours + "h " + mins + "m" : mins + "m";
-                                    }
-                                    return "";
-                                }
-                                color: "#ffffff"
-                                font.pixelSize: 18
-                                visible: root.isEpisodeMode && root.itemData.duration > 0
                             }
 
                             // Movie/Show mode: Release Date • Content Rating • Genres
@@ -1146,9 +1130,14 @@ Item {
                                             if (newSeason !== root.selectedSeasonNumber) {
                                                 root.selectedSeasonNumber = newSeason
                                                 root.currentSeasonEpisodes = [] // Clear while loading
-                                                var tmdbId = parseInt(root.itemData.tmdbId) || root.itemData.tmdbId
-                                                if (tmdbId) {
+                                                // Use whatever ID is available (prefer IMDB, then TMDB, then contentId)
+                                                var contentId = root.itemData.imdbId || root.itemData.id || ""
+                                                if (!contentId && root.itemData.tmdbId) {
+                                                    // Fallback to TMDB ID if no IMDB/contentId available
+                                                    var tmdbId = parseInt(root.itemData.tmdbId) || root.itemData.tmdbId
                                                     libraryService.loadSeasonEpisodes(tmdbId, newSeason)
+                                                } else if (contentId) {
+                                                    libraryService.loadSeasonEpisodes(contentId, newSeason)
                                                 }
                                             }
                                         }
@@ -1248,6 +1237,7 @@ Item {
                                                                 title: episodeData.title || "",
                                                                 description: episodeData.description || episodeData.overview || "",
                                                                 airDate: episodeData.airDate || "",
+                                                                metadataLine: episodeData.metadataLine || "",
                                                                 duration: episodeData.duration || 0,
                                                                 thumbnailUrl: episodeData.thumbnailUrl || "",
                                                                 
@@ -1322,10 +1312,16 @@ Item {
                                                             castModel.clear()
                                                             
                                                             // Ensure episodes are loaded for the current season
-                                                            if (root.itemData.showTmdbId) {
+                                                            // Use whatever ID is available (prefer IMDB, then TMDB, then contentId)
+                                                            var showContentId = root.itemData.showImdbId || root.itemData.showId || ""
+                                                            if (!showContentId && root.itemData.showTmdbId) {
+                                                                // Fallback to TMDB ID if no IMDB/contentId available
                                                                 var tmdbId = parseInt(root.itemData.showTmdbId) || root.itemData.showTmdbId
                                                                 var seasonNum = root.selectedSeasonNumber || 1
                                                                 libraryService.loadSeasonEpisodes(tmdbId, seasonNum)
+                                                            } else if (showContentId) {
+                                                                var seasonNum = root.selectedSeasonNumber || 1
+                                                                libraryService.loadSeasonEpisodes(showContentId, seasonNum)
                                                             }
                                                         }
                                                         cursorShape: Qt.PointingHandCursor
@@ -1360,6 +1356,16 @@ Item {
                                                     color: "#ffffff"
                                                     font.pixelSize: 16
                                                     font.bold: true
+                                                    elide: Text.ElideRight
+                                                }
+                                                
+                                                // Metadata line (formatted in backend: "Release Date • Runtime")
+                                                Text {
+                                                    width: parent.width
+                                                    text: modelData.metadataLine || ""
+                                                    color: "#aaaaaa"
+                                                    font.pixelSize: 14
+                                                    visible: (modelData.metadataLine || "") !== ""
                                                     elide: Text.ElideRight
                                                 }
                                                 

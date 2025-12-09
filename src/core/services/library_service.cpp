@@ -1104,6 +1104,81 @@ void LibraryService::onMediaMetadataLoaded(const QVariantMap& details)
         // This is for item details loading
         emit itemDetailsLoaded(details);
     }
+    
+    // Check if there are pending episode requests for this content
+    // Try multiple ID formats to match the request
+    QString episodeRequestKey;
+    
+    LoggingService::logDebug("LibraryService", QString("Checking for pending episode requests - contentId: %1, imdbId: %2, tmdbId: %3")
+        .arg(contentId).arg(imdbId).arg(tmdbId));
+    LoggingService::logDebug("LibraryService", QString("Pending episode request keys: %1")
+        .arg(QStringList(m_pendingSeasonEpisodesRequests.keys()).join(", ")));
+    
+    // First, try to match by the exact contentId from pending requests
+    if (!contentId.isEmpty() && m_pendingSeasonEpisodesRequests.contains(contentId)) {
+        episodeRequestKey = contentId;
+    } else if (!tmdbId.isEmpty()) {
+        QString tmdbKey = "tmdb:" + tmdbId;
+        if (m_pendingSeasonEpisodesRequests.contains(tmdbKey)) {
+            episodeRequestKey = tmdbKey;
+        }
+    } else if (!imdbId.isEmpty()) {
+        // Try IMDB ID directly
+        if (m_pendingSeasonEpisodesRequests.contains(imdbId)) {
+            episodeRequestKey = imdbId;
+        }
+    }
+    
+    // Also try matching by tmdb: format if we have tmdbId
+    if (episodeRequestKey.isEmpty() && !tmdbId.isEmpty()) {
+        QString tmdbKey = "tmdb:" + tmdbId;
+        if (m_pendingSeasonEpisodesRequests.contains(tmdbKey)) {
+            episodeRequestKey = tmdbKey;
+        }
+    }
+    
+    if (!episodeRequestKey.isEmpty()) {
+        // We have a pending episode request for this metadata
+        int seasonNumber = m_pendingSeasonEpisodesRequests.take(episodeRequestKey);
+        
+        LoggingService::logInfo("LibraryService", QString("Found pending episode request: %1 -> season %2").arg(episodeRequestKey).arg(seasonNumber));
+        
+        // Try to get episodes using multiple contentId formats
+        // Episodes might be stored under IMDB ID even if we requested with TMDB ID
+        QVariantList episodes;
+        
+        // First try the original request key
+        episodes = m_mediaMetadataService->getSeriesEpisodes(episodeRequestKey, seasonNumber);
+        LoggingService::logDebug("LibraryService", QString("Tried episodes with requestKey '%1': found %2").arg(episodeRequestKey).arg(episodes.size()));
+        
+        // If not found and we have IMDB ID, try that
+        if (episodes.isEmpty() && !imdbId.isEmpty() && episodeRequestKey != imdbId) {
+            episodes = m_mediaMetadataService->getSeriesEpisodes(imdbId, seasonNumber);
+            LoggingService::logDebug("LibraryService", QString("Tried episodes with IMDB ID '%1': found %2").arg(imdbId).arg(episodes.size()));
+        }
+        
+        // If still not found and we have TMDB ID in different format, try that
+        if (episodes.isEmpty() && !tmdbId.isEmpty()) {
+            QString tmdbKey = "tmdb:" + tmdbId;
+            if (episodeRequestKey != tmdbKey) {
+                episodes = m_mediaMetadataService->getSeriesEpisodes(tmdbKey, seasonNumber);
+                LoggingService::logDebug("LibraryService", QString("Tried episodes with TMDB key '%1': found %2").arg(tmdbKey).arg(episodes.size()));
+            }
+        }
+        
+        // Also try with just the tmdbId as string
+        if (episodes.isEmpty() && !tmdbId.isEmpty()) {
+            episodes = m_mediaMetadataService->getSeriesEpisodes(tmdbId, seasonNumber);
+            LoggingService::logDebug("LibraryService", QString("Tried episodes with tmdbId string '%1': found %2").arg(tmdbId).arg(episodes.size()));
+        }
+        
+        LoggingService::logInfo("LibraryService", QString("Emitting %1 episodes for season %2 (requestKey: %3)")
+            .arg(episodes.size()).arg(seasonNumber).arg(episodeRequestKey));
+        
+        emit seasonEpisodesLoaded(seasonNumber, episodes);
+    } else {
+        LoggingService::logDebug("LibraryService", "No matching pending episode request found");
+    }
 }
 
 void LibraryService::onMediaMetadataError(const QString& message)
@@ -1343,12 +1418,49 @@ void LibraryService::loadSimilarItems(int tmdbId, const QString& type)
     emit similarItemsLoaded(QVariantList());
 }
 
+void LibraryService::loadSeasonEpisodes(const QString& contentId, int seasonNumber)
+{
+    LoggingService::logInfo("LibraryService", QString("Loading episodes for contentId: %1, season: %2").arg(contentId).arg(seasonNumber));
+    
+    if (!m_mediaMetadataService) {
+        LoggingService::logWarning("LibraryService", "MediaMetadataService not available");
+        emit seasonEpisodesLoaded(seasonNumber, QVariantList());
+        return;
+    }
+    
+    if (contentId.isEmpty()) {
+        LoggingService::logWarning("LibraryService", "Empty contentId provided for loadSeasonEpisodes");
+        emit seasonEpisodesLoaded(seasonNumber, QVariantList());
+        return;
+    }
+    
+    // First, try to get episodes from cache (if metadata was already fetched)
+    QVariantList episodes = m_mediaMetadataService->getSeriesEpisodes(contentId, seasonNumber);
+    
+    if (!episodes.isEmpty()) {
+        // Episodes found in cache, emit them
+        LoggingService::logInfo("LibraryService", QString("Found %1 episodes in cache for season %2").arg(episodes.size()).arg(seasonNumber));
+        emit seasonEpisodesLoaded(seasonNumber, episodes);
+        return;
+    }
+    
+    // Episodes not in cache, need to fetch metadata first
+    // This will extract episodes from the metadata response
+    LoggingService::logInfo("LibraryService", QString("Episodes not in cache, fetching metadata for contentId: %1").arg(contentId));
+    
+    // Store pending request info - we'll check this when metadata loads
+    m_pendingSeasonEpisodesRequests[contentId] = seasonNumber;
+    LoggingService::logDebug("LibraryService", QString("Stored pending episode request: %1 -> season %2").arg(contentId).arg(seasonNumber));
+    
+    // Fetch metadata using the provided contentId
+    // When metadata loads, onMediaMetadataLoaded will check for pending episode requests
+    m_mediaMetadataService->getCompleteMetadata(contentId, "tv");
+}
+
 void LibraryService::loadSeasonEpisodes(int tmdbId, int seasonNumber)
 {
-    // This method is required by the interface but not currently implemented
-    // Season episodes would need to be fetched from TMDB API or addons
-    // For now, emit empty results
-    LoggingService::logWarning("LibraryService", QString("loadSeasonEpisodes not implemented for tmdbId: %1, season: %2").arg(tmdbId).arg(seasonNumber));
-    emit seasonEpisodesLoaded(seasonNumber, QVariantList());
+    // Legacy overload for QML compatibility - converts TMDB ID to contentId format
+    QString contentId = QString("tmdb:%1").arg(tmdbId);
+    loadSeasonEpisodes(contentId, seasonNumber);
 }
 
