@@ -154,6 +154,15 @@ ApplicationWindow {
                 source: "qrc:/qml/components/NavigationBar.qml"
                 visible: navigationService.currentScreen !== NavigationService.Player
                 
+                function updateBackButtonVisibility() {
+                    if (navBarLoader.item) {
+                        // Show back button for Search (3) and Detail (4) screens
+                        // navigateBack() will handle the case where we can't go back
+                        var isSearchOrDetail = navigationService.currentScreen === NavigationService.Search || navigationService.currentScreen === NavigationService.Detail
+                        navBarLoader.item.showBackButton = isSearchOrDetail
+                    }
+                }
+                
                 Connections {
                     target: navBarLoader.item
                     function onTabClicked(index) {
@@ -168,13 +177,17 @@ ApplicationWindow {
                     }
                 }
                 
+                Connections {
+                    target: navigationService
+                    function onCurrentScreenChanged() {
+                        navBarLoader.updateBackButtonVisibility()
+                    }
+                }
+                
                 onLoaded: {
                     if (item) {
                         item.currentIndex = Qt.binding(function() { return navigationService.currentScreen })
-                        // Show back button for Search (3) and Detail (4) screens
-                        item.showBackButton = Qt.binding(function() { 
-                            return navigationService.currentScreen === NavigationService.Search || navigationService.currentScreen === NavigationService.Detail 
-                        })
+                        updateBackButtonVisibility()
                     }
                 }
             }
