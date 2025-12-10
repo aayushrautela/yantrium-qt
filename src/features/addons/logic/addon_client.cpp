@@ -29,26 +29,62 @@ QString AddonClient::normalizeBaseUrl(const QString& url)
 
 QUrl AddonClient::buildUrl(const QString& path)
 {
+    QUrl baseUrl(m_baseUrl);
     QString fullPath = path;
+    
+    // Ensure path starts with '/'
     if (!fullPath.startsWith('/')) {
         fullPath.prepend('/');
     }
-    return QUrl(m_baseUrl + fullPath);
+    
+    // Join paths properly: if base URL has a path, append the new path
+    // QUrl.resolved() treats paths starting with '/' as absolute, which replaces the base path
+    // Instead, we manually join paths to append
+    QString basePath = baseUrl.path();
+    
+    // Remove trailing slash from base path if present (we'll add it back)
+    if (basePath.endsWith('/') && basePath != "/") {
+        basePath.chop(1);
+    }
+    
+    // Join paths: basePath + fullPath
+    QString joinedPath = basePath + fullPath;
+    
+    // Set the joined path
+    baseUrl.setPath(joinedPath);
+    
+    return baseUrl;
 }
 
 QString AddonClient::extractBaseUrl(const QString& manifestUrl)
 {
     QUrl url(manifestUrl);
-    QStringList pathSegments = url.path().split('/', Qt::SkipEmptyParts);
     
-    // Remove 'manifest.json' if it's the last segment
-    if (!pathSegments.isEmpty() && pathSegments.last() == "manifest.json") {
-        pathSegments.removeLast();
+    // According to Stremio spec: base URL = manifest URL with '/manifest.json' removed
+    QString path = url.path();
+    
+    // Remove '/manifest.json' from the path
+    if (path.endsWith("/manifest.json")) {
+        path = path.left(path.length() - 14); // Remove "/manifest.json"
+    } else if (path.endsWith("manifest.json")) {
+        path = path.left(path.length() - 13); // Remove "manifest.json"
     }
     
-    // Rebuild URL without the manifest.json part
+    // Normalize path: ensure it doesn't end with '/' (we'll add it in buildUrl if needed)
+    // Actually, let's keep trailing slash for consistency with Stremio behavior
+    if (!path.isEmpty() && !path.endsWith('/')) {
+        path += '/';
+    } else if (path.isEmpty()) {
+        path = "/";
+    }
+    
+    // Rebuild URL with cleaned path, removing query and fragment
     QUrl baseUrl = url;
-    baseUrl.setPath('/' + pathSegments.join('/'));
+    baseUrl.setPath(path);
+    baseUrl.setQuery(QUrlQuery()); // Remove query parameters
+    baseUrl.setFragment(QString()); // Remove fragment
+    
+    // Use default encoding - QUrl will encode what's needed but preserve valid path characters
     return baseUrl.toString(QUrl::RemoveFragment | QUrl::RemoveQuery);
 }
 
