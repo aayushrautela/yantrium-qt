@@ -3,6 +3,7 @@ runtime: org.kde.Platform
 runtime-version: '6.10'
 sdk: org.kde.Sdk
 command: yantrium
+icon: resources/assets/icons/app_logo.svg
 finish-args:
   - --share=network
   - --socket=x11

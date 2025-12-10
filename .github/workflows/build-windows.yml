@@ -149,6 +149,35 @@ jobs:
 
         echo "libtorrent setup complete"
         
+    # Convert SVG to ICO for Windows icon
+    - name: Convert SVG to ICO
+      shell: powershell
+      run: |
+        # Install ImageMagick for SVG to ICO conversion
+        choco install imagemagick --no-progress -y
+        
+        # Create icons directory if it doesn't exist
+        $iconDir = "resources\assets\icons"
+        if (-not (Test-Path $iconDir)) {
+          New-Item -ItemType Directory -Path $iconDir -Force | Out-Null
+        }
+        
+        # Convert SVG to ICO with multiple sizes (16, 32, 48, 64, 128, 256)
+        $svgPath = "$iconDir\app_logo.svg"
+        $icoPath = "$iconDir\app_logo.ico"
+        
+        if (Test-Path $svgPath) {
+          Write-Host "Converting $svgPath to $icoPath"
+          magick convert $svgPath -define icon:auto-resize=16,32,48,64,128,256 $icoPath
+          if (Test-Path $icoPath) {
+            Write-Host "Successfully created icon file: $icoPath"
+          } else {
+            Write-Host "Warning: Icon conversion may have failed"
+          }
+        } else {
+          Write-Host "Warning: SVG file not found at $svgPath"
+        }
+
     # Build the main application
     - name: Configure and build
       shell: cmd

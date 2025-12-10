@@ -133,6 +133,11 @@ set(PROJECT_SOURCES
     resources/qml.qrc
 )
 
+# Windows icon resource file
+if(WIN32)
+    list(APPEND PROJECT_SOURCES resources/yantrium.rc)
+endif()
+
 # 4. Define the Executable
 qt_add_executable(Yantrium
     MANUAL_FINALIZATION
