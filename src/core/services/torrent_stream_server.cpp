@@ -10,12 +10,14 @@
 #include <QMimeType>
 #include <QDir>
 #include <QHostAddress>
+#include <QTcpServer>
 
 #ifdef TORRENT_SUPPORT_ENABLED
 #ifdef HAVE_QHTTPSERVER
 #include <QHttpServer>
 #include <QHttpServerRequest>
 #include <QHttpServerResponse>
+#include <QHttpHeaders>
 #endif
 #include <libtorrent/session.hpp>
 #include <libtorrent/torrent_handle.hpp>
@@ -80,21 +82,40 @@ bool TorrentStreamServer::startServer(quint16 port)
     m_server = std::make_unique<QHttpServer>();
     
     // Handle stream requests
-    m_server->route("/stream/<arg>", [this](const QString& streamId, const QHttpServerRequest& request) {
+    m_server->route("/stream/<arg>", [this](const QString& /*streamId*/, const QHttpServerRequest& request) {
         return handleRequest(request);
     });
     
     // Handle root requests (redirect to stream)
-    m_server->route("/", [this](const QHttpServerRequest& request) {
+    m_server->route("/", [this](const QHttpServerRequest& /*request*/) {
         return QHttpServerResponse("text/plain", "Torrent Stream Server");
     });
     
+    // Use bind() for newer Qt6HttpServer API, fallback to listen() for older versions
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // Newer API: bind() requires a QTcpServer (bind() takes ownership)
+    auto tcpServer = new QTcpServer();
+    if (!tcpServer->listen(QHostAddress::LocalHost, port)) {
+        LoggingService::logError("TorrentStreamServer", "Failed to start TCP server");
+        delete tcpServer;
+        return false;
+    }
+    if (!m_server->bind(tcpServer)) {
+        LoggingService::logError("TorrentStreamServer", "Failed to bind HTTP server");
+        delete tcpServer;
+        return false;
+    }
+    // bind() takes ownership, so don't delete tcpServer
+    auto ports = m_server->serverPorts();
+    m_port = ports.isEmpty() ? tcpServer->serverPort() : ports.first();
+    #else
+    // Older API: listen() directly on QHttpServer
     if (!m_server->listen(QHostAddress::LocalHost, port)) {
         LoggingService::logError("TorrentStreamServer", "Failed to start HTTP server");
         return false;
     }
-    
     m_port = m_server->serverPort();
+    #endif
     m_baseUrl = QString("http://localhost:%1").arg(m_port);
     
     LoggingService::logInfo("TorrentStreamServer", 
@@ -400,17 +421,23 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     
     // Get file index (use provided or auto-detect video file)
     int actualFileIndex = fileIndex;
+    auto ti_ptr = handle.torrent_file();
+    if (!ti_ptr) {
+        return QHttpServerResponse(QHttpServerResponse::StatusCode::NotFound);
+    }
+    const libtorrent::torrent_info& ti = *ti_ptr;
+    
     if (actualFileIndex < 0) {
         // Auto-detect largest video file
-        libtorrent::torrent_info ti = handle.torrent_file();
         qint64 maxSize = 0;
         for (int i = 0; i < ti.num_files(); ++i) {
-            libtorrent::file_entry fe = ti.file_at(i);
-            QString path = QString::fromStdString(fe.path);
+            const libtorrent::file_storage& files = ti.files();
+            QString path = QString::fromStdString(files.file_path(i));
+            qint64 fileSize = files.file_size(i);
             if (path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".avi") ||
                 path.endsWith(".mov") || path.endsWith(".webm")) {
-                if (fe.size > maxSize) {
-                    maxSize = fe.size;
+                if (fileSize > maxSize) {
+                    maxSize = fileSize;
                     actualFileIndex = i;
                 }
             }
@@ -422,7 +449,6 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     }
     
     // Check if file exists in torrent
-    libtorrent::torrent_info ti = handle.torrent_file();
     if (actualFileIndex >= ti.num_files()) {
         return QHttpServerResponse(QHttpServerResponse::StatusCode::NotFound);
     }
@@ -445,8 +471,8 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     }
     
     // Get file size
-    libtorrent::file_entry fe = ti.file_at(actualFileIndex);
-    qint64 fileSize = fe.size;
+    const libtorrent::file_storage& files = ti.files();
+    qint64 fileSize = files.file_size(actualFileIndex);
     
     if (end < 0) {
         end = fileSize - 1;
@@ -461,23 +487,36 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     
     // For now, return a simple response indicating the file
     // In a full implementation, you'd stream the actual file data
-    QString fileName = QString::fromStdString(fe.path);
+    QString fileName = QString::fromStdString(files.file_path(actualFileIndex));
     QMimeDatabase mimeDb;
     QMimeType mimeType = mimeDb.mimeTypeForFile(fileName);
     
-    QHttpServerResponse response;
-    response.setStatusCode(QHttpServerResponse::StatusCode::PartialContent);
+    // TODO: Actually read and stream the file data from libtorrent
+    // For now, return placeholder
+    QByteArray body = "Torrent streaming - file data would be here";
+    
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // Newer API: use QHttpHeaders and setHeaders()
+    QHttpHeaders headers;
+    headers.append("Content-Type", mimeType.name().toUtf8());
+    headers.append("Content-Length", QByteArray::number(contentLength));
+    headers.append("Accept-Ranges", "bytes");
+    headers.append("Content-Range", 
+        QString("bytes %1-%2/%3").arg(start).arg(end).arg(fileSize).toUtf8());
+    
+    QHttpServerResponse response(body, QHttpServerResponse::StatusCode::PartialContent);
+    response.setHeaders(headers);
+    return response;
+    #else
+    // Older API: use setHeader() method
+    QHttpServerResponse response(body, QHttpServerResponse::StatusCode::PartialContent);
     response.setHeader("Content-Type", mimeType.name().toUtf8());
     response.setHeader("Content-Length", QByteArray::number(contentLength));
     response.setHeader("Accept-Ranges", "bytes");
     response.setHeader("Content-Range", 
         QString("bytes %1-%2/%3").arg(start).arg(end).arg(fileSize).toUtf8());
-    
-    // TODO: Actually read and stream the file data from libtorrent
-    // For now, return placeholder
-    response.setBody("Torrent streaming - file data would be here");
-    
     return response;
+    #endif
 }
 #endif
 

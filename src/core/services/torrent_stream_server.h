@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QString>
 #include <QMap>
+#include <QTimer>
 #include <memory>
 #include <QtQmlIntegration/qqmlintegration.h>
 
