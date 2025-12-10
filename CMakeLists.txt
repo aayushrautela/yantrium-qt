@@ -278,24 +278,102 @@ elseif(UNIX AND NOT APPLE)
         )
     else()
         # Try to find libtorrent from system/Flatpak paths (e.g., /app/lib)
-        find_library(LIBTORRENT_LIB 
-            NAMES torrent-rasterbar libtorrent-rasterbar
-            PATHS /app/lib /usr/lib /usr/local/lib
-            NO_DEFAULT_PATH
-        )
-        find_path(LIBTORRENT_INCLUDE_DIR
-            NAMES libtorrent/session.hpp
-            PATHS /app/include /usr/include /usr/local/include
-            NO_DEFAULT_PATH
-        )
+        # First, check if /app/lib/libtorrent-rasterbar.so exists (Flatpak build)
+        if(EXISTS "/app/lib/libtorrent-rasterbar.so")
+            set(LIBTORRENT_LIB "/app/lib/libtorrent-rasterbar.so")
+            message(STATUS "Found libtorrent at: ${LIBTORRENT_LIB}")
+        else()
+            # Try multiple library name variations
+            find_library(LIBTORRENT_LIB 
+                NAMES torrent-rasterbar libtorrent-rasterbar libtorrent
+                PATHS /app/lib /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+                NO_DEFAULT_PATH
+            )
+            # Also try without NO_DEFAULT_PATH as fallback
+            if(NOT LIBTORRENT_LIB)
+                find_library(LIBTORRENT_LIB 
+                    NAMES torrent-rasterbar libtorrent-rasterbar libtorrent
+                )
+            endif()
+        endif()
+        
+        # Check for headers
+        if(EXISTS "/app/include/libtorrent/session.hpp")
+            set(LIBTORRENT_INCLUDE_DIR "/app/include")
+            message(STATUS "Found libtorrent headers at: ${LIBTORRENT_INCLUDE_DIR}")
+        else()
+            find_path(LIBTORRENT_INCLUDE_DIR
+                NAMES libtorrent/session.hpp
+                PATHS /app/include /usr/include /usr/local/include
+                NO_DEFAULT_PATH
+            )
+            # Also try without NO_DEFAULT_PATH as fallback
+            if(NOT LIBTORRENT_INCLUDE_DIR)
+                find_path(LIBTORRENT_INCLUDE_DIR
+                    NAMES libtorrent/session.hpp
+                )
+            endif()
+        endif()
+        
         if(LIBTORRENT_LIB AND LIBTORRENT_INCLUDE_DIR)
             message(STATUS "Found libtorrent from system: ${LIBTORRENT_LIB}")
             message(STATUS "Found libtorrent headers: ${LIBTORRENT_INCLUDE_DIR}")
             target_include_directories(Yantrium PRIVATE ${LIBTORRENT_INCLUDE_DIR})
-            target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIB})
             target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
+            
+            # Find and link boost libraries that libtorrent depends on
+            # Boost is built in the Flatpak manifest, so it should be in /app/lib
+            # Check for boost libraries in /app/lib first (Flatpak build)
+            if(EXISTS "/app/lib/libboost_system.so")
+                set(BOOST_SYSTEM_LIB "/app/lib/libboost_system.so")
+            else()
+                find_library(BOOST_SYSTEM_LIB
+                    NAMES boost_system
+                    PATHS /app/lib /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+                    NO_DEFAULT_PATH
+                )
+                if(NOT BOOST_SYSTEM_LIB)
+                    find_library(BOOST_SYSTEM_LIB NAMES boost_system)
+                endif()
+            endif()
+            
+            if(EXISTS "/app/lib/libboost_filesystem.so")
+                set(BOOST_FILESYSTEM_LIB "/app/lib/libboost_filesystem.so")
+            else()
+                find_library(BOOST_FILESYSTEM_LIB
+                    NAMES boost_filesystem
+                    PATHS /app/lib /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+                    NO_DEFAULT_PATH
+                )
+                if(NOT BOOST_FILESYSTEM_LIB)
+                    find_library(BOOST_FILESYSTEM_LIB NAMES boost_filesystem)
+                endif()
+            endif()
+            
+            # Link libtorrent and its boost dependencies
+            target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIB})
+            if(BOOST_SYSTEM_LIB)
+                message(STATUS "Linking boost_system: ${BOOST_SYSTEM_LIB}")
+                target_link_libraries(Yantrium PRIVATE ${BOOST_SYSTEM_LIB})
+            else()
+                message(WARNING "boost_system not found - libtorrent may not link correctly")
+            endif()
+            if(BOOST_FILESYSTEM_LIB)
+                message(STATUS "Linking boost_filesystem: ${BOOST_FILESYSTEM_LIB}")
+                target_link_libraries(Yantrium PRIVATE ${BOOST_FILESYSTEM_LIB})
+            else()
+                message(WARNING "boost_filesystem not found - libtorrent may not link correctly")
+            endif()
         else()
-            message(STATUS "libtorrent not found - torrent support disabled")
+            message(WARNING "libtorrent not found - torrent support disabled")
+            message(STATUS "Searched for library in: /app/lib, /usr/lib, /usr/local/lib")
+            message(STATUS "Searched for headers in: /app/include, /usr/include, /usr/local/include")
+            if(LIBTORRENT_LIB)
+                message(STATUS "Found library but no headers: ${LIBTORRENT_LIB}")
+            endif()
+            if(LIBTORRENT_INCLUDE_DIR)
+                message(STATUS "Found headers but no library: ${LIBTORRENT_INCLUDE_DIR}")
+            endif()
         endif()
     endif()
 endif()
