@@ -36,7 +36,6 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.margins: 20
 
             // Addons Tab
             ScrollView {
@@ -48,194 +47,244 @@ Item {
                 Column {
                     id: addonColumn
                     width: parent.width
-                    spacing: 15
+                    spacing: 20
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: 20
 
-                        Text {
-                            text: "Addon Management"
-                            font.pixelSize: 28
-                            font.bold: true
-                            color: "#FFFFFF"
-                        }
-
-                        property AddonRepository addonRepo: AddonRepository
+                    // Header with title and add button
+                    Row {
+                        id: headerRow
+                        width: parent.width
+                        spacing: 20
                         
-                        Connections {
-                            target: addonRepo
-                            function onAddonInstalled() {
-                                statusText.text = "✓ Addon installed successfully!"
-                                statusText.color = "#4CAF50"
-                                addonCount.text = "Total Addons: " + addonRepo.listAddonsCount()
-                                enabledCount.text = "Enabled: " + addonRepo.getEnabledAddonsCount()
-                            }
-                            
-                            function onAddonUpdated() {
-                                statusText.text = "✓ Addon updated successfully!"
-                                statusText.color = "#2196F3"
-                                addonCount.text = "Total Addons: " + addonRepo.listAddonsCount()
-                                enabledCount.text = "Enabled: " + addonRepo.getEnabledAddonsCount()
-                            }
-                            
-                            function onAddonRemoved(addonId) {
-                                statusText.text = "✓ Removed addon: " + addonId
-                                statusText.color = "#FF9800"
-                                addonCount.text = "Total Addons: " + addonRepo.listAddonsCount()
-                                enabledCount.text = "Enabled: " + addonRepo.getEnabledAddonsCount()
-                            }
-                            
-                            function onError(errorMessage) {
-                                statusText.text = "✗ Error: " + errorMessage
-                                statusText.color = "#F44336"
-                            }
-                        }
-
-                        // Status display
-                        Rectangle {
-                            width: parent.width
-                    height: 60
-                    color: "#1a1a1a"
-                    radius: 8
-                    border.color: "#333333"
-                    border.width: 1
-
-                    Column {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.margins: 10
-                        spacing: 5
-
-                        Text {
-                            id: statusText
-                            text: "Ready"
-                            color: "#FFFFFF"
-                            font.pixelSize: 14
-                        }
-
+                        // Settings icon and title
                         Row {
-                            spacing: 20
-                            Text {
-                                id: addonCount
-                                text: "Total Addons: " + addonRepo.listAddonsCount()
-                                color: "#AAAAAA"
-                                font.pixelSize: 12
+                            id: settingsTitleRow
+                            spacing: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            
+                            Image {
+                                source: "qrc:/assets/icons/settings.svg"
+                                width: 24
+                                height: 24
+                                anchors.verticalCenter: parent.verticalCenter
                             }
+                            
                             Text {
-                                id: enabledCount
-                                text: "Enabled: " + addonRepo.getEnabledAddonsCount()
-                                color: "#AAAAAA"
-                                font.pixelSize: 12
+                                text: "Addon Management"
+                                font.pixelSize: 28
+                                font.bold: true
+                                color: "#FFFFFF"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                        
+                        Item {
+                            width: parent.width - settingsTitleRow.width - addButton.width - parent.spacing
+                            height: 1
+                        }
+                        
+                        // Add button
+                        Rectangle {
+                            id: addButton
+                            width: 40
+                            height: 40
+                            radius: 20
+                            color: mouseArea.containsMouse ? "#2a2a2a" : "#1a1a1a"
+                            border.color: "#333333"
+                            border.width: 1
+                            
+                            Text {
+                                text: "+"
+                                font.pixelSize: 28
+                                font.bold: true
+                                color: "#FFFFFF"
+                                anchors.centerIn: parent
+                            }
+                            
+                            MouseArea {
+                                id: mouseArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    installDialog.open()
+                                }
                             }
                         }
                     }
-                }
-
-                        // Install section
-                        Rectangle {
-                            width: parent.width
-                    height: 120
-                    color: "#1a1a1a"
-                    radius: 8
-                    border.color: "#333333"
-                    border.width: 1
-
-                    Column {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 10
-
-                        Text {
-                            text: "Install Addon"
-                            color: "#FFFFFF"
-                            font.pixelSize: 16
-                            font.bold: true
+                    
+                    property AddonRepository addonRepo: AddonRepository
+                    
+                    // Addon list model
+                    ListModel {
+                        id: addonListModel
+                    }
+                    
+                    function refreshAddonList() {
+                        addonListModel.clear()
+                        var addons = addonRepo.getAllAddons()
+                        for (var i = 0; i < addons.length; i++) {
+                            addonListModel.append(addons[i])
                         }
-
-                        Row {
-                            width: parent.width
-                            spacing: 10
-
-                            TextField {
-                                id: manifestUrlInput
-                                width: parent.width - installButton.width - parent.spacing
-                                placeholderText: "Enter manifest URL"
-                                color: "#FFFFFF"
-                                background: Rectangle {
-                                    color: "#2a2a2a"
-                                    border.color: "#444444"
-                                    border.width: 1
-                                    radius: 4
-                                }
-                                text: "https://v3-cinemeta.strem.io/manifest.json"
-                            }
-
-                            Button {
-                                id: installButton
-                                text: "Install"
-                                onClicked: {
-                                    if (manifestUrlInput.text.trim() !== "") {
-                                        statusText.text = "Installing..."
-                                        statusText.color = "#FFA500"
-                                        addonRepo.installAddon(manifestUrlInput.text.trim())
+                    }
+                    
+                    Connections {
+                        target: addonRepo
+                        function onAddonInstalled() {
+                            refreshAddonList()
+                        }
+                        
+                        function onAddonUpdated() {
+                            refreshAddonList()
+                        }
+                        
+                        function onAddonRemoved(addonId) {
+                            refreshAddonList()
+                        }
+                    }
+                    
+                    // Addon cards in Flow layout
+                    Flow {
+                        width: parent.width
+                        spacing: 20
+                        
+                        Repeater {
+                            model: addonListModel
+                            
+                            Rectangle {
+                                id: addonCard
+                                width: Math.max(280, Math.min(350, (parent.width - 40) / 3))
+                                height: cardContent.height + 32
+                                color: "#1a1a1a"
+                                radius: 8
+                                border.color: "#2d2d2d"
+                                border.width: 1
+                                
+                                Column {
+                                    id: cardContent
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: 16
+                                    spacing: 12
+                                    
+                                    // Addon name (large, bold)
+                                    Text {
+                                        width: parent.width
+                                        text: model.name || model.id || "Unknown Addon"
+                                        font.pixelSize: 20
+                                        font.bold: true
+                                        color: "#FFFFFF"
+                                        elide: Text.ElideRight
+                                    }
+                                    
+                                    // Version
+                                    Text {
+                                        text: "Version: " + (model.version || "N/A")
+                                        font.pixelSize: 14
+                                        color: "#AAAAAA"
+                                    }
+                                    
+                                    // Description
+                                    Text {
+                                        width: parent.width
+                                        text: model.description || "No description available"
+                                        font.pixelSize: 13
+                                        color: "#AAAAAA"
+                                        wrapMode: Text.WordWrap
+                                        maximumLineCount: 3
+                                        elide: Text.ElideRight
+                                    }
+                                    
+                                    // Controls row (toggle and delete)
+                                    Row {
+                                        width: parent.width
+                                        spacing: 12
+                                        
+                                        Item {
+                                            width: parent.width - toggleSwitch.width - deleteButton.width - parent.spacing
+                                            height: 1
+                                        }
+                                        
+                                        // Toggle switch
+                                        Rectangle {
+                                            id: toggleSwitch
+                                            width: 50
+                                            height: 28
+                                            radius: 14
+                                            color: (model.enabled || false) ? "#E53935" : "#666666"
+                                            
+                                            Behavior on color {
+                                                ColorAnimation { duration: 200 }
+                                            }
+                                            
+                                            Rectangle {
+                                                id: toggleHandle
+                                                width: 24
+                                                height: 24
+                                                radius: 12
+                                                color: "#FFFFFF"
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                anchors.left: parent.left
+                                                anchors.leftMargin: (model.enabled || false) ? 24 : 2
+                                                
+                                                Behavior on anchors.leftMargin {
+                                                    NumberAnimation { duration: 200 }
+                                                }
+                                            }
+                                            
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (model.enabled) {
+                                                        addonColumn.addonRepo.disableAddon(model.id)
+                                                    } else {
+                                                        addonColumn.addonRepo.enableAddon(model.id)
+                                                    }
+                                                    addonColumn.refreshAddonList()
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Delete button
+                                        Rectangle {
+                                            id: deleteButton
+                                            width: 32
+                                            height: 32
+                                            radius: 16
+                                            color: deleteMouseArea.containsMouse ? "#2a2a2a" : "transparent"
+                                            
+                                            Image {
+                                                source: "qrc:/assets/icons/delete.svg"
+                                                width: 20
+                                                height: 20
+                                                anchors.centerIn: parent
+                                            }
+                                            
+                                            MouseArea {
+                                                id: deleteMouseArea
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    addonColumn.addonRepo.removeAddon(model.id)
+                                                    addonColumn.refreshAddonList()
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-
-                        // Quick install buttons
-                        Row {
-                            spacing: 10
-                            Button {
-                                text: "Cinemeta"
-                                onClicked: manifestUrlInput.text = "https://v3-cinemeta.strem.io/manifest.json"
-                            }
-                            Button {
-                                text: "OpenSubtitles"
-                                onClicked: manifestUrlInput.text = "https://opensubtitles-v3.strem.io/manifest.json"
-                            }
-                        }
                     }
-                }
-
-                        // Addon Operations
-                        Rectangle {
-                            width: parent.width
-                    height: 100
-                    color: "#1a1a1a"
-                    radius: 8
-                    border.color: "#333333"
-                    border.width: 1
-
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 10
-
-                        Button {
-                            text: "Refresh Count"
-                            onClicked: {
-                                addonCount.text = "Total Addons: " + addonRepo.listAddonsCount()
-                                enabledCount.text = "Enabled: " + addonRepo.getEnabledAddonsCount()
-                            }
-                        }
-
-                        Button {
-                            text: "View Addon Details"
-                            onClicked: {
-                                var json = addonRepo.getAddonJson("com.cinemeta.movie")
-                                if (json) {
-                                    statusText.text = "Found addon: " + json
-                                    statusText.color = "#4CAF50"
-                                } else {
-                                    statusText.text = "Addon not found (try installing Cinemeta first)"
-                                    statusText.color = "#FF9800"
-                                }
-                            }
-                        }
-                    }
-                }
                 }
             }
 
-            // Trakt Tab
+            // Trakt Tab (keeping existing implementation)
             ScrollView {
                 id: traktTab
                 anchors.fill: parent
@@ -246,143 +295,7 @@ Item {
                     id: traktColumn
                     width: parent.width
                     spacing: 15
-
-                    Text {
-                        text: "Trakt Integration"
-                        font.pixelSize: 28
-                        font.bold: true
-                        color: "#FFFFFF"
-                    }
-
-                    // TraktAuthService is a singleton, accessed directly
-                    Connections {
-                        target: TraktAuthService
-                        
-                        function onDeviceCodeGenerated(userCode, verificationUrl, expiresIn) {
-                            traktStatusText.text = "✓ Device code generated!\nUser Code: " + userCode + "\nVisit: " + verificationUrl
-                            traktStatusText.color = "#4CAF50"
-                            traktUserCodeText.text = "User Code: " + userCode
-                            traktVerificationUrlText.text = "Visit: " + verificationUrl
-                        }
-                        
-                        function onAuthenticationStatusChanged(authenticated) {
-                            if (authenticated) {
-                                traktStatusText.text = "✓ Authenticated with Trakt"
-                                traktStatusText.color = "#4CAF50"
-                            } else {
-                                traktStatusText.text = "Not authenticated"
-                                traktStatusText.color = "#FF9800"
-                            }
-                        }
-                        
-                        function onUserInfoFetched(username, slug) {
-                            traktStatusText.text = "✓ User: " + username + " (" + slug + ")"
-                            traktStatusText.color = "#4CAF50"
-                        }
-                        
-                        function onError(errorMessage) {
-                            traktStatusText.text = "✗ Error: " + errorMessage
-                            traktStatusText.color = "#F44336"
-                        }
-                    }
-
-                    property TraktScrobbleService traktScrobble: TraktScrobbleService
-                    
-                    Connections {
-                        target: traktScrobble
-                        function onScrobbleStarted(success) {
-                            traktStatusText.text = success ? "✓ Scrobble started" : "✗ Failed to start scrobble"
-                            traktStatusText.color = success ? "#4CAF50" : "#F44336"
-                        }
-                        
-                        function onScrobblePaused(success) {
-                            traktStatusText.text = success ? "✓ Scrobble paused" : "✗ Failed to pause scrobble"
-                            traktStatusText.color = success ? "#4CAF50" : "#F44336"
-                        }
-                        
-                        function onScrobbleStopped(success) {
-                            traktStatusText.text = success ? "✓ Scrobble stopped" : "✗ Failed to stop scrobble"
-                            traktStatusText.color = success ? "#4CAF50" : "#F44336"
-                        }
-                        
-                        function onHistoryFetched(history) {
-                            traktStatusText.text = "✓ Fetched " + history.length + " history items"
-                            traktStatusText.color = "#4CAF50"
-                        }
-                        
-                        function onError(errorMessage) {
-                            traktStatusText.text = "✗ Error: " + errorMessage
-                            traktStatusText.color = "#F44336"
-                        }
-                    }
-
-                    TraktWatchlistService {
-                        id: traktWatchlist
-                        
-                        onWatchlistMoviesFetched: function(movies) {
-                            traktStatusText.text = "✓ Fetched " + movies.length + " watchlist movies"
-                            traktStatusText.color = "#4CAF50"
-                        }
-                        
-                        onWatchlistShowsFetched: function(shows) {
-                            traktStatusText.text = "✓ Fetched " + shows.length + " watchlist shows"
-                            traktStatusText.color = "#4CAF50"
-                        }
-                        
-                        onCollectionMoviesFetched: function(movies) {
-                            traktStatusText.text = "✓ Fetched " + movies.length + " collection movies"
-                            traktStatusText.color = "#4CAF50"
-                        }
-                        
-                        onCollectionShowsFetched: function(shows) {
-                            traktStatusText.text = "✓ Fetched " + shows.length + " collection shows"
-                            traktStatusText.color = "#4CAF50"
-                        }
-                        
-                        onError: function(errorMessage) {
-                            traktStatusText.text = "✗ Error: " + errorMessage
-                            traktStatusText.color = "#F44336"
-                        }
-                    }
-
-                    // Status display
-                    Rectangle {
-                        width: parent.width
-                        height: 60
-                        color: "#1a1a1a"
-                        radius: 8
-                        border.color: "#333333"
-                        border.width: 1
-
-                        Column {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.margins: 10
-                            spacing: 5
-
-                            Text {
-                                id: traktStatusText
-                                text: "Ready"
-                                color: "#FFFFFF"
-                                font.pixelSize: 14
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Trakt Tab
-            ScrollView {
-                id: traktTab
-                anchors.fill: parent
-                visible: tabBar.currentIndex === 1
-                clip: true
-                
-                Column {
-                    id: traktColumn
-                    width: parent.width
-                    spacing: 15
+                    anchors.margins: 20
 
                     Text {
                         text: "Trakt Integration"
@@ -828,8 +741,74 @@ Item {
         }
     }
 
+    // Install Addon Dialog
+    Dialog {
+        id: installDialog
+        title: "Install Addon"
+        width: 600
+        height: 300
+        anchors.centerIn: parent
+        
+        Column {
+            anchors.fill: parent
+            spacing: 15
+            
+            Text {
+                text: "Enter manifest URL"
+                font.pixelSize: 16
+                color: "#FFFFFF"
+            }
+            
+            TextField {
+                id: manifestUrlInput
+                width: parent.width
+                placeholderText: "Enter manifest URL"
+                color: "#FFFFFF"
+                background: Rectangle {
+                    color: "#2a2a2a"
+                    border.color: "#444444"
+                    border.width: 1
+                    radius: 4
+                }
+                text: "https://v3-cinemeta.strem.io/manifest.json"
+            }
+            
+            // Quick install buttons
+            Row {
+                spacing: 10
+                
+                Button {
+                    text: "Cinemeta"
+                    onClicked: manifestUrlInput.text = "https://v3-cinemeta.strem.io/manifest.json"
+                }
+                Button {
+                    text: "OpenSubtitles"
+                    onClicked: manifestUrlInput.text = "https://opensubtitles-v3.strem.io/manifest.json"
+                }
+            }
+            
+            Row {
+                spacing: 10
+                
+                Button {
+                    text: "Install"
+                    onClicked: {
+                        if (manifestUrlInput.text.trim() !== "") {
+                            addonColumn.addonRepo.installAddon(manifestUrlInput.text.trim())
+                            installDialog.close()
+                        }
+                    }
+                }
+                
+                Button {
+                    text: "Cancel"
+                    onClicked: installDialog.close()
+                }
+            }
+        }
+    }
+
     Component.onCompleted: {
-        addonCount.text = "Total Addons: " + addonRepo.listAddonsCount()
-        enabledCount.text = "Enabled: " + addonRepo.getEnabledAddonsCount()
+        addonColumn.refreshAddonList()
     }
 }

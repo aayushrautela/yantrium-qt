@@ -183,6 +183,7 @@ QVariantList AddonRepository::getAllAddons()
         map["id"] = addon.id;
         map["name"] = addon.name;
         map["version"] = addon.version;
+        map["description"] = addon.description;
         map["enabled"] = addon.enabled;
         map["manifestUrl"] = addon.manifestUrl;
         result.append(map);
