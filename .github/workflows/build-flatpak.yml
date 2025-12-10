@@ -126,13 +126,15 @@ jobs:
         # Inject API keys into manifest
         envsubst < org.yantrium.Yantrium.yml > org.yantrium.Yantrium.filled.yml
 
-    - name: Cache libtorrent build
+    - name: Cache Flatpak builder cache
       uses: actions/cache@v4
       with:
-        path: ~/.var/app/org.flatpak.Builder/cache/objects
-        key: libtorrent-cache-${{ runner.os }}-${{ hashFiles('org.yantrium.Yantrium.yml') }}
+        path: |
+          ~/.cache/flatpak-builder
+          .flatpak-builder
+        key: flatpak-builder-cache-${{ runner.os }}-${{ hashFiles('org.yantrium.Yantrium.yml') }}
         restore-keys: |
-          libtorrent-cache-${{ runner.os }}-
+          flatpak-builder-cache-${{ runner.os }}-
 
     - name: Build Flatpak
       run: |
