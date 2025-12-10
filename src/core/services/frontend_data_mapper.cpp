@@ -7,15 +7,23 @@
 // Inline helper functions to replace deleted TmdbDataMapper
 namespace {
     QString extractPosterUrl(const QJsonObject& tmdbData) {
+        if (!tmdbData.contains("poster_path") || tmdbData["poster_path"].isNull()) {
+            return QString();
+        }
         QString posterPath = tmdbData["poster_path"].toString();
-        if (posterPath.isEmpty()) return QString();
+        // Check for "null" string literal as well
+        if (posterPath.isEmpty() || posterPath == "null") return QString();
         if (posterPath.startsWith("http")) return posterPath;
         return "https://image.tmdb.org/t/p/w500" + posterPath;
     }
     
     QString extractBackdropUrl(const QJsonObject& tmdbData) {
+        if (!tmdbData.contains("backdrop_path") || tmdbData["backdrop_path"].isNull()) {
+            return QString();
+        }
         QString backdropPath = tmdbData["backdrop_path"].toString();
-        if (backdropPath.isEmpty()) return QString();
+        // Check for "null" string literal as well
+        if (backdropPath.isEmpty() || backdropPath == "null") return QString();
         if (backdropPath.startsWith("http")) return backdropPath;
         return "https://image.tmdb.org/t/p/w1280" + backdropPath;
     }
@@ -25,8 +33,12 @@ namespace {
         QJsonArray logos = images["logos"].toArray();
         if (!logos.isEmpty()) {
             QJsonObject logo = logos[0].toObject();
+            if (!logo.contains("file_path") || logo["file_path"].isNull()) {
+                return QString();
+            }
             QString filePath = logo["file_path"].toString();
-            if (!filePath.isEmpty()) {
+            // Check for "null" string literal as well
+            if (!filePath.isEmpty() && filePath != "null") {
                 if (filePath.startsWith("http")) return filePath;
                 return "https://image.tmdb.org/t/p/w500" + filePath;
             }
@@ -88,13 +100,15 @@ namespace {
     public:
         enum class ImageSize { Small, Medium, Large };
         static QString buildUrl(const QString& path, ImageSize size) {
-            if (path.isEmpty()) return QString();
+            // Check for empty or "null" string literal
+            if (path.isEmpty() || path == "null") return QString();
             if (path.startsWith("http")) return path;
             QString sizeStr = (size == ImageSize::Small) ? "w185" : (size == ImageSize::Medium) ? "w500" : "w1280";
             return "https://image.tmdb.org/t/p/" + sizeStr + path;
         }
         static QString buildUrl(const QString& path, const QString& size) {
-            if (path.isEmpty()) return QString();
+            // Check for empty or "null" string literal
+            if (path.isEmpty() || path == "null") return QString();
             if (path.startsWith("http")) return path;
             return "https://image.tmdb.org/t/p/" + size + path;
         }
@@ -716,212 +730,192 @@ QVariantMap FrontendDataMapper::mapCatalogItemToVariantMap(const QJsonObject& it
 {
     QVariantMap map;
     
-    // Helper function to resolve relative URLs
-    auto resolveUrl = [&baseUrl](const QString& url) -> QString {
-        if (url.isEmpty()) {
-            return url;
+    // Helper function to safely extract string from JSON and resolve relative URLs
+    // Following Stremio approach: minimal transformation, trust addon data
+    auto extractAndResolveUrl = [&baseUrl](const QJsonObject& obj, const QString& key) -> QString {
+        // Check if key exists and is not null
+        if (!obj.contains(key) || obj[key].isNull()) {
+            return QString();
         }
+        
+        QString url = obj[key].toString();
+        
+        // Filter out "null" string literal and empty strings
+        if (url.isEmpty() || url == "null") {
+            return QString();
+        }
+        
         // If already absolute, return as-is
         if (url.startsWith("http://") || url.startsWith("https://")) {
             return url;
         }
-        // If relative, resolve against base URL
-        if (!baseUrl.isEmpty() && url.startsWith("/")) {
-            // Absolute path relative to base URL
+        
+        // If relative, resolve against base URL (Stremio standard behavior)
+        if (!baseUrl.isEmpty()) {
             QString normalizedBase = baseUrl;
-            if (normalizedBase.endsWith('/')) {
-                normalizedBase.chop(1);
+            if (url.startsWith("/")) {
+                // Absolute path relative to base URL
+                if (normalizedBase.endsWith('/')) {
+                    normalizedBase.chop(1);
+                }
+                return normalizedBase + url;
+            } else {
+                // Relative path
+                if (!normalizedBase.endsWith('/')) {
+                    normalizedBase += '/';
+                }
+                return normalizedBase + url;
             }
-            return normalizedBase + url;
-        } else if (!baseUrl.isEmpty() && !url.startsWith("/")) {
-            // Relative path
-            QString normalizedBase = baseUrl;
-            if (!normalizedBase.endsWith('/')) {
-                normalizedBase += '/';
-            }
-            return normalizedBase + url;
         }
+        
         return url;
     };
     
-    // Extract common fields
-    map["id"] = item["id"].toString();
-    map["type"] = item["type"].toString();
-    map["title"] = item["title"].toString();
-    map["name"] = item["name"].toString(); // Some items use "name" instead of "title"
-    if (map["title"].toString().isEmpty()) {
-        map["title"] = map["name"].toString();
+    // Helper to safely extract string field (handles null properly)
+    auto extractString = [](const QJsonObject& obj, const QString& key) -> QString {
+        if (!obj.contains(key) || obj[key].isNull()) {
+            return QString();
+        }
+        QString value = obj[key].toString();
+        // Filter "null" string literal
+        return (value == "null") ? QString() : value;
+    };
+    
+    // Extract fields according to Stremio metadata spec - use as-is
+    map["id"] = extractString(item, "id");
+    map["type"] = extractString(item, "type");
+    
+    // Stremio uses both "title" and "name" - prefer title, fallback to name
+    QString title = extractString(item, "title");
+    if (title.isEmpty()) {
+        title = extractString(item, "name");
     }
-    map["description"] = item["description"].toString();
+    map["title"] = title;
+    map["name"] = extractString(item, "name");
+    map["description"] = extractString(item, "description");
     
-    // Resolve poster URL - always use "posterUrl"
-    QString poster = item["poster"].toString();
-    QString resolvedPoster = resolveUrl(poster);
-    map["poster"] = resolvedPoster;
-    map["posterUrl"] = resolvedPoster; // Alias for QML
+    // Resolve image URLs (Stremio standard: poster, background, logo)
+    QString poster = extractAndResolveUrl(item, "poster");
+    map["poster"] = poster;
+    map["posterUrl"] = poster; // Alias for QML compatibility
     
-    // Resolve background/backdrop URL - always use "backdropUrl"
-    QString background = item["background"].toString();
-    QString resolvedBackground = resolveUrl(background);
-    map["background"] = resolvedBackground;
-    map["backdropUrl"] = resolvedBackground; // Alias for QML
+    QString background = extractAndResolveUrl(item, "background");
+    map["background"] = background;
+    map["backdropUrl"] = background; // Alias for QML compatibility
     
-    // Resolve logo URL - always use "logoUrl"
-    QString logo = item["logo"].toString();
-    QString resolvedLogo = resolveUrl(logo);
-    map["logo"] = resolvedLogo;
-    map["logoUrl"] = resolvedLogo; // Alias for QML
+    QString logo = extractAndResolveUrl(item, "logo");
+    map["logo"] = logo;
+    map["logoUrl"] = logo; // Alias for QML compatibility
     
-    // Extract IDs
+    // Extract IDs - Stremio supports both object and string ID formats
     QVariant idVar = item["id"];
     if (idVar.typeId() == QMetaType::QJsonObject) {
+        // ID is an object with imdb, tmdb, trakt, etc.
         QJsonObject ids = item["id"].toObject();
-        map["imdbId"] = ids["imdb"].toString();
-        map["tmdbId"] = ids["tmdb"].toString();
-        map["traktId"] = ids["trakt"].toString();
+        map["imdbId"] = extractString(ids, "imdb");
+        map["tmdbId"] = extractString(ids, "tmdb");
+        map["traktId"] = extractString(ids, "trakt");
     } else {
-        // ID is a string - could be "tmdb:123" or "tt1234567" format
-        QString idStr = item["id"].toString();
-        map["id"] = idStr;
-        
-        // Try to extract TMDB ID from "tmdb:123" format
+        // ID is a string - could be "tt1234567", "tmdb:123", etc.
+        QString idStr = map["id"].toString();
+        // Try to extract TMDB ID from "tmdb:123" format if present
         if (idStr.startsWith("tmdb:")) {
-            QString tmdbId = idStr.mid(5); // Remove "tmdb:" prefix
-            map["tmdbId"] = tmdbId;
+            map["tmdbId"] = idStr.mid(5);
+        }
+        // IMDB IDs start with "tt"
+        if (idStr.startsWith("tt")) {
+            map["imdbId"] = idStr;
         }
     }
     
-    // Extract IMDB ID from separate field if available
-    if (item.contains("imdb_id")) {
-        QString imdbId = item["imdb_id"].toString();
+    // Extract additional ID fields if present (some addons provide these separately)
+    QString imdbId = extractString(item, "imdb_id");
+    if (!imdbId.isEmpty()) {
         map["imdbId"] = imdbId;
-        // Only use imdb_id as main ID if no ID is set at all
-        // Preserve original ID format (e.g., "tmdb:123") as-is for Stremio compatibility
-        if (map["id"].toString().isEmpty()) {
-            if (!imdbId.isEmpty()) {
-                map["id"] = imdbId;
-            }
-        }
     }
     
-    // Extract TMDB ID from separate field if available
-    if (item.contains("tmdb_id") || item.contains("tmdbId")) {
-        QString tmdbId = item["tmdb_id"].toString();
-        if (tmdbId.isEmpty()) {
-            tmdbId = item["tmdbId"].toString();
-        }
-        if (!tmdbId.isEmpty()) {
-            map["tmdbId"] = tmdbId;
-        }
+    QString tmdbId = extractString(item, "tmdb_id");
+    if (tmdbId.isEmpty()) {
+        tmdbId = extractString(item, "tmdbId");
+    }
+    if (!tmdbId.isEmpty()) {
+        map["tmdbId"] = tmdbId;
     }
     
-    // Extract year - check multiple sources
-    bool yearFound = false;
-    if (item.contains("year")) {
+    // Extract year - Stremio standard field
+    if (item.contains("year") && !item["year"].isNull()) {
         QVariant yearVar = item["year"];
         if (yearVar.typeId() == QMetaType::Int || yearVar.typeId() == QMetaType::LongLong) {
-            map["year"] = yearVar.toInt();
-            yearFound = true;
+            int year = yearVar.toInt();
+            if (year > 1900 && year < 2100) {
+                map["year"] = year;
+            }
         } else {
             QString yearStr = yearVar.toString();
-            bool ok;
-            int year = yearStr.toInt(&ok);
-            if (ok && year > 1900 && year < 2100) {
-                map["year"] = year;
-                yearFound = true;
+            if (yearStr != "null" && !yearStr.isEmpty()) {
+                bool ok;
+                int year = yearStr.toInt(&ok);
+                if (ok && year > 1900 && year < 2100) {
+                    map["year"] = year;
+                }
             }
         }
     }
     
-    if (!yearFound && item.contains("releaseInfo")) {
-        QString releaseInfo = item["releaseInfo"].toString();
-        // releaseInfo can be "2025" (just year) or "2023-01-01" (full date) format
-        if (releaseInfo.length() >= 4) {
-            bool ok;
-            int year = releaseInfo.left(4).toInt(&ok);
-            if (ok && year > 1900 && year < 2100) {
-                map["year"] = year;
-                yearFound = true;
-            }
-        }
+    // Extract rating - Stremio uses "imdbRating" or "rating"
+    QString rating = extractString(item, "imdbRating");
+    if (rating.isEmpty()) {
+        rating = extractString(item, "rating");
     }
+    map["rating"] = rating;
     
-    if (!yearFound && item.contains("released")) {
-        QString released = item["released"].toString();
-        // released is ISO date format "2025-11-26T00:00:00.000Z"
-        if (released.length() >= 4) {
-            bool ok;
-            int year = released.left(4).toInt(&ok);
-            if (ok && year > 1900 && year < 2100) {
-                map["year"] = year;
-            }
-        }
-    }
-    
-    // Extract rating - check multiple sources
-    if (item.contains("imdbRating")) {
-        QString rating = item["imdbRating"].toString();
-        map["rating"] = rating;
-    } else if (item.contains("rating")) {
-        QString rating = item["rating"].toString();
-        map["rating"] = rating;
-    }
-    
-    // Extract genres
-    if (item.contains("genres")) {
+    // Extract genres - Stremio uses array of strings
+    if (item.contains("genres") && item["genres"].isArray()) {
         QJsonArray genres = item["genres"].toArray();
         QStringList genreList;
         for (const QJsonValue& genre : genres) {
-            genreList.append(genre.toString());
+            if (genre.isString()) {
+                QString genreStr = genre.toString();
+                if (!genreStr.isEmpty() && genreStr != "null") {
+                    genreList.append(genreStr);
+                }
+            }
         }
         map["genres"] = genreList;
     }
 
-    // === DATA NORMALIZATION FOR QML COMPATIBILITY ===
-    // Ensure ALL expected fields exist with proper types and defaults
-
-    // Required string fields with fallbacks
+    // === MINIMAL NORMALIZATION FOR QML COMPATIBILITY ===
+    // Only ensure fields exist with safe defaults - don't try to "fix" addon data
+    
+    // Ensure title exists (fallback to name, then default)
     if (map["title"].toString().isEmpty()) {
-        map["title"] = map["name"].toString();  // Fallback to name
+        map["title"] = map["name"].toString().isEmpty() ? "Unknown Title" : map["name"].toString();
     }
-    if (map["title"].toString().isEmpty()) {
-        map["title"] = "Unknown Title";  // Final fallback
+    
+    // Ensure essential fields exist with safe defaults
+    if (!map.contains("posterUrl") || map["posterUrl"].toString().isEmpty()) {
+        map["posterUrl"] = map["poster"].toString();
     }
-
-    if (map["posterUrl"].toString().isEmpty()) {
-        map["posterUrl"] = map["poster"].toString();  // Use poster as posterUrl
-    }
-    if (map["posterUrl"].toString().isEmpty()) {
-        map["posterUrl"] = "";  // Explicit empty string
-    }
-
-    // Required numeric fields with validation
     if (!map.contains("year") || map["year"].toInt() <= 0) {
-        map["year"] = 0;  // Default to 0
+        map["year"] = 0;
     }
-
-    // Required string fields
     if (!map.contains("rating")) {
-        map["rating"] = "";  // Default empty
+        map["rating"] = "";
     }
-
     if (!map.contains("description")) {
-        map["description"] = "";  // Default empty
+        map["description"] = "";
     }
-
     if (!map.contains("id")) {
-        map["id"] = "";  // Default empty
+        map["id"] = "";
     }
-
-    // Optional fields for ListModel compatibility
+    
+    // Optional QML fields
     if (!map.contains("progress")) {
         map["progress"] = 0.0;
     }
-
     if (!map.contains("progressPercent")) {
         map["progressPercent"] = 0.0;
     }
-
     if (!map.contains("badgeText")) {
         map["badgeText"] = "";
     }
@@ -1108,16 +1102,22 @@ QVariantList FrontendDataMapper::mapSearchResultsToVariantList(const QJsonArray&
         map["firstAirDate"] = result["first_air_date"].toString();
         
         // Build image URLs
-        QString posterPath = result["poster_path"].toString();
-        if (!posterPath.isEmpty()) {
-            map["posterPath"] = posterPath;
-            map["posterUrl"] = ImageUrlBuilder::buildUrl(posterPath, ImageUrlBuilder::ImageSize::Medium);
+        QString posterPath;
+        if (result.contains("poster_path") && !result["poster_path"].isNull()) {
+            posterPath = result["poster_path"].toString();
+            if (!posterPath.isEmpty() && posterPath != "null") {
+                map["posterPath"] = posterPath;
+                map["posterUrl"] = ImageUrlBuilder::buildUrl(posterPath, ImageUrlBuilder::ImageSize::Medium);
+            }
         }
         
-        QString backdropPath = result["backdrop_path"].toString();
-        if (!backdropPath.isEmpty()) {
-            map["backdropPath"] = backdropPath;
-            map["backdropUrl"] = ImageUrlBuilder::buildUrl(backdropPath, "w1280");
+        QString backdropPath;
+        if (result.contains("backdrop_path") && !result["backdrop_path"].isNull()) {
+            backdropPath = result["backdrop_path"].toString();
+            if (!backdropPath.isEmpty() && backdropPath != "null") {
+                map["backdropPath"] = backdropPath;
+                map["backdropUrl"] = ImageUrlBuilder::buildUrl(backdropPath, "w1280");
+            }
         }
         
         map["voteAverage"] = result["vote_average"].toDouble();

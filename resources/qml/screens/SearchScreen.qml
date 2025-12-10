@@ -10,6 +10,7 @@ Item {
     property LibraryService libraryService: LibraryService
     property NavigationService navigationService: NavigationService
     property LoggingService loggingService: LoggingService
+    property CatalogPreferencesService catalogPrefsService: CatalogPreferencesService
     signal itemClicked(string contentId, string type, string addonId)
     signal closeRequested()  // Signal to go back to previous screen
 
@@ -28,17 +29,35 @@ Item {
         id: combinedResultsModel
     }
     
-    // Dynamically collect available filter types from sections
+    // Dynamically collect available filter types from enabled search catalogs
     function getAvailableFilterTypes() {
-        var types = new Set()
+        // Get enabled search catalogs from CatalogPreferencesService
+        var enabledTypes = new Set()
+        var searchCatalogs = catalogPrefsService.getSearchCatalogs()
+        
+        for (var i = 0; i < searchCatalogs.length; i++) {
+            var catalog = searchCatalogs[i]
+            // Only include enabled catalogs
+            if (catalog.enabled) {
+                var catalogType = catalog.catalogType || ""
+                if (catalogType) {
+                    // Capitalize first letter to match section naming
+                    var typeName = catalogType.charAt(0).toUpperCase() + catalogType.slice(1)
+                    enabledTypes.add(typeName)
+                }
+            }
+        }
+        
+        // Also add types from current search results (for backward compatibility with active searches)
         for (var i = 0; i < searchSectionsModel.count; i++) {
             var section = searchSectionsModel.get(i)
             var sectionName = section.sectionTitle || ""
             if (sectionName && sectionName !== "All") {
-                types.add(sectionName)
+                enabledTypes.add(sectionName)
             }
         }
-        var typeArray = Array.from(types)
+        
+        var typeArray = Array.from(enabledTypes)
         typeArray.sort()  // Sort alphabetically for consistent ordering
         return ["All"].concat(typeArray)  // Always have "All" first
     }
@@ -180,10 +199,10 @@ Item {
                     }
                 }
 
-                // Filter Buttons (dynamically generated from available sections)
+                // Filter Buttons (dynamically generated from enabled catalogs)
                 Row {
                     spacing: 12
-                    visible: searchSectionsModel.count > 0
+                    visible: getAvailableFilterTypes().length > 1  // Show if more than just "All"
 
                     Repeater {
                         model: getAvailableFilterTypes()
@@ -280,7 +299,14 @@ Item {
 
                                 Image {
                                     anchors.fill: parent
-                                    source: model.posterUrl || model.poster || ""
+                                    source: {
+                                        var url = model.posterUrl || model.poster || ""
+                                        // Prevent "null" string from being used as URL
+                                        if (url === "null" || url === null || url === undefined) {
+                                            return ""
+                                        }
+                                        return url
+                                    }
                                     fillMode: Image.PreserveAspectCrop
                                     asynchronous: true
                                     smooth: true
