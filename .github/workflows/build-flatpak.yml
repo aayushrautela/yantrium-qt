@@ -25,13 +25,36 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y flatpak flatpak-builder
 
+    - name: Cache Flatpak runtimes and SDKs
+      uses: actions/cache@v4
+      id: flatpak-cache
+      with:
+        path: /var/lib/flatpak
+        key: flatpak-runtimes-${{ runner.os }}-kde-6.10-v1
+        restore-keys: |
+          flatpak-runtimes-${{ runner.os }}-
+
     - name: Install KDE Platform runtime and SDK
+      if: steps.flatpak-cache.outputs.cache-hit != 'true'
       run: |
         # Added sudo here to fix permission error
         sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
         sudo flatpak install -y flathub org.kde.Platform//6.10 org.kde.Sdk//6.10
 
+    - name: Ensure Flatpak remote is configured
+      if: steps.flatpak-cache.outputs.cache-hit == 'true'
+      run: |
+        sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+    - name: Cache MDK SDK
+      uses: actions/cache@v4
+      id: mdk-cache
+      with:
+        path: vendor/mdk-sdk
+        key: mdk-sdk-${{ runner.os }}-v0.35.0-v1
+
     - name: Download MDK SDK
+      if: steps.mdk-cache.outputs.cache-hit != 'true'
       run: |
         # Download MDK SDK for Linux amd64
         MDK_VERSION="0.35.0"
