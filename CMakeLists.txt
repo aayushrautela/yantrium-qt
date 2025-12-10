@@ -277,33 +277,32 @@ elseif(UNIX AND NOT APPLE)
         )
     else()
         # ==================================================
-        # SYSTEM LIBTORRENT FALLBACK (FLATPAK/LINUX)
+        # SYSTEM LIBTORRENT FALLBACK (FLATPAK/LINUX) - CORRECTED LINKING
         # ==================================================
         
-        # 1. Try PkgConfig first (Best for Flatpak)
+        # 1. Try PkgConfig with IMPORTED_TARGET option (Most reliable)
         if(PkgConfig_FOUND)
-            pkg_check_modules(LIBTORRENT libtorrent-rasterbar)
+            pkg_check_modules(LIBTORRENT IMPORTED_TARGET libtorrent-rasterbar)
         endif()
 
         if(LIBTORRENT_FOUND)
-            message(STATUS "Found libtorrent via PkgConfig: ${LIBTORRENT_LIBRARIES}")
+            message(STATUS "--- Libtorrent Found via PkgConfig ---")
+            message(STATUS "Linking: PkgConfig::LIBTORRENT")
             
+            # Link using the PkgConfig imported target (Handles -L, -l, and dependencies like Boost)
+            target_link_libraries(Yantrium PRIVATE PkgConfig::LIBTORRENT)
+            
+            # PkgConfig usually sets includes, but for completeness and definitions:
             target_include_directories(Yantrium PRIVATE ${LIBTORRENT_INCLUDE_DIRS})
-            
-            # Use IMPORTED_TARGET if available from CMake 3.16+ logic, otherwise manual link
-            target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIBRARIES})
-            target_link_directories(Yantrium PRIVATE ${LIBTORRENT_LIBRARY_DIRS})
-            
             target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
             
         else()
-            # 2. Manual Fallback (Legacy)
-            message(STATUS "PkgConfig failed, trying manual find_library...")
+            # 2. Manual Fallback: Find the absolute library path
+            message(STATUS "PkgConfig failed, trying manual absolute path link...")
             
-            # Removed NO_DEFAULT_PATH to allow broader system search
-            find_library(LIBTORRENT_LIB 
-                NAMES torrent-rasterbar libtorrent-rasterbar
-                PATHS /app/lib /usr/lib /usr/local/lib
+            find_library(LIBTORRENT_LIB_FILE 
+                NAMES libtorrent-rasterbar.so libtorrent-rasterbar.a torrent-rasterbar
+                PATHS /app/lib /usr/lib /usr/local/lib /usr/lib64
             )
             
             find_path(LIBTORRENT_INCLUDE_DIR
@@ -311,10 +310,13 @@ elseif(UNIX AND NOT APPLE)
                 PATHS /app/include /usr/include /usr/local/include
             )
 
-            if(LIBTORRENT_LIB AND LIBTORRENT_INCLUDE_DIR)
-                message(STATUS "Found libtorrent manually: ${LIBTORRENT_LIB}")
+            if(LIBTORRENT_LIB_FILE AND LIBTORRENT_INCLUDE_DIR)
+                message(STATUS "Found libtorrent manually: ${LIBTORRENT_LIB_FILE}")
                 target_include_directories(Yantrium PRIVATE ${LIBTORRENT_INCLUDE_DIR})
-                target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIB})
+                
+                # Link using the FULL PATH to the .so file
+                target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIB_FILE})
+                
                 target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
             else()
                 message(STATUS "libtorrent not found - torrent support disabled")
@@ -332,5 +334,6 @@ install(TARGETS Yantrium
     ARCHIVE DESTINATION lib
 )
 
+# --- CRITICAL ---
 # Finalize the target (Required because MANUAL_FINALIZATION was used)
 qt_finalize_executable(Yantrium)
