@@ -38,6 +38,9 @@ public:
     
     // Check if a catalog is a hero source
     Q_INVOKABLE bool isHeroSource(const QString& addonId, const QString& catalogType, const QString& catalogId = QString());
+    
+    // Update catalog order
+    Q_INVOKABLE bool updateCatalogOrder(const QVariantList& catalogOrder);
 
 signals:
     void catalogsUpdated();

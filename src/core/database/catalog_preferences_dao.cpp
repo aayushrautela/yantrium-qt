@@ -18,13 +18,14 @@ bool CatalogPreferencesDao::upsertPreference(const CatalogPreferenceRecord& pref
     query.prepare(R"(
         INSERT INTO catalog_preferences (
             addon_id, catalog_type, catalog_id,
-            enabled, is_hero_source, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            enabled, is_hero_source, created_at, updated_at, "order"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(addon_id, catalog_type, catalog_id)
         DO UPDATE SET
             enabled = excluded.enabled,
             is_hero_source = excluded.is_hero_source,
-            updated_at = excluded.updated_at
+            updated_at = excluded.updated_at,
+            "order" = excluded."order"
     )");
 
     QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
@@ -37,6 +38,7 @@ bool CatalogPreferencesDao::upsertPreference(const CatalogPreferenceRecord& pref
     query.addBindValue(preference.isHeroSource ? 1 : 0);
     query.addBindValue(now); // Created At
     query.addBindValue(now); // Updated At
+    query.addBindValue(preference.order);
 
     if (!query.exec()) {
         qWarning() << "Failed to upsert catalog preference:" << query.lastError().text();
@@ -77,7 +79,7 @@ QList<CatalogPreferenceRecord> CatalogPreferencesDao::getAllPreferences()
     QList<CatalogPreferenceRecord> preferences;
     QSqlQuery query(m_database);
 
-    if (!query.exec("SELECT * FROM catalog_preferences ORDER BY addon_id, catalog_type")) {
+    if (!query.exec("SELECT * FROM catalog_preferences ORDER BY \"order\" ASC")) {
         qWarning() << "Failed to get all catalog preferences:" << query.lastError().text();
         return preferences;
     }
@@ -207,6 +209,41 @@ QList<CatalogPreferenceRecord> CatalogPreferencesDao::getHeroCatalogs()
     return preferences;
 }
 
+bool CatalogPreferencesDao::updateCatalogOrder(const QVariantList& catalogOrder)
+{
+    m_database.transaction();
+    
+    QSqlQuery query(m_database);
+    query.prepare(R"(
+        UPDATE catalog_preferences SET "order" = ?, updated_at = ?
+        WHERE addon_id = ? AND catalog_type = ? AND catalog_id = ?
+    )");
+    
+    QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    
+    for (int i = 0; i < catalogOrder.size(); ++i) {
+        QVariantMap catalog = catalogOrder[i].toMap();
+        QString addonId = catalog["addonId"].toString();
+        QString catalogType = catalog["catalogType"].toString();
+        QString catalogId = catalog["catalogId"].toString();
+        
+        query.bindValue(0, i);
+        query.bindValue(1, now);
+        query.bindValue(2, addonId);
+        query.bindValue(3, catalogType);
+        query.bindValue(4, normalizeId(catalogId));
+        
+        if (!query.exec()) {
+            qWarning() << "Failed to update catalog order:" << query.lastError().text();
+            m_database.rollback();
+            return false;
+        }
+    }
+    
+    m_database.commit();
+    return true;
+}
+
 CatalogPreferenceRecord CatalogPreferencesDao::recordFromQuery(const QSqlQuery& query)
 {
     CatalogPreferenceRecord record;
@@ -217,6 +254,7 @@ CatalogPreferenceRecord CatalogPreferencesDao::recordFromQuery(const QSqlQuery& 
     record.isHeroSource = query.value("is_hero_source").toInt() == 1;
     record.createdAt = QDateTime::fromString(query.value("created_at").toString(), Qt::ISODate);
     record.updatedAt = QDateTime::fromString(query.value("updated_at").toString(), Qt::ISODate);
+    record.order = query.value("order").toInt();
     return record;
 }
 

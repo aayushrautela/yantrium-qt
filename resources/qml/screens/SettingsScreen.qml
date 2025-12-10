@@ -704,6 +704,17 @@ Item {
                             }
                         }
                         
+                        Connections {
+                            target: catalogPrefsService
+                            function onCatalogsUpdated() {
+                                refreshCatalogList()
+                            }
+                            function onError(message) {
+                                // You can show the error in a dialog or a status bar
+                                console.log("Catalog Error:", message)
+                            }
+                        }
+                        
                         // Catalog Lists (Side-by-side)
                         Row {
                             width: parent.width
@@ -724,30 +735,81 @@ Item {
                                 }
                                 
                                 ListView {
+                                    id: normalCatalogsListView
                                     width: parent.width
                                     height: contentItem.childrenRect.height
                                     model: normalCatalogsModel
                                     clip: true
                                     spacing: 12
+                                    move: Transition {
+                                        NumberAnimation {
+                                            properties: "x,y"
+                                            duration: 300
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
                                     
                                     delegate: Item {
+                                        id: delegateWrapper
                                         width: ListView.view.width
                                         height: 70
+                                        z: dragArea.pressed ? 1 : 0
                                         
                                         Rectangle {
+                                            id: visualCard
                                             anchors.fill: parent
-                                            color: "#252525"
+                                            color: dragArea.pressed ? "#333333" : "#252525"
                                             radius: 8
                                             border.width: 1
-                                            border.color: "#2d2d2d"
+                                            border.color: dragArea.pressed ? "#555555" : "#2d2d2d"
+                                            scale: dragArea.pressed ? 1.02 : 1.0
+                                            
+                                            Behavior on scale { NumberAnimation { duration: 150 } }
+                                            Behavior on color { ColorAnimation { duration: 150 } }
                                             
                                             Row {
                                                 anchors.fill: parent
                                                 anchors.margins: 16
                                                 spacing: 12
                                                 
+                                                // Drag Handle
+                                                Item {
+                                                    width: 30
+                                                    height: parent.height
+                                                    
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "\u2630"
+                                                        color: dragArea.pressed ? "#ffffff" : "#666666"
+                                                        font.pixelSize: 24
+                                                        font.bold: true
+                                                    }
+                                                    
+                                                    MouseArea {
+                                                        id: dragArea
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.OpenHandCursor
+                                                        drag.target: delegateWrapper
+                                                        drag.axis: Drag.YAxis
+                                                        drag.smoothed: true
+                                                        
+                                                        onPressed: {
+                                                            delegateWrapper.z = 100
+                                                        }
+                                                        
+                                                        onReleased: {
+                                                            delegateWrapper.z = 0
+                                                            let order = []
+                                                            for (let i = 0; i < normalCatalogsModel.count; i++) {
+                                                                order.push(normalCatalogsModel.get(i))
+                                                            }
+                                                            catalogPrefsService.updateCatalogOrder(order)
+                                                        }
+                                                    }
+                                                }
+                                                
                                                 Column {
-                                                    width: parent.width - heroToggle.width - enableSwitch.width - (parent.spacing * 2)
+                                                    width: parent.width - heroToggle.width - enableSwitch.width - (parent.spacing * 3)
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     spacing: 4
                                                     
@@ -771,6 +833,22 @@ Item {
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     checked: model.enabled || false
                                                     onToggled: { catalogPrefsService.toggleCatalogEnabled(model.addonId, model.catalogType, model.catalogId||"", checked) }
+                                                }
+                                            }
+                                        }
+                                        
+                                        Drag.active: dragArea.drag.active
+                                        Drag.source: delegateWrapper
+                                        Drag.hotSpot.x: 35
+                                        Drag.hotSpot.y: 35
+                                        
+                                        DropArea {
+                                            anchors.fill: parent
+                                            onEntered: (drag) => {
+                                                let fromIndex = drag.source.model.index
+                                                let toIndex = index
+                                                if (fromIndex !== toIndex) {
+                                                    normalCatalogsModel.move(fromIndex, toIndex, 1)
                                                 }
                                             }
                                         }
@@ -902,11 +980,10 @@ Item {
                 catalogId: catalogs[i].catalogId, 
                 catalogName: catalogs[i].catalogName, 
                 enabled: catalogs[i].enabled, 
-                isHeroSource: catalogs[i].isHeroSource,
-                isSearch: (catalogs[i].catalogId || "").includes("search") // Simple check for search catalogs
+                isHeroSource: catalogs[i].isHeroSource
             };
             
-            if (catalog.isSearch) {
+            if ((catalogs[i].catalogId || "").includes("search")) {
                 searchCatalogsModel.append(catalog);
                 searchCount++;
             } else {
@@ -914,7 +991,6 @@ Item {
                 normalCount++;
             }
         }
-        catalogStatusText.text = "Display Catalogs: " + normalCount + " / Search Providers: " + searchCount;
     }
     
     // Delete Dialog

@@ -44,6 +44,7 @@ QVariantList CatalogPreferencesService::getAvailableCatalogs()
                 auto preference = m_dao->getPreference(addon.id, catalogDef.type(), catalogId);
                 bool enabled = preference ? preference->enabled : true;
                 bool isHeroSource = preference ? preference->isHeroSource : false;
+                int order = preference ? preference->order : 0;
                 
                 // Build catalog name
                 QString catalogName = catalogDef.name();
@@ -62,6 +63,7 @@ QVariantList CatalogPreferencesService::getAvailableCatalogs()
                 catalogInfo["catalogName"] = catalogName;
                 catalogInfo["enabled"] = enabled;
                 catalogInfo["isHeroSource"] = isHeroSource;
+                catalogInfo["order"] = order;
                 catalogInfo["uniqueId"] = QString("%1|%2|%3").arg(addon.id, catalogDef.type(), catalogId);
                 
                 catalogs.append(catalogInfo);
@@ -185,6 +187,17 @@ bool CatalogPreferencesService::isHeroSource(
 {
     auto preference = m_dao->getPreference(addonId, catalogType, catalogId);
     return preference ? preference->isHeroSource : false;
+}
+
+bool CatalogPreferencesService::updateCatalogOrder(const QVariantList& catalogOrder)
+{
+    bool success = m_dao->updateCatalogOrder(catalogOrder);
+    if (success) {
+        emit catalogsUpdated();
+    } else {
+        emit error("Failed to update catalog order");
+    }
+    return success;
 }
 
 QString CatalogPreferencesService::capitalize(const QString& text)

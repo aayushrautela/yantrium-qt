@@ -137,6 +137,7 @@ bool DatabaseManager::createTables()
                 is_hero_source INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
+                "order" INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (addon_id, catalog_type, catalog_id)
             ))"
         },

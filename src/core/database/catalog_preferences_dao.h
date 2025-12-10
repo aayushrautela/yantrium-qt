@@ -16,6 +16,7 @@ struct CatalogPreferenceRecord
     bool isHeroSource = false;   // Default to false
     QDateTime createdAt;
     QDateTime updatedAt;
+    int order = 0;
 };
 
 class CatalogPreferencesDao
@@ -55,6 +56,9 @@ public:
 
     // Returns all catalogs marked as hero
     QList<CatalogPreferenceRecord> getHeroCatalogs();
+    
+    // Update catalog order
+    bool updateCatalogOrder(const QVariantList& catalogOrder);
     
 private:
     QSqlDatabase m_database;
