@@ -239,7 +239,7 @@ jobs:
           exit 1
         }
 
-        windeployqt.exe --qmldir resources/qml --network --compiler-runtime $exePath
+        windeployqt.exe --qmldir resources/qml --network --compiler-runtime --imageformats $exePath
 
         # Copy TLS plugins
         $windeployqt = Get-Command windeployqt
