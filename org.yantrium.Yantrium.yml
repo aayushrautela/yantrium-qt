@@ -22,8 +22,17 @@ modules:
     build-commands:
       - mkdir -p /app/lib
       - mkdir -p /app/include
-      - cp -r include/* /app/include/
-      - cp -r lib/amd64/*.so* /app/lib/ 2>/dev/null || true
+      - cp -r include/* /app/include/ 2>/dev/null || true
+      - |
+        # Copy libraries from amd64 or x86_64 directory (whichever exists)
+        if [ -d lib/amd64 ]; then
+          cp -r lib/amd64/*.so* /app/lib/ 2>/dev/null || true
+        elif [ -d lib/x86_64 ]; then
+          cp -r lib/x86_64/*.so* /app/lib/ 2>/dev/null || true
+        elif [ -d lib ]; then
+          # Some archives might extract directly to lib/
+          cp -r lib/*.so* /app/lib/ 2>/dev/null || true
+        fi
       - |
         # Set up library symlinks if needed
         if [ -f /app/lib/libmdk.so.0 ]; then
@@ -83,19 +92,11 @@ modules:
       - -DOMDB_API_KEY=${OMDB_API_KEY}
     post-install:
       - |
-        # Copy MDK libraries to /app/lib
-        if [ -f vendor/mdk-sdk/lib/amd64/libmdk.so ]; then
-          install -Dm644 vendor/mdk-sdk/lib/amd64/libmdk.so /app/lib/libmdk.so
+        # MDK libraries should already be in /app/lib from the mdk-sdk module
+        # Verify they exist
+        if [ ! -f /app/lib/libmdk.so ] && [ ! -f /app/lib/libmdk.so.0 ]; then
+          echo "Warning: MDK libraries not found in /app/lib"
         fi
-        if [ -f vendor/mdk-sdk/lib/amd64/libmdk.so.0 ]; then
-          install -Dm644 vendor/mdk-sdk/lib/amd64/libmdk.so.0 /app/lib/libmdk.so.0
-        fi
-        # Copy additional MDK libraries
-        for lib in vendor/mdk-sdk/lib/amd64/libmdk-*.so* vendor/mdk-sdk/lib/amd64/lib*.so*; do
-          if [ -f "$lib" ]; then
-            install -Dm644 "$lib" /app/lib/$(basename "$lib") || true
-          fi
-        done
       - |
         # Rename executable to lowercase
         if [ -f /app/bin/Yantrium ]; then

@@ -1,4 +1,0 @@
-# libtorrent-rasterbar will be built and placed here during CI/CD
-# Windows: bin/x64/*.dll, lib/x64/*.lib, include/libtorrent/
-# Linux: bin/amd64/*.so, lib/amd64/*.so, include/libtorrent/
-

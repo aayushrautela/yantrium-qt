@@ -240,10 +240,11 @@ if(WIN32)
     endif()
     
 elseif(UNIX AND NOT APPLE)
-    # Check if libtorrent is available in vendor directory
+    # Check if libtorrent is available in vendor directory first
     file(GLOB LIBTORRENT_SO "${LIBTORRENT_DIR}/lib/amd64/libtorrent-rasterbar.so*")
+    
     if(LIBTORRENT_SO)
-        message(STATUS "Found bundled libtorrent for Linux")
+        message(STATUS "Found bundled libtorrent for Linux in vendor directory")
         target_include_directories(Yantrium PRIVATE ${LIBTORRENT_DIR}/include)
         
         # Link against the main .so file (not versioned)
@@ -276,7 +277,26 @@ elseif(UNIX AND NOT APPLE)
             INSTALL_RPATH "\$ORIGIN"
         )
     else()
-        message(STATUS "libtorrent not found in vendor directory - torrent support disabled")
+        # Try to find libtorrent from system/Flatpak paths (e.g., /app/lib)
+        find_library(LIBTORRENT_LIB 
+            NAMES torrent-rasterbar libtorrent-rasterbar
+            PATHS /app/lib /usr/lib /usr/local/lib
+            NO_DEFAULT_PATH
+        )
+        find_path(LIBTORRENT_INCLUDE_DIR
+            NAMES libtorrent/session.hpp
+            PATHS /app/include /usr/include /usr/local/include
+            NO_DEFAULT_PATH
+        )
+        if(LIBTORRENT_LIB AND LIBTORRENT_INCLUDE_DIR)
+            message(STATUS "Found libtorrent from system: ${LIBTORRENT_LIB}")
+            message(STATUS "Found libtorrent headers: ${LIBTORRENT_INCLUDE_DIR}")
+            target_include_directories(Yantrium PRIVATE ${LIBTORRENT_INCLUDE_DIR})
+            target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIB})
+            target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
+        else()
+            message(STATUS "libtorrent not found - torrent support disabled")
+        endif()
     endif()
 endif()
 

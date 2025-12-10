@@ -31,6 +31,64 @@ jobs:
         sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
         sudo flatpak install -y flathub org.kde.Platform//6.10 org.kde.Sdk//6.10
 
+    - name: Download MDK SDK
+      run: |
+        # Download MDK SDK for Linux amd64
+        MDK_VERSION="0.35.0"
+        mkdir -p vendor/mdk-sdk
+        cd vendor/mdk-sdk
+        
+        echo "Attempting to download MDK SDK version ${MDK_VERSION}..."
+        
+        DOWNLOAD_SUCCESS=false
+        for url in \
+          "https://github.com/wang-bin/mdk-sdk/releases/download/v${MDK_VERSION}/mdk-sdk-linux-amd64.tar.xz" \
+          "https://github.com/wang-bin/mdk-sdk/releases/download/v${MDK_VERSION}/mdk-sdk-linux-x86_64.tar.xz" \
+          "https://github.com/wang-bin/mdk-sdk/releases/download/${MDK_VERSION}/mdk-sdk-linux-amd64.tar.xz"; do
+          if curl -L -f -o mdk-sdk.tar.xz "$url" 2>/dev/null; then
+            echo "Successfully downloaded from: $url"
+            DOWNLOAD_SUCCESS=true
+            break
+          fi
+        done
+        
+        if [ "$DOWNLOAD_SUCCESS" = false ]; then
+          echo "Error: Could not download MDK SDK v${MDK_VERSION} from GitHub releases"
+          echo "Please check available versions at: https://github.com/wang-bin/mdk-sdk/releases"
+          exit 1
+        fi
+        
+        # Extract archive (try with strip-components first, fallback to no strip)
+        echo "Extracting MDK SDK..."
+        if tar -xf mdk-sdk.tar.xz --strip-components=1 2>/dev/null; then
+          echo "Extracted with --strip-components=1"
+        elif tar -xf mdk-sdk.tar.xz 2>/dev/null; then
+          echo "Extracted without --strip-components"
+          # If there's a subdirectory, move its contents up
+          if [ -d mdk-sdk-* ]; then
+            mv mdk-sdk-*/* . 2>/dev/null || true
+            rmdir mdk-sdk-* 2>/dev/null || true
+          fi
+        else
+          echo "Error: Failed to extract MDK SDK archive"
+          exit 1
+        fi
+        
+        rm -f mdk-sdk.tar.xz
+        
+        # Verify essential files exist
+        if [ ! -d "include" ]; then
+          echo "Warning: include directory not found after extraction"
+        fi
+        if [ ! -d "lib/amd64" ] && [ ! -d "lib/x86_64" ] && [ ! -d "lib" ]; then
+          echo "Error: MDK SDK extraction failed - lib directory not found"
+          ls -la
+          exit 1
+        fi
+        
+        echo "MDK SDK downloaded and extracted successfully"
+        cd ../..
+
     - name: Setup build environment
       env:
         TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
