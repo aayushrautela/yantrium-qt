@@ -22,8 +22,6 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # 2. Find Qt6 Packages
-# ADDED: 'Svg' (Fixes "Unsupported image format" for icons)
-# CHANGED: 'Qt5Compat' -> 'Core5Compat' (Correct CMake name)
 find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Network Gui Sql Core5Compat Svg)
 
 # HttpServer is optional (only needed for torrent streaming)
@@ -34,6 +32,9 @@ if(Qt6HttpServer_FOUND)
 else()
     message(STATUS "Qt6HttpServer not found - torrent streaming disabled")
 endif()
+
+# Added: PkgConfig is required for robust Linux/Flatpak builds
+find_package(PkgConfig QUIET)
 
 # 3. Add Source Files
 set(PROJECT_SOURCES
@@ -133,7 +134,6 @@ set(PROJECT_SOURCES
 )
 
 # 4. Define the Executable
-# Note: MANUAL_FINALIZATION is used, so we must call qt_finalize_executable at the end
 qt_add_executable(Yantrium
     MANUAL_FINALIZATION
     ${PROJECT_SOURCES}
@@ -166,7 +166,6 @@ else()
 endif()
 
 # 5. Link Qt Libraries
-# ADDED: Qt6::Svg and Qt6::Core5Compat
 target_link_libraries(Yantrium PRIVATE
     Qt6::Core
     Qt6::Quick
@@ -277,102 +276,48 @@ elseif(UNIX AND NOT APPLE)
             INSTALL_RPATH "\$ORIGIN"
         )
     else()
-        # Try to find libtorrent from system/Flatpak paths (e.g., /app/lib)
-        # First, check if /app/lib/libtorrent-rasterbar.so exists (Flatpak build)
-        if(EXISTS "/app/lib/libtorrent-rasterbar.so")
-            set(LIBTORRENT_LIB "/app/lib/libtorrent-rasterbar.so")
-            message(STATUS "Found libtorrent at: ${LIBTORRENT_LIB}")
-        else()
-            # Try multiple library name variations
-            find_library(LIBTORRENT_LIB 
-                NAMES torrent-rasterbar libtorrent-rasterbar libtorrent
-                PATHS /app/lib /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
-                NO_DEFAULT_PATH
-            )
-            # Also try without NO_DEFAULT_PATH as fallback
-            if(NOT LIBTORRENT_LIB)
-                find_library(LIBTORRENT_LIB 
-                    NAMES torrent-rasterbar libtorrent-rasterbar libtorrent
-                )
-            endif()
-        endif()
+        # ==================================================
+        # SYSTEM LIBTORRENT FALLBACK (FLATPAK/LINUX)
+        # ==================================================
         
-        # Check for headers
-        if(EXISTS "/app/include/libtorrent/session.hpp")
-            set(LIBTORRENT_INCLUDE_DIR "/app/include")
-            message(STATUS "Found libtorrent headers at: ${LIBTORRENT_INCLUDE_DIR}")
+        # 1. Try PkgConfig first (Best for Flatpak)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(LIBTORRENT libtorrent-rasterbar)
+        endif()
+
+        if(LIBTORRENT_FOUND)
+            message(STATUS "Found libtorrent via PkgConfig: ${LIBTORRENT_LIBRARIES}")
+            
+            target_include_directories(Yantrium PRIVATE ${LIBTORRENT_INCLUDE_DIRS})
+            
+            # Use IMPORTED_TARGET if available from CMake 3.16+ logic, otherwise manual link
+            target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIBRARIES})
+            target_link_directories(Yantrium PRIVATE ${LIBTORRENT_LIBRARY_DIRS})
+            
+            target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
+            
         else()
+            # 2. Manual Fallback (Legacy)
+            message(STATUS "PkgConfig failed, trying manual find_library...")
+            
+            # Removed NO_DEFAULT_PATH to allow broader system search
+            find_library(LIBTORRENT_LIB 
+                NAMES torrent-rasterbar libtorrent-rasterbar
+                PATHS /app/lib /usr/lib /usr/local/lib
+            )
+            
             find_path(LIBTORRENT_INCLUDE_DIR
                 NAMES libtorrent/session.hpp
                 PATHS /app/include /usr/include /usr/local/include
-                NO_DEFAULT_PATH
             )
-            # Also try without NO_DEFAULT_PATH as fallback
-            if(NOT LIBTORRENT_INCLUDE_DIR)
-                find_path(LIBTORRENT_INCLUDE_DIR
-                    NAMES libtorrent/session.hpp
-                )
-            endif()
-        endif()
-        
-        if(LIBTORRENT_LIB AND LIBTORRENT_INCLUDE_DIR)
-            message(STATUS "Found libtorrent from system: ${LIBTORRENT_LIB}")
-            message(STATUS "Found libtorrent headers: ${LIBTORRENT_INCLUDE_DIR}")
-            target_include_directories(Yantrium PRIVATE ${LIBTORRENT_INCLUDE_DIR})
-            target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
-            
-            # Find and link boost libraries that libtorrent depends on
-            # Boost is built in the Flatpak manifest, so it should be in /app/lib
-            # Check for boost libraries in /app/lib first (Flatpak build)
-            if(EXISTS "/app/lib/libboost_system.so")
-                set(BOOST_SYSTEM_LIB "/app/lib/libboost_system.so")
+
+            if(LIBTORRENT_LIB AND LIBTORRENT_INCLUDE_DIR)
+                message(STATUS "Found libtorrent manually: ${LIBTORRENT_LIB}")
+                target_include_directories(Yantrium PRIVATE ${LIBTORRENT_INCLUDE_DIR})
+                target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIB})
+                target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
             else()
-                find_library(BOOST_SYSTEM_LIB
-                    NAMES boost_system
-                    PATHS /app/lib /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
-                    NO_DEFAULT_PATH
-                )
-                if(NOT BOOST_SYSTEM_LIB)
-                    find_library(BOOST_SYSTEM_LIB NAMES boost_system)
-                endif()
-            endif()
-            
-            if(EXISTS "/app/lib/libboost_filesystem.so")
-                set(BOOST_FILESYSTEM_LIB "/app/lib/libboost_filesystem.so")
-            else()
-                find_library(BOOST_FILESYSTEM_LIB
-                    NAMES boost_filesystem
-                    PATHS /app/lib /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
-                    NO_DEFAULT_PATH
-                )
-                if(NOT BOOST_FILESYSTEM_LIB)
-                    find_library(BOOST_FILESYSTEM_LIB NAMES boost_filesystem)
-                endif()
-            endif()
-            
-            # Link libtorrent and its boost dependencies
-            target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIB})
-            if(BOOST_SYSTEM_LIB)
-                message(STATUS "Linking boost_system: ${BOOST_SYSTEM_LIB}")
-                target_link_libraries(Yantrium PRIVATE ${BOOST_SYSTEM_LIB})
-            else()
-                message(WARNING "boost_system not found - libtorrent may not link correctly")
-            endif()
-            if(BOOST_FILESYSTEM_LIB)
-                message(STATUS "Linking boost_filesystem: ${BOOST_FILESYSTEM_LIB}")
-                target_link_libraries(Yantrium PRIVATE ${BOOST_FILESYSTEM_LIB})
-            else()
-                message(WARNING "boost_filesystem not found - libtorrent may not link correctly")
-            endif()
-        else()
-            message(WARNING "libtorrent not found - torrent support disabled")
-            message(STATUS "Searched for library in: /app/lib, /usr/lib, /usr/local/lib")
-            message(STATUS "Searched for headers in: /app/include, /usr/include, /usr/local/include")
-            if(LIBTORRENT_LIB)
-                message(STATUS "Found library but no headers: ${LIBTORRENT_LIB}")
-            endif()
-            if(LIBTORRENT_INCLUDE_DIR)
-                message(STATUS "Found headers but no library: ${LIBTORRENT_INCLUDE_DIR}")
+                message(STATUS "libtorrent not found - torrent support disabled")
             endif()
         endif()
     endif()
@@ -387,6 +332,5 @@ install(TARGETS Yantrium
     ARCHIVE DESTINATION lib
 )
 
-# --- CRITICAL ---
 # Finalize the target (Required because MANUAL_FINALIZATION was used)
 qt_finalize_executable(Yantrium)
