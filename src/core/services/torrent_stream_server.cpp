@@ -496,32 +496,88 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     QMimeDatabase mimeDb;
     QMimeType mimeType = mimeDb.mimeTypeForFile(fileName);
 
-    // Prioritize pieces for the requested range
-    handle.set_piece_deadline(ti.map_file(ltFileIndex, start, contentLength).piece, 0);
-
-    // Wait for the data to become available (this is a simplified synchronous wait)
-    // A more robust implementation would be asynchronous.
-    int piece_index = ti.map_file(ltFileIndex, start, contentLength).piece;
-    while (!handle.have_piece(libtorrent::piece_index_t{piece_index})) {
-        // This is a busy-wait loop, not ideal for production.
-        // It's for demonstration purposes.
-        // In a real app, you would use alerts or a more efficient mechanism.
+    // Map file range to pieces
+    libtorrent::peer_request pr = ti.map_file(ltFileIndex, start, contentLength);
+    libtorrent::piece_index_t piece_index = pr.piece;
+    
+    // Prioritize pieces for streaming - set deadline to 0 (highest priority)
+    handle.set_piece_deadline(piece_index, 0, libtorrent::torrent_handle::alert_when_available);
+    
+    // Wait for the piece to be available
+    int maxWaitIterations = 100; // 10 seconds max wait
+    int iterations = 0;
+    while (!handle.have_piece(piece_index) && iterations < maxWaitIterations) {
         QThread::msleep(100);
+        iterations++;
+        // Process alerts to ensure read_piece_alert is handled
+        processTorrentAlerts();
     }
     
-    // Read the data from libtorrent
-    libtorrent::io_buffer buf;
-    libtorrent::error_code ec;
-    int bytes_read = ti.read_piece(piece_index, buf, 0, ec);
-    if (ec || bytes_read <= 0) {
-        return QHttpServerResponse("Error reading torrent data", QHttpServerResponse::StatusCode::InternalServerError);
+    if (!handle.have_piece(piece_index)) {
+        return QHttpServerResponse("Piece not available yet", 
+            QHttpServerResponse::StatusCode::ServiceUnavailable);
     }
-
-    QByteArray body = QByteArray(buf.get(), bytes_read);
     
-    // Adjust body to match the requested range
-    int offset_in_piece = start - (piece_index * ti.piece_length());
-    body = body.mid(offset_in_piece, contentLength);
+    // Read the piece asynchronously
+    handle.read_piece(piece_index);
+    
+    // Wait for read_piece_alert
+    QByteArray pieceData;
+    bool pieceRead = false;
+    iterations = 0;
+    while (!pieceRead && iterations < maxWaitIterations) {
+        std::vector<libtorrent::alert*> alerts;
+        m_session.pop_alerts(&alerts);
+        
+        for (libtorrent::alert* alert : alerts) {
+            if (auto* rpa = libtorrent::alert_cast<libtorrent::read_piece_alert>(alert)) {
+                if (rpa->piece == piece_index) {
+                    if (rpa->error) {
+                        return QHttpServerResponse("Error reading piece", 
+                            QHttpServerResponse::StatusCode::InternalServerError);
+                    }
+                    // Extract data from alert buffer
+                    const char* data = static_cast<const char*>(rpa->buffer.get());
+                    int size = rpa->size;
+                    pieceData = QByteArray(data, size);
+                    pieceRead = true;
+                    break;
+                }
+            }
+        }
+        
+        if (!pieceRead) {
+            QThread::msleep(100);
+            iterations++;
+        }
+    }
+    
+    if (!pieceRead || pieceData.isEmpty()) {
+        return QHttpServerResponse("Failed to read piece data", 
+            QHttpServerResponse::StatusCode::InternalServerError);
+    }
+    
+    // Calculate offset within the piece
+    // The peer_request already contains the offset within the piece
+    qint64 offsetInPiece = pr.start;
+    
+    // Extract the requested range from the piece data
+    // Use the minimum of mapped length and contentLength to avoid over-reading
+    int extractLength = qMin(static_cast<int>(pr.length), contentLength);
+    QByteArray body = pieceData.mid(offsetInPiece, extractLength);
+    
+    // If the range spans multiple pieces, we'd need to read more pieces
+    // For now, we handle single-piece ranges. Multi-piece ranges would require
+    // reading multiple pieces and concatenating them.
+    if (extractLength < contentLength) {
+        // Partial data - this happens when range spans multiple pieces
+        // For now, return what we have. A full implementation would read all pieces.
+        LoggingService::logWarning("TorrentStreamServer", 
+            QString("Range request spans multiple pieces, returning partial data"));
+        // Adjust end to match actual data returned
+        end = start + extractLength - 1;
+        contentLength = extractLength;
+    }
     
     #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
     // Newer API: use QHttpHeaders and setHeaders()
