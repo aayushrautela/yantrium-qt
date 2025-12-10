@@ -33,7 +33,7 @@ public:
     void getStreams(const QString& type, const QString& id);
     
     // Search for content
-    void search(const QString& type, const QString& query);
+    void search(const QString& type, const QString& catalogId, const QString& query);
     
     // Static helper methods
     static QString extractBaseUrl(const QString& manifestUrl);

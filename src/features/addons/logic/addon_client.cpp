@@ -200,12 +200,12 @@ void AddonClient::getStreams(const QString& type, const QString& id)
     });
 }
 
-void AddonClient::search(const QString& type, const QString& query)
+void AddonClient::search(const QString& type, const QString& catalogId, const QString& query)
 {
-    // AIOMetadata search endpoint format: /catalog/{type}/search/search={query}.json
+    // Correct search endpoint format: /catalog/{type}/{id}/search={query}.json
     // The search parameter is part of the path, not a query parameter
     QString encodedQuery = QUrl::toPercentEncoding(query);
-    QString path = QString("/catalog/%1/search/search=%2.json").arg(type, encodedQuery);
+    QString path = QString("/catalog/%1/%2/search=%3.json").arg(type, catalogId, encodedQuery);
     QUrl url = buildUrl(path);
     
     QNetworkRequest request(url);

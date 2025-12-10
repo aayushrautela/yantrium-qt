@@ -269,23 +269,30 @@ void LibraryService::searchCatalogs(const QString& query)
     m_pendingSearchRequests = 0;
     
     // Get all enabled addons
-    QList<AddonConfig> addons = m_addonRepository->listAddons();
-    
-    // Search each addon for all supported types
-    QStringList searchTypes = {"movie", "series", "anime"};
-    
+    QList<AddonConfig> addons = m_addonRepository->getEnabledAddons();
+
     for (const AddonConfig& addon : addons) {
-        if (!addon.enabled) {
-            continue;
-        }
-        
         QString baseUrl = AddonClient::extractBaseUrl(addon.manifestUrl);
         if (baseUrl.isEmpty()) {
             continue;
         }
+
+        AddonManifest manifest = m_addonRepository->getManifest(addon);
         
-        // Search for each type this addon supports
-        for (const QString& type : searchTypes) {
+        // Iterate through the addon's catalogs to find searchable ones
+        for (const CatalogDefinition& catalog : manifest.catalogs()) {
+            bool isSearchable = false;
+            for (const QJsonObject& extra : catalog.extra()) {
+                if (extra["name"].toString() == "search") {
+                    isSearchable = true;
+                    break;
+                }
+            }
+
+            if (!isSearchable) {
+                continue;
+            }
+
             m_pendingSearchRequests++;
             
             // Create a new AddonClient for each search request
@@ -296,7 +303,8 @@ void LibraryService::searchCatalogs(const QString& query)
             client->setProperty("isSearchRequest", true);
             client->setProperty("addonId", addon.id);
             client->setProperty("baseUrl", baseUrl);
-            client->setProperty("searchType", type);
+            client->setProperty("searchType", catalog.type());
+            client->setProperty("searchCatalogId", catalog.id());
             client->setProperty("searchQuery", query);
             
             // Connect signals
@@ -304,7 +312,7 @@ void LibraryService::searchCatalogs(const QString& query)
             connect(client, &AddonClient::error, this, &LibraryService::onSearchClientError);
             
             // Perform search
-            client->search(type, query);
+            client->search(catalog.type(), catalog.id(), query);
         }
     }
     
