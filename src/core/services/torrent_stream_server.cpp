@@ -432,8 +432,9 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
         qint64 maxSize = 0;
         for (int i = 0; i < ti.num_files(); ++i) {
             const libtorrent::file_storage& files = ti.files();
-            QString path = QString::fromStdString(files.file_path(i));
-            qint64 fileSize = files.file_size(i);
+            libtorrent::file_index_t fileIdx(i);
+            QString path = QString::fromStdString(files.file_path(fileIdx));
+            qint64 fileSize = files.file_size(fileIdx);
             if (path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".avi") ||
                 path.endsWith(".mov") || path.endsWith(".webm")) {
                 if (fileSize > maxSize) {
@@ -452,6 +453,9 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     if (actualFileIndex >= ti.num_files()) {
         return QHttpServerResponse(QHttpServerResponse::StatusCode::NotFound);
     }
+    
+    // Convert to libtorrent::file_index_t for libtorrent API calls
+    libtorrent::file_index_t ltFileIndex(actualFileIndex);
     
     // Handle range requests for video streaming
     QString rangeHeader = request.value("Range");
@@ -472,7 +476,7 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     
     // Get file size
     const libtorrent::file_storage& files = ti.files();
-    qint64 fileSize = files.file_size(actualFileIndex);
+    qint64 fileSize = files.file_size(ltFileIndex);
     
     if (end < 0) {
         end = fileSize - 1;
@@ -487,7 +491,7 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     
     // For now, return a simple response indicating the file
     // In a full implementation, you'd stream the actual file data
-    QString fileName = QString::fromStdString(files.file_path(actualFileIndex));
+    QString fileName = QString::fromStdString(files.file_path(ltFileIndex));
     QMimeDatabase mimeDb;
     QMimeType mimeType = mimeDb.mimeTypeForFile(fileName);
     
