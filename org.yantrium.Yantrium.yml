@@ -108,6 +108,22 @@ modules:
         if [ -f /app/lib/libtorrent-rasterbar.so ]; then
           echo "libtorrent-rasterbar.so found in /app/lib"
         fi
+      - |
+        # Install desktop file
+        mkdir -p /app/share/applications
+        if [ -f org.yantrium.Yantrium.desktop ]; then
+          cp org.yantrium.Yantrium.desktop /app/share/applications/
+          echo "Desktop file installed"
+        else
+          echo "Warning: Desktop file not found"
+        fi
+      - |
+        # Ensure icon is accessible (Flatpak will handle icon installation automatically from the icon field)
+        if [ -f resources/assets/icons/app_logo.svg ]; then
+          echo "Icon file found at resources/assets/icons/app_logo.svg"
+        else
+          echo "Warning: Icon file not found"
+        fi
     sources:
       - type: dir
         path: .

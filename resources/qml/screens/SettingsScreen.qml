@@ -157,26 +157,47 @@ Item {
                             Text { id: addonStatusText; width: parent.width; font.pixelSize: 14; color: "#aaaaaa"; wrapMode: Text.WordWrap }
                         }
                         
-                        // Installed addons list
+                        // Installed addons list - Grid layout
                         Column {
                             width: parent.width
                             spacing: 10
                             Text { text: "INSTALLED ADDONS"; font.pixelSize: 14; font.bold: true; font.letterSpacing: 0.5; color: "#aaaaaa"; visible: addonListModel.count > 0 }
                             
-                            ListView {
+                            Flow {
                                 width: parent.width
-                                height: Math.min(addonListModel.count * 90, 500)
-                                model: addonListModel
-                                clip: true; spacing: 12; visible: addonListModel.count > 0
+                                spacing: 20
+                                visible: addonListModel.count > 0
                                 
-                                delegate: Rectangle {
-                                    width: ListView.view.width; height: 85; color: "#1a1a1a"; radius: 8; border.width: 1; border.color: "#2d2d2d"
+                                Repeater {
+                                    model: addonListModel
                                     
-                                    Row {
-                                        anchors.fill: parent; anchors.margins: 16; spacing: 16
+                                    Rectangle {
+                                        width: Math.max(280, Math.min(350, (parent.width - 40) / 3))
+                                        height: cardContent.height + 32
+                                        color: "#1a1a1a"
+                                        radius: 8
+                                        border.color: "#2d2d2d"
+                                        border.width: 1
+                                        
                                         Column {
-                                            width: parent.width - toggleSwitch.width - deleteButton.width - 40; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                                            Text { width: parent.width; text: model.name || model.id || "Unknown"; font.pixelSize: 16; font.bold: true; color: "#ffffff"; elide: Text.ElideRight }
+                                            id: cardContent
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 16
+                                            spacing: 12
+                                            
+                                            // Addon name
+                                            Text {
+                                                width: parent.width
+                                                text: model.name || model.id || "Unknown Addon"
+                                                font.pixelSize: 18
+                                                font.bold: true
+                                                color: "#FFFFFF"
+                                                elide: Text.ElideRight
+                                            }
+                                            
+                                            // Version and status
                                             Row {
                                                 spacing: 12
                                                 Text { text: "v" + (model.version || "N/A"); font.pixelSize: 12; color: "#aaaaaa" }
@@ -186,44 +207,85 @@ Item {
                                                     Text { text: (model.enabled || false) ? "Active" : "Inactive"; font.pixelSize: 12; color: (model.enabled || false) ? "#4CAF50" : "#666666"; anchors.verticalCenter: parent.verticalCenter }
                                                 }
                                             }
-                                        }
-                                        Switch {
-                                            id: toggleSwitch; anchors.verticalCenter: parent.verticalCenter; checked: model.enabled || false
-                                            onToggled: { if (checked) addonRepo.enableAddon(model.id); else addonRepo.disableAddon(model.id); refreshAddonList() }
-                                        }
-                                        
-                                        // --- DELETE BUTTON ---
-                                        Button {
-                                            id: deleteButton
-                                            width: 40
-                                            height: 40
-                                            anchors.verticalCenter: parent.verticalCenter
-
-                                            // 1. Transparent Background
-                                            background: Rectangle {
-                                                color: parent.pressed ? "#22ffffff" : "transparent"
-                                                radius: 4
-                                            }
-
-                                            contentItem: Item {
-                                                Image {
-                                                    id: deleteIcon
-                                                    source: "qrc:/assets/icons/delete.svg"
+                                            
+                                            // Controls row (toggle and delete)
+                                            Row {
+                                                width: parent.width
+                                                spacing: 12
+                                                
+                                                Item {
+                                                    width: parent.width - toggleSwitch.width - deleteButton.width - parent.spacing
+                                                    height: 1
+                                                }
+                                                
+                                                // Toggle switch
+                                                Rectangle {
+                                                    id: toggleSwitch
+                                                    width: 50
+                                                    height: 28
+                                                    radius: 14
+                                                    color: (model.enabled || false) ? "#E53935" : "#666666"
                                                     
-                                                    // 2. High Quality Settings
-                                                    sourceSize.width: 128
-                                                    sourceSize.height: 128
-                                                    mipmap: true
-                                                    smooth: true
-                                                    antialiasing: true
-
-                                                    width: 36
-                                                    height: 36
-                                                    anchors.centerIn: parent
-                                                    fillMode: Image.PreserveAspectFit
+                                                    Behavior on color {
+                                                        ColorAnimation { duration: 200 }
+                                                    }
+                                                    
+                                                    Rectangle {
+                                                        width: 24
+                                                        height: 24
+                                                        radius: 12
+                                                        color: "#FFFFFF"
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        anchors.left: parent.left
+                                                        anchors.leftMargin: (model.enabled || false) ? 24 : 2
+                                                        
+                                                        Behavior on anchors.leftMargin {
+                                                            NumberAnimation { duration: 200 }
+                                                        }
+                                                    }
+                                                    
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            if (model.enabled) {
+                                                                addonRepo.disableAddon(model.id)
+                                                            } else {
+                                                                addonRepo.enableAddon(model.id)
+                                                            }
+                                                            refreshAddonList()
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // Delete button
+                                                Rectangle {
+                                                    id: deleteButton
+                                                    width: 32
+                                                    height: 32
+                                                    radius: 16
+                                                    color: deleteMouseArea.containsMouse ? "#2a2a2a" : "transparent"
+                                                    
+                                                    Image {
+                                                        source: "qrc:/assets/icons/delete.svg"
+                                                        width: 20
+                                                        height: 20
+                                                        anchors.centerIn: parent
+                                                    }
+                                                    
+                                                    MouseArea {
+                                                        id: deleteMouseArea
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            deleteConfirmDialog.addonName = model.name || model.id || "Unknown"
+                                                            deleteConfirmDialog.addonId = model.id
+                                                            deleteConfirmDialog.open()
+                                                        }
+                                                    }
                                                 }
                                             }
-                                            onClicked: { deleteConfirmDialog.addonName = model.name || model.id || "Unknown"; deleteConfirmDialog.addonId = model.id; deleteConfirmDialog.open() }
                                         }
                                     }
                                 }

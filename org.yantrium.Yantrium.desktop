@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Yantrium
+Comment=Media player and streaming application
+Exec=yantrium
+Icon=org.yantrium.Yantrium
+Categories=AudioVideo;Player;Video;
+StartupNotify=true
+MimeType=video/mp4;video/x-msvideo;video/quicktime;video/x-matroska;
