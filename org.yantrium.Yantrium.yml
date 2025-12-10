@@ -118,11 +118,33 @@ modules:
           echo "Warning: Desktop file not found"
         fi
       - |
-        # Install icon to the correct location
-        mkdir -p /app/share/icons/hicolor/scalable/apps
+        # Install icons in multiple sizes for better desktop environment compatibility
         if [ -f resources/assets/icons/app_logo.svg ]; then
+          # Install scalable SVG icon
+          mkdir -p /app/share/icons/hicolor/scalable/apps
           cp resources/assets/icons/app_logo.svg /app/share/icons/hicolor/scalable/apps/org.yantrium.Yantrium.svg
-          echo "Icon installed to /app/share/icons/hicolor/scalable/apps/org.yantrium.Yantrium.svg"
+          echo "Scalable icon installed"
+          
+          # Generate and install fixed-size PNG icons from SVG
+          # Using rsvg-convert (librsvg) which is available in KDE SDK
+          ICON_SIZES="16 32 48 64 128 256"
+          for size in $ICON_SIZES; do
+            mkdir -p /app/share/icons/hicolor/${size}x${size}/apps
+            if command -v rsvg-convert >/dev/null 2>&1; then
+              rsvg-convert -w $size -h $size resources/assets/icons/app_logo.svg \
+                -o /app/share/icons/hicolor/${size}x${size}/apps/org.yantrium.Yantrium.png
+              echo "Generated ${size}x${size} icon"
+            elif command -v convert >/dev/null 2>&1; then
+              # Fallback to ImageMagick if available
+              convert -background none -resize ${size}x${size} resources/assets/icons/app_logo.svg \
+                /app/share/icons/hicolor/${size}x${size}/apps/org.yantrium.Yantrium.png
+              echo "Generated ${size}x${size} icon (ImageMagick)"
+            else
+              echo "Warning: No SVG converter found (rsvg-convert or ImageMagick), skipping ${size}x${size} icon"
+            fi
+          done
+          
+          echo "Icons installed successfully"
         else
           echo "Warning: Icon file not found at resources/assets/icons/app_logo.svg"
         fi
