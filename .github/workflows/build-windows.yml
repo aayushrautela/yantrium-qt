@@ -269,7 +269,8 @@ jobs:
         }
 
         Write-Host "Running windeployqt..."
-        windeployqt.exe --verbose 2 --qmldir resources/qml --network --compiler-runtime --imageformats --sql $exePath
+        # Fixed: Removed --imageformats --sql --network (auto-detected in Qt6)
+        windeployqt.exe --verbose 2 --qmldir resources/qml --compiler-runtime $exePath
         
     # Copy MDK and libtorrent runtime libraries
     - name: Copy dependencies
