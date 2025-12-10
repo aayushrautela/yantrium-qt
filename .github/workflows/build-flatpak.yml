@@ -40,18 +40,15 @@ jobs:
         
         echo "Attempting to download MDK SDK version ${MDK_VERSION}..."
         
-        DOWNLOAD_SUCCESS=false
-        for url in \
-          "https://github.com/wang-bin/mdk-sdk/releases/download/${MDK_VERSION}/mdk-sdk-linux-x64.tar.xz"; do
-          if curl -L -f -o mdk-sdk.tar.xz "$url" 2>/dev/null; then
-            echo "Successfully downloaded from: $url"
-            DOWNLOAD_SUCCESS=true
-            break
-          fi
-        done
+        DOWNLOAD_URL="https://github.com/wang-bin/mdk-sdk/releases/download/v${MDK_VERSION}/mdk-sdk-linux-x64.tar.xz"
+        echo "Download URL: ${DOWNLOAD_URL}"
         
-        if [ "$DOWNLOAD_SUCCESS" = false ]; then
-          echo "Error: Could not download MDK SDK v${MDK_VERSION} from GitHub releases"
+        # Use curl with verbose output to see what's happening
+        if curl -L -f --show-error --retry 3 --retry-delay 2 -o mdk-sdk.tar.xz "${DOWNLOAD_URL}"; then
+          echo "Successfully downloaded MDK SDK from: ${DOWNLOAD_URL}"
+        else
+          echo "Error: Failed to download MDK SDK v${MDK_VERSION} from GitHub releases"
+          echo "URL attempted: ${DOWNLOAD_URL}"
           echo "Please check available versions at: https://github.com/wang-bin/mdk-sdk/releases"
           exit 1
         fi
