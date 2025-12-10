@@ -227,118 +227,6 @@ jobs:
         
         Write-Host "MDK SDK verification successful"
 
-    # Package Qt libraries and plugins
-    - name: Deploy Qt
-      shell: powershell
-      run: |
-        $buildDir = "build\${{ inputs.build_type }}"
-        $exePath = "$buildDir\Yantrium.exe"
-
-        if (-not (Test-Path $exePath)) {
-          Write-Host "FATAL: Executable not found at $exePath"
-          exit 1
-        }
-
-        windeployqt.exe --qmldir resources/qml --network --compiler-runtime $exePath
-
-        # Copy TLS plugins
-        $windeployqt = Get-Command windeployqt
-        $binDir = Split-Path -Parent $windeployqt.Path
-        $qtRootDir = Split-Path -Parent $binDir
-        $qtTlsSrc = Join-Path $qtRootDir "plugins\tls"
-        $destTlsDir = Join-Path $buildDir "tls"
-
-        if (Test-Path $qtTlsSrc) {
-           New-Item -ItemType Directory -Path $destTlsDir -Force | Out-Null
-           Copy-Item -Path "$qtTlsSrc\*" -Destination $destTlsDir -Force -Recurse
-        } else {
-           Write-Host "ERROR: Could not find TLS plugins at $qtTlsSrc"
-           exit 1
-        }
-
-    - name: Copy Image Format Plugins
-      shell: powershell
-      run: |
-        $buildDir = "build\${{ inputs.build_type }}"
-        $windeployqt = Get-Command windeployqt
-        $binDir = Split-Path -Parent $windeployqt.Path
-        $qtRootDir = Split-Path -Parent $binDir
-        $qtImageFormatsSrc = Join-Path $qtRootDir "plugins\imageformats"
-        $destImageFormatsDir = Join-Path $buildDir "imageformats"
-
-        if (Test-Path $qtImageFormatsSrc) {
-           New-Item -ItemType Directory -Path $destImageFormatsDir -Force | Out-Null
-           Copy-Item -Path "$qtImageFormatsSrc\*" -Destination $destImageFormatsDir -Force -Recurse
-           Write-Host "Successfully copied image format plugins."
-        } else {
-           Write-Host "ERROR: Could not find image format plugins at $qtImageFormatsSrc"
-           exit 1
-        }
-
-    - name: Copy Image Format Dependency DLLs
-      shell: powershell
-      run: |
-        $buildDir = "build\${{ inputs.build_type }}"
-        $windeployqt = Get-Command windeployqt
-        $binDir = Split-Path -Parent $windeployqt.Path
-        $qtRootDir = Split-Path -Parent $binDir
-        $qtBinDir = $binDir
-        
-        Write-Host "Qt bin directory: $qtBinDir"
-        
-        # List of image format dependency DLLs that may be needed
-        # These are third-party libraries that image format plugins depend on
-        $imageFormatDlls = @(
-            "libjpeg-8.dll",
-            "libpng16-16.dll",
-            "libtiff-6.dll",
-            "libwebp-7.dll",
-            "libwebpdemux-2.dll",
-            "libwebpmux-3.dll",
-            "libdeflate.dll",
-            "libjbig-0.dll",
-            "libLerc.dll",
-            "liblzma-5.dll",
-            "libsharpyuv-0.dll",
-            "libjasper.dll"
-        )
-        
-        $copiedCount = 0
-        $missingDlls = @()
-        
-        foreach ($dll in $imageFormatDlls) {
-            $srcPath = Join-Path $qtBinDir $dll
-            if (Test-Path $srcPath) {
-                Copy-Item -Path $srcPath -Destination $buildDir -Force
-                Write-Host "Copied: $dll"
-                $copiedCount++
-            } else {
-                $missingDlls += $dll
-            }
-        }
-        
-        Write-Host "Successfully copied $copiedCount image format dependency DLL(s)."
-        
-        if ($missingDlls.Count -gt 0) {
-            Write-Host "Note: The following DLLs were not found (may not be needed for your image formats):"
-            foreach ($dll in $missingDlls) {
-                Write-Host "  - $dll"
-            }
-        }
-        
-        # Also try to copy any lib*.dll files that might be image format dependencies
-        # This is a catch-all for any other image format dependencies
-        $libDlls = Get-ChildItem -Path $qtBinDir -Filter "lib*.dll" -ErrorAction SilentlyContinue
-        if ($libDlls) {
-            foreach ($dll in $libDlls) {
-                $destPath = Join-Path $buildDir $dll.Name
-                if (-not (Test-Path $destPath)) {
-                    Copy-Item -Path $dll.FullName -Destination $buildDir -Force
-                    Write-Host "Copied additional dependency: $($dll.Name)"
-                }
-            }
-        }
-
     - name: Setup OpenSSL
       shell: powershell
       run: |
@@ -368,23 +256,20 @@ jobs:
           exit 1
         }
 
-    - name: Copy SQL plugins
+    # Package Qt libraries and plugins
+    - name: Deploy Qt
       shell: powershell
       run: |
-        $windeployqt = Get-Command windeployqt
-        $qtBinDir = Split-Path -Parent $windeployqt.Path
-        $qtRootDir = Split-Path -Parent $qtBinDir
-        $sqlPluginsDir = Join-Path $qtRootDir "plugins\sqldrivers"
-        $sqliteDll = Join-Path $sqlPluginsDir "qsqlite.dll"
+        $buildDir = "build\${{ inputs.build_type }}"
+        $exePath = "$buildDir\Yantrium.exe"
 
-        if (Test-Path $sqliteDll) {
-          $targetDir = "build\${{ inputs.build_type }}\sqldrivers"
-          New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-          Copy-Item -Path $sqliteDll -Destination $targetDir -Force
-        } else {
-          Write-Host "ERROR: qsqlite.dll not found."
+        if (-not (Test-Path $exePath)) {
+          Write-Host "FATAL: Executable not found at $exePath"
           exit 1
         }
+
+        Write-Host "Running windeployqt..."
+        windeployqt.exe --verbose 2 --qmldir resources/qml --network --compiler-runtime --imageformats --sql $exePath
         
     # Copy MDK and libtorrent runtime libraries
     - name: Copy dependencies
