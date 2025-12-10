@@ -40,11 +40,17 @@ jobs:
         # Added sudo here to fix permission error
         sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
         sudo flatpak install -y flathub org.kde.Platform//6.10 org.kde.Sdk//6.10
+        # Fix permissions for cache - remove lock files and make directory readable
+        sudo rm -f /var/lib/flatpak/repo/.lock || true
+        sudo chmod -R a+rX /var/lib/flatpak || true
 
     - name: Ensure Flatpak remote is configured
       if: steps.flatpak-cache.outputs.cache-hit == 'true'
       run: |
         sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+        # Fix permissions after cache restore - remove lock files
+        sudo rm -f /var/lib/flatpak/repo/.lock || true
+        sudo chmod -R a+rX /var/lib/flatpak || true
 
     - name: Cache MDK SDK
       uses: actions/cache@v4
@@ -147,8 +153,10 @@ jobs:
         # but since you installed the SDK manually above, this should work as is.
         # Flatpak-builder will reuse cached modules (boost, libtorrent) from previous builds
         # thanks to the cache above. Only the yantrium app itself will rebuild if source changed.
+        # --disable-updates prevents checking for updates to cached modules, ensuring they're reused
         flatpak-builder \
           --repo=repo \
+          --disable-updates \
           build-dir \
           org.yantrium.Yantrium.filled.yml
 
@@ -164,6 +172,14 @@ jobs:
           yantrium.flatpak
         retention-days: 30
         if-no-files-found: warn
+
+    - name: Fix permissions before cache save
+      if: always()
+      run: |
+        # Remove lock files and fix permissions so cache can save successfully
+        # This runs before the cache action tries to save at the end of the job
+        sudo rm -f /var/lib/flatpak/repo/.lock || true
+        sudo chmod -R a+rX /var/lib/flatpak || true
 
     - name: Cleanup
       if: always()
