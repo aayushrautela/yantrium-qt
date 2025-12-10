@@ -37,6 +37,68 @@ jobs:
       with:
         cmake-version: '3.31'
     
+    - name: Download MDK SDK
+      shell: powershell
+      run: |
+        $MDK_VERSION = "0.35.0"
+        $vendorDir = "vendor\mdk-sdk"
+        New-Item -ItemType Directory -Force -Path $vendorDir | Out-Null
+        cd $vendorDir
+        
+        Write-Host "Attempting to download MDK SDK version $MDK_VERSION..."
+        
+        $downloadUrl = "https://github.com/wang-bin/mdk-sdk/releases/download/v$MDK_VERSION/mdk-sdk-windows-x64.zip"
+        Write-Host "Download URL: $downloadUrl"
+        
+        $zipFile = "mdk-sdk.zip"
+        
+        try {
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $zipFile -UseBasicParsing
+            Write-Host "Successfully downloaded MDK SDK"
+        } catch {
+            Write-Host "Error: Failed to download MDK SDK v$MDK_VERSION from GitHub releases"
+            Write-Host "URL attempted: $downloadUrl"
+            Write-Host "Error: $_"
+            exit 1
+        }
+        
+        Write-Host "Extracting MDK SDK..."
+        Expand-Archive -Path $zipFile -DestinationPath . -Force
+        
+        Remove-Item $zipFile -Force
+        
+        # Handle archives that extract with a root directory (e.g., mdk-sdk-windows-x64/)
+        $subdirs = Get-ChildItem -Directory | Where-Object { $_.Name -like "mdk-sdk*" -or $_.Name -like "mdk*" }
+        if ($subdirs.Count -eq 1) {
+            Write-Host "Archive extracted with root directory, moving contents up..."
+            $subdir = $subdirs[0]
+            Get-ChildItem -Path $subdir.FullName | Move-Item -Destination . -Force
+            Remove-Item $subdir -Force
+        }
+        
+        # Verify essential files exist
+        if (-not (Test-Path "include\mdk\Player.h")) {
+            Write-Host "Error: MDK SDK extraction failed - include/mdk/Player.h not found"
+            Write-Host "Contents of current directory:"
+            Get-ChildItem | Select-Object Name, PSIsContainer
+            if (Test-Path "include") {
+                Write-Host "Contents of include directory:"
+                Get-ChildItem "include" -Recurse | Select-Object FullName
+            }
+            exit 1
+        }
+        if (-not (Test-Path "lib\x64\mdk.lib") -and -not (Test-Path "lib\mdk.lib")) {
+            Write-Host "Error: MDK SDK extraction failed - lib/mdk.lib not found"
+            if (Test-Path "lib") {
+                Write-Host "Contents of lib directory:"
+                Get-ChildItem "lib" -Recurse | Select-Object FullName
+            }
+            exit 1
+        }
+        
+        Write-Host "MDK SDK downloaded and extracted successfully"
+        cd ..\..
+    
     # Cache libtorrent build since it takes forever
     - name: Cache vcpkg and libtorrent
       uses: actions/cache@v4
@@ -92,11 +154,33 @@ jobs:
         cmake --build build --config ${{ inputs.build_type }}
         
     - name: Check MDK SDK
-      shell: cmd
+      shell: powershell
       run: |
-        if not exist "vendor\mdk-sdk\lib\x64\mdk.lib" (
-          echo "Warning: MDK SDK Windows library not found."
-        )
+        $mdkInclude = "vendor\mdk-sdk\include\mdk\Player.h"
+        $mdkLib1 = "vendor\mdk-sdk\lib\x64\mdk.lib"
+        $mdkLib2 = "vendor\mdk-sdk\lib\mdk.lib"
+        
+        if (-not (Test-Path $mdkInclude)) {
+          Write-Host "ERROR: MDK SDK header not found at $mdkInclude"
+          Write-Host "Contents of vendor\mdk-sdk\include:"
+          if (Test-Path "vendor\mdk-sdk\include") {
+            Get-ChildItem "vendor\mdk-sdk\include" -Recurse | Select-Object FullName
+          }
+          exit 1
+        }
+        
+        if (-not (Test-Path $mdkLib1) -and -not (Test-Path $mdkLib2)) {
+          Write-Host "ERROR: MDK SDK library not found at either:"
+          Write-Host "  - $mdkLib1"
+          Write-Host "  - $mdkLib2"
+          if (Test-Path "vendor\mdk-sdk\lib") {
+            Write-Host "Contents of vendor\mdk-sdk\lib:"
+            Get-ChildItem "vendor\mdk-sdk\lib" -Recurse | Select-Object FullName
+          }
+          exit 1
+        }
+        
+        Write-Host "MDK SDK verification successful"
 
     # Package Qt libraries and plugins
     - name: Deploy Qt
