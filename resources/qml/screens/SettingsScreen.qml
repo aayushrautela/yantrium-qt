@@ -224,15 +224,17 @@ Item {
                                             Row {
                                                 width: parent.width
                                                 spacing: 12
-                                                
+
+                                                // Spacer to push controls to the right
                                                 Item {
-                                                    width: parent.width - toggleSwitch.width - deleteButton.width - parent.spacing
+                                                    width: parent.width - parent.spacing - deleteButton.width - toggleSwitch.width
                                                     height: 1
                                                 }
                                                 
                                                 // Toggle switch - Standard Qt Switch
                                                 Switch {
                                                     id: toggleSwitch
+                                                    anchors.verticalCenter: parent.verticalCenter
                                                     checked: model.enabled || false
                                                     onToggled: {
                                                         if (checked) {
@@ -247,16 +249,25 @@ Item {
                                                 // Delete button
                                                 Rectangle {
                                                     id: deleteButton
-                                                    width: 32
-                                                    height: 32
-                                                    radius: 16
+                                                    width: 40
+                                                    height: 40
+                                                    radius: 20
+                                                    anchors.verticalCenter: parent.verticalCenter
                                                     color: deleteMouseArea.containsMouse ? "#2a2a2a" : "transparent"
                                                     
                                                     Image {
                                                         source: "qrc:/assets/icons/delete.svg"
-                                                        width: 20
-                                                        height: 20
+                                                        width: 24
+                                                        height: 24
                                                         anchors.centerIn: parent
+                                                        
+                                                        // SVG Quality Fix
+                                                        sourceSize.width: 128
+                                                        sourceSize.height: 128
+                                                        mipmap: true
+                                                        smooth: true
+                                                        antialiasing: true
+                                                        fillMode: Image.PreserveAspectFit
                                                     }
                                                     
                                                     MouseArea {
@@ -327,7 +338,7 @@ Item {
                             Rectangle {
                                 id: traktCardRectangle
                                 width: Math.max(350, Math.min(450, (parent.width - 20) / 2))
-                                height: traktCardContent.height + 32
+                                height: omdbCardRectangle.height
                                 color: "#252525"
                                 radius: 8
                                 border.color: "#2d2d2d"
@@ -522,6 +533,7 @@ Item {
                             
                             // OMDB API Key Card
                             Rectangle {
+                                id: omdbCardRectangle
                                 width: Math.max(350, Math.min(450, (parent.width - 20) / 2))
                                 height: omdbCardContent.height + 32
                                 color: "#252525"
@@ -692,65 +704,163 @@ Item {
                             }
                         }
                         
-                        Connections { target: catalogPrefsService; function onCatalogsUpdated(){ refreshCatalogList() } function onError(m){ catalogStatusText.text="Error: "+m; catalogStatusText.color="#F44336" } }
-                        Text { id: catalogStatusText; width: parent.width; font.pixelSize: 14; color: "#aaaaaa"; wrapMode: Text.WordWrap }
-                        Column {
-                            width: parent.width; spacing: 10; visible: catalogListModel.count > 0
-                            Text { text: "AVAILABLE CATALOGS"; font.pixelSize: 14; font.bold: true; font.letterSpacing: 0.5; color: "#aaaaaa" }
+                        // Catalog Lists (Side-by-side)
+                        Row {
+                            width: parent.width
+                            spacing: 20
                             
-                            ListView {
-                                id: catalogListView
-                                width: parent.width; height: Math.min(catalogListModel.count * 100, 500)
-                                model: catalogListModel; clip: true; spacing: 12
-                                move: Transition { NumberAnimation { properties: "x,y"; duration: 300; easing.type: Easing.OutCubic } }
-
-                                delegate: Item {
-                                    id: delegateWrapper; width: ListView.view.width; height: 95; z: dragArea.pressed ? 100 : 1 
-                                    Rectangle {
-                                        id: visualCard
-                                        width: parent.width; height: parent.height
-                                        color: dragArea.pressed ? "#252525" : "#1a1a1a"; radius: 8; border.width: 1; border.color: dragArea.pressed ? "#4d4d4d" : "#2d2d2d"; scale: dragArea.pressed ? 1.02 : 1.0
-                                        anchors.fill: dragArea.pressed ? undefined : parent
-                                        Behavior on scale { NumberAnimation { duration: 150 } }
-                                        Behavior on color { ColorAnimation { duration: 150 } }
+                            // Normal Catalogs Column
+                            Column {
+                                width: (parent.width - parent.spacing) / 2
+                                spacing: 10
+                                
+                                Text { 
+                                    text: "DISPLAY CATALOGS"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    font.letterSpacing: 0.5
+                                    color: "#aaaaaa"
+                                    visible: normalCatalogsModel.count > 0
+                                }
+                                
+                                ListView {
+                                    width: parent.width
+                                    height: contentItem.childrenRect.height
+                                    model: normalCatalogsModel
+                                    clip: true
+                                    spacing: 12
+                                    
+                                    delegate: Item {
+                                        width: ListView.view.width
+                                        height: 70
                                         
-                                        Row {
-                                            anchors.fill: parent; anchors.margins: 16; spacing: 12
-                                            // Drag Handle
-                                            Item {
-                                                width: 30; height: parent.height; anchors.verticalCenter: parent.verticalCenter
-                                                Text { anchors.centerIn: parent; text: "\u2630"; color: dragArea.pressed ? "#ffffff" : "#666666"; font.pixelSize: 24; font.bold: true }
-                                                MouseArea {
-                                                    id: dragArea; anchors.fill: parent; cursorShape: Qt.OpenHandCursor
-                                                    drag.target: visualCard; drag.axis: Drag.YAxis; drag.smoothed: true
-                                                    property int pendingIndex: -1
-                                                    Timer { id: reorderTimer; interval: 150; repeat: false; onTriggered: { if (dragArea.pendingIndex !== -1 && dragArea.pendingIndex !== index) { catalogListModel.move(index, dragArea.pendingIndex, 1); dragArea.pendingIndex = -1 } } }
-                                                    onPressed: (mouse) => { var pos=visualCard.mapToItem(root,0,0); visualCard.width=delegateWrapper.width; visualCard.height=delegateWrapper.height; visualCard.parent=root; visualCard.x=pos.x; visualCard.y=pos.y; visualCard.z=1000; catalogListView.interactive=false }
-                                                    onReleased: (mouse) => { visualCard.parent=delegateWrapper; visualCard.x=0; visualCard.y=0; visualCard.z=1; visualCard.anchors.fill=delegateWrapper; catalogListView.interactive=true; reorderTimer.stop(); dragArea.pendingIndex=-1 }
-                                                    onPositionChanged: (mouse) => { var rootCenter=Qt.point(visualCard.x+visualCard.width/2, visualCard.y+visualCard.height/2); var contentPos=catalogListView.contentItem.mapFromItem(root, rootCenter.x, rootCenter.y); var indexUnderMouse=catalogListView.indexAt(contentPos.x, contentPos.y); if(indexUnderMouse!==-1 && indexUnderMouse!==index){ if(dragArea.pendingIndex!==indexUnderMouse){ dragArea.pendingIndex=indexUnderMouse; reorderTimer.restart() } }else{ reorderTimer.stop(); dragArea.pendingIndex=-1 } }
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: "#252525"
+                                            radius: 8
+                                            border.width: 1
+                                            border.color: "#2d2d2d"
+                                            
+                                            Row {
+                                                anchors.fill: parent
+                                                anchors.margins: 16
+                                                spacing: 12
+                                                
+                                                Column {
+                                                    width: parent.width - heroToggle.width - enableSwitch.width - (parent.spacing * 2)
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    spacing: 4
+                                                    
+                                                    Text { width: parent.width; text: model.catalogName || "Unknown"; font.pixelSize: 16; font.bold: true; color: "#ffffff"; elide: Text.ElideRight }
+                                                    Text { width: parent.width; text: model.addonName + " • " + (model.catalogType||""); font.pixelSize: 12; color: "#aaaaaa"; elide: Text.ElideRight }
+                                                }
+                                                
+                                                Button {
+                                                    id: heroToggle
+                                                    width: 80
+                                                    height: 36
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    text: model.isHeroSource ? "Hero ✓" : "Hero"
+                                                    background: Rectangle { color: model.isHeroSource ? "#ffffff" : "#2d2d2d"; radius: 4; border.width: 1; border.color: model.isHeroSource ? "#ffffff" : "#3d3d3d" }
+                                                    contentItem: Text { text: parent.text; color: model.isHeroSource ? "#000000" : "#ffffff"; font.bold: true; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                                    onClicked: { if(model.isHeroSource) catalogPrefsService.unsetHeroCatalog(model.addonId, model.catalogType, model.catalogId||""); else catalogPrefsService.setHeroCatalog(model.addonId, model.catalogType, model.catalogId||"") }
+                                                }
+                                                
+                                                Switch { 
+                                                    id: enableSwitch
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    checked: model.enabled || false
+                                                    onToggled: { catalogPrefsService.toggleCatalogEnabled(model.addonId, model.catalogType, model.catalogId||"", checked) }
                                                 }
                                             }
-                                            // Content
-                                            Column {
-                                                width: parent.width - 30 - enableSwitch.width - 40 - 30; anchors.verticalCenter: parent.verticalCenter
-                                                Text { width: parent.width; text: model.catalogName || "Unknown"; font.pixelSize: 16; font.bold: true; color: "#ffffff"; elide: Text.ElideRight }
-                                                Text { width: parent.width; text: model.addonName + " \u2022 " + (model.catalogType||""); font.pixelSize: 12; color: "#aaaaaa"; elide: Text.ElideRight }
-                                                Text { width: parent.width; text: "ID: "+model.catalogId; font.pixelSize: 11; color: "#666666"; elide: Text.ElideRight; visible: model.catalogId }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Search Catalogs Column
+                            Column {
+                                width: (parent.width - parent.spacing) / 2
+                                spacing: 10
+                                
+                                Text { 
+                                    text: "SEARCH PROVIDERS"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    font.letterSpacing: 0.5
+                                    color: "#aaaaaa"
+                                    visible: searchCatalogsModel.count > 0
+                                }
+                                
+                                ListView {
+                                    width: parent.width
+                                    height: contentItem.childrenRect.height
+                                    model: searchCatalogsModel
+                                    clip: true
+                                    spacing: 12
+                                    
+                                    delegate: Item {
+                                        width: ListView.view.width
+                                        height: 70
+                                        
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: "#252525"
+                                            radius: 8
+                                            border.width: 1
+                                            border.color: "#2d2d2d"
+                                            
+                                            Row {
+                                                anchors.fill: parent
+                                                anchors.margins: 16
+                                                spacing: 12
+                                                
+                                                Column {
+                                                    width: parent.width - enableSwitch.width - parent.spacing
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    spacing: 4
+                                                    
+                                                    Text { width: parent.width; text: model.catalogName || "Unknown"; font.pixelSize: 16; font.bold: true; color: "#ffffff"; elide: Text.ElideRight }
+                                                    Text { width: parent.width; text: model.addonName + " • " + (model.catalogType||""); font.pixelSize: 12; color: "#aaaaaa"; elide: Text.ElideRight }
+                                                }
+                                                
+                                                Switch { 
+                                                    id: enableSwitch
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    checked: model.enabled || false
+                                                    onToggled: { catalogPrefsService.toggleCatalogEnabled(model.addonId, model.catalogType, model.catalogId||"", checked) }
+                                                }
                                             }
-                                            Button {
-                                                id: heroToggle; width: 80; height: 36; anchors.verticalCenter: parent.verticalCenter; text: model.isHeroSource ? "Hero \u2713" : "Hero"
-                                                background: Rectangle { color: model.isHeroSource ? "#ffffff" : "#2d2d2d"; radius: 4; border.width: 1; border.color: model.isHeroSource ? "#ffffff" : "#3d3d3d" }
-                                                contentItem: Text { text: parent.text; color: model.isHeroSource ? "#000000" : "#ffffff"; font.bold: true; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                                onClicked: { if(model.isHeroSource) catalogPrefsService.unsetHeroCatalog(model.addonId, model.catalogType, model.catalogId||""); else catalogPrefsService.setHeroCatalog(model.addonId, model.catalogType, model.catalogId||"") }
-                                            }
-                                            Switch { id: enableSwitch; anchors.verticalCenter: parent.verticalCenter; checked: model.enabled || false; onToggled: { catalogPrefsService.toggleCatalogEnabled(model.addonId, model.catalogType, model.catalogId||"", checked) } }
                                         }
                                     }
                                 }
                             }
                         }
-                        // Empty State
-                        Rectangle { width: parent.width; height: 200; color: "transparent"; visible: catalogListModel.count===0; Column { anchors.centerIn: parent; spacing: 12; Text { anchors.horizontalCenter: parent.horizontalCenter; text: "No catalogs"; font.pixelSize: 18; font.bold: true; color: "#ffffff" } } }
+                        
+                        // Empty State (if both are empty)
+                        Rectangle { 
+                            width: parent.width
+                            height: 200
+                            color: "transparent"
+                            visible: normalCatalogsModel.count === 0 && searchCatalogsModel.count === 0
+                            Column { 
+                                anchors.centerIn: parent
+                                spacing: 12
+                                Text { 
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: "No catalogs available"
+                                    font.pixelSize: 18
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+                                Text { 
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: "Install addons to see available content catalogs."
+                                    font.pixelSize: 14
+                                    color: "#aaaaaa"
+                                }
+                            } 
+                        }
                     }
                 }
             }
@@ -759,9 +869,53 @@ Item {
     
     // Models / Logic
     ListModel { id: addonListModel }
-    ListModel { id: catalogListModel }
-    function refreshAddonList() { addonListModel.clear(); let addons = addonRepo.getAllAddons(); for(let i=0; i<addons.length; i++) addonListModel.append({id: addons[i].id, name: addons[i].name, version: addons[i].version, description: addons[i].description || "", enabled: addons[i].enabled}); addonStatusText.text="Total: "+addonListModel.count }
-    function refreshCatalogList() { catalogListModel.clear(); let catalogs = catalogPrefsService.getAvailableCatalogs(); for(let i=0; i<catalogs.length; i++) catalogListModel.append({addonId: catalogs[i].addonId, addonName: catalogs[i].addonName, catalogType: catalogs[i].catalogType, catalogId: catalogs[i].catalogId, catalogName: catalogs[i].catalogName, enabled: catalogs[i].enabled, isHeroSource: catalogs[i].isHeroSource}); catalogStatusText.text="Total: "+catalogListModel.count }
+    ListModel { id: normalCatalogsModel }
+    ListModel { id: searchCatalogsModel }
+    
+    function refreshAddonList() { 
+        addonListModel.clear(); 
+        let addons = addonRepo.getAllAddons(); 
+        for(let i=0; i<addons.length; i++) {
+            addonListModel.append({
+                id: addons[i].id, 
+                name: addons[i].name, 
+                version: addons[i].version, 
+                description: addons[i].description || "", 
+                enabled: addons[i].enabled
+            });
+        }
+        addonStatusText.text = "Total: " + addonListModel.count 
+    }
+    
+    function refreshCatalogList() { 
+        normalCatalogsModel.clear(); 
+        searchCatalogsModel.clear();
+        let catalogs = catalogPrefsService.getAvailableCatalogs(); 
+        let normalCount = 0;
+        let searchCount = 0;
+        
+        for(let i=0; i<catalogs.length; i++) {
+            const catalog = {
+                addonId: catalogs[i].addonId, 
+                addonName: catalogs[i].addonName, 
+                catalogType: catalogs[i].catalogType, 
+                catalogId: catalogs[i].catalogId, 
+                catalogName: catalogs[i].catalogName, 
+                enabled: catalogs[i].enabled, 
+                isHeroSource: catalogs[i].isHeroSource,
+                isSearch: (catalogs[i].catalogId || "").includes("search") // Simple check for search catalogs
+            };
+            
+            if (catalog.isSearch) {
+                searchCatalogsModel.append(catalog);
+                searchCount++;
+            } else {
+                normalCatalogsModel.append(catalog);
+                normalCount++;
+            }
+        }
+        catalogStatusText.text = "Display Catalogs: " + normalCount + " / Search Providers: " + searchCount;
+    }
     
     // Delete Dialog
     MessageDialog { id: deleteConfirmDialog; property string addonName; property string addonId; title: "Remove Addon"; text: "Remove \""+addonName+"\"?"; buttons: MessageDialog.Ok|MessageDialog.Cancel; onAccepted: if(addonId) addonRepo.removeAddon(addonId) }
