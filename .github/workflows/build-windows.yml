@@ -275,6 +275,70 @@ jobs:
            exit 1
         }
 
+    - name: Copy Image Format Dependency DLLs
+      shell: powershell
+      run: |
+        $buildDir = "build\${{ inputs.build_type }}"
+        $windeployqt = Get-Command windeployqt
+        $binDir = Split-Path -Parent $windeployqt.Path
+        $qtRootDir = Split-Path -Parent $binDir
+        $qtBinDir = $binDir
+        
+        Write-Host "Qt bin directory: $qtBinDir"
+        
+        # List of image format dependency DLLs that may be needed
+        # These are third-party libraries that image format plugins depend on
+        $imageFormatDlls = @(
+            "libjpeg-8.dll",
+            "libpng16-16.dll",
+            "libtiff-6.dll",
+            "libwebp-7.dll",
+            "libwebpdemux-2.dll",
+            "libwebpmux-3.dll",
+            "libdeflate.dll",
+            "libjbig-0.dll",
+            "libLerc.dll",
+            "liblzma-5.dll",
+            "libsharpyuv-0.dll",
+            "libjasper.dll"
+        )
+        
+        $copiedCount = 0
+        $missingDlls = @()
+        
+        foreach ($dll in $imageFormatDlls) {
+            $srcPath = Join-Path $qtBinDir $dll
+            if (Test-Path $srcPath) {
+                Copy-Item -Path $srcPath -Destination $buildDir -Force
+                Write-Host "Copied: $dll"
+                $copiedCount++
+            } else {
+                $missingDlls += $dll
+            }
+        }
+        
+        Write-Host "Successfully copied $copiedCount image format dependency DLL(s)."
+        
+        if ($missingDlls.Count -gt 0) {
+            Write-Host "Note: The following DLLs were not found (may not be needed for your image formats):"
+            foreach ($dll in $missingDlls) {
+                Write-Host "  - $dll"
+            }
+        }
+        
+        # Also try to copy any lib*.dll files that might be image format dependencies
+        # This is a catch-all for any other image format dependencies
+        $libDlls = Get-ChildItem -Path $qtBinDir -Filter "lib*.dll" -ErrorAction SilentlyContinue
+        if ($libDlls) {
+            foreach ($dll in $libDlls) {
+                $destPath = Join-Path $buildDir $dll.Name
+                if (-not (Test-Path $destPath)) {
+                    Copy-Item -Path $dll.FullName -Destination $buildDir -Force
+                    Write-Host "Copied additional dependency: $($dll.Name)"
+                }
+            }
+        }
+
     - name: Setup OpenSSL
       shell: powershell
       run: |
