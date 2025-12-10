@@ -38,20 +38,19 @@ QUrl AddonClient::buildUrl(const QString& path)
     }
     
     // Join paths properly: if base URL has a path, append the new path
-    // QUrl.resolved() treats paths starting with '/' as absolute, which replaces the base path
-    // Instead, we manually join paths to append
     QString basePath = baseUrl.path();
     
-    // Remove trailing slash from base path if present (we'll add it back)
+    // Remove trailing slash from base path if present
     if (basePath.endsWith('/') && basePath != "/") {
         basePath.chop(1);
     }
     
     // Join paths: basePath + fullPath
+    // QUrl::setPath() expects decoded paths and will encode them automatically
     QString joinedPath = basePath + fullPath;
     
-    // Set the joined path
-    baseUrl.setPath(joinedPath);
+    // Set the joined path - QUrl will handle encoding automatically
+    baseUrl.setPath(joinedPath, QUrl::TolerantMode);
     
     return baseUrl;
 }
@@ -119,11 +118,12 @@ void AddonClient::fetchManifest()
 
 void AddonClient::getCatalog(const QString& type, const QString& id)
 {
+    // Don't manually encode - QUrl will encode path components automatically
     QString path;
     if (id.isEmpty()) {
         path = QString("/catalog/%1.json").arg(type);
     } else {
-        path = QString("/catalog/%1/%2.json").arg(type, QUrl::toPercentEncoding(id));
+        path = QString("/catalog/%1/%2.json").arg(type, id);
     }
     
     QUrl url = buildUrl(path);
@@ -161,7 +161,9 @@ void AddonClient::getCatalog(const QString& type, const QString& id)
 
 void AddonClient::getMeta(const QString& type, const QString& id)
 {
-    QString path = QString("/meta/%1/%2.json").arg(type, QUrl::toPercentEncoding(id));
+    // Don't manually encode - QUrl will encode path components automatically
+    // Manual encoding causes double-encoding (e.g., tmdb:123 -> tmdb%253A123)
+    QString path = QString("/meta/%1/%2.json").arg(type, id);
     QUrl url = buildUrl(path);
     
     QNetworkRequest request(url);
@@ -194,7 +196,8 @@ void AddonClient::getMeta(const QString& type, const QString& id)
 
 void AddonClient::getStreams(const QString& type, const QString& id)
 {
-    QString path = QString("/stream/%1/%2.json").arg(type, QUrl::toPercentEncoding(id));
+    // Don't manually encode - QUrl will encode path components automatically
+    QString path = QString("/stream/%1/%2.json").arg(type, id);
     QUrl url = buildUrl(path);
     
     qDebug() << "AddonClient: Requesting streams:" << url.toString();
@@ -240,8 +243,8 @@ void AddonClient::search(const QString& type, const QString& catalogId, const QS
 {
     // Correct search endpoint format: /catalog/{type}/{id}/search={query}.json
     // The search parameter is part of the path, not a query parameter
-    QString encodedQuery = QUrl::toPercentEncoding(query);
-    QString path = QString("/catalog/%1/%2/search=%3.json").arg(type, catalogId, encodedQuery);
+    // Don't manually encode - QUrl will encode path components automatically
+    QString path = QString("/catalog/%1/%2/search=%3.json").arg(type, catalogId, query);
     QUrl url = buildUrl(path);
     
     QNetworkRequest request(url);
