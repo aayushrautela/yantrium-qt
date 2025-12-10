@@ -239,7 +239,7 @@ jobs:
           exit 1
         }
 
-        windeployqt.exe --qmldir resources/qml --network --compiler-runtime --imageformats $exePath
+        windeployqt.exe --qmldir resources/qml --network --compiler-runtime $exePath
 
         # Copy TLS plugins
         $windeployqt = Get-Command windeployqt
@@ -253,6 +253,25 @@ jobs:
            Copy-Item -Path "$qtTlsSrc\*" -Destination $destTlsDir -Force -Recurse
         } else {
            Write-Host "ERROR: Could not find TLS plugins at $qtTlsSrc"
+           exit 1
+        }
+
+    - name: Copy Image Format Plugins
+      shell: powershell
+      run: |
+        $buildDir = "build\${{ inputs.build_type }}"
+        $windeployqt = Get-Command windeployqt
+        $binDir = Split-Path -Parent $windeployqt.Path
+        $qtRootDir = Split-Path -Parent $binDir
+        $qtImageFormatsSrc = Join-Path $qtRootDir "plugins\imageformats"
+        $destImageFormatsDir = Join-Path $buildDir "imageformats"
+
+        if (Test-Path $qtImageFormatsSrc) {
+           New-Item -ItemType Directory -Path $destImageFormatsDir -Force | Out-Null
+           Copy-Item -Path "$qtImageFormatsSrc\*" -Destination $destImageFormatsDir -Force -Recurse
+           Write-Host "Successfully copied image format plugins."
+        } else {
+           Write-Host "ERROR: Could not find image format plugins at $qtImageFormatsSrc"
            exit 1
         }
 
