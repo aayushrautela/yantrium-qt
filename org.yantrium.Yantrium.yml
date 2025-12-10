@@ -129,3 +129,5 @@ modules:
     sources:
       - type: dir
         path: .
+      - type: file
+        path: resources/assets/icons/app_logo.svg
