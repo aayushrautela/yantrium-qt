@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <algorithm>
 
 LibraryService::LibraryService(
     std::shared_ptr<AddonRepository> addonRepository,
@@ -268,7 +269,22 @@ void LibraryService::searchCatalogs(const QString& query)
     
     m_pendingSearchRequests = 0;
     
-    // Get all enabled addons
+    // Structure to hold search catalog info with ordering
+    struct SearchCatalogInfo {
+        AddonConfig addon;
+        CatalogDefinition catalog;
+        QString baseUrl;
+        int order;
+        QString catalogId;
+        
+        bool operator<(const SearchCatalogInfo& other) const {
+            return order < other.order;
+        }
+    };
+    
+    QList<SearchCatalogInfo> searchCatalogs;
+    
+    // Get all enabled addons and collect searchable catalogs
     QList<AddonConfig> addons = m_addonRepository->getEnabledAddons();
 
     for (const AddonConfig& addon : addons) {
@@ -292,28 +308,55 @@ void LibraryService::searchCatalogs(const QString& query)
             if (!isSearchable) {
                 continue;
             }
-
-            m_pendingSearchRequests++;
             
-            // Create a new AddonClient for each search request
-            AddonClient* client = new AddonClient(baseUrl, this);
-            m_activeClients.append(client);
+            // Get the order from preferences (default to 0)
+            QString catalogId = catalog.id().isEmpty() ? QString() : catalog.id();
+            auto preference = m_catalogPreferencesDao->getPreference(addon.id, catalog.type(), catalogId);
+            int order = preference ? preference->order : 0;
             
-            // Store search info on client
-            client->setProperty("isSearchRequest", true);
-            client->setProperty("addonId", addon.id);
-            client->setProperty("baseUrl", baseUrl);
-            client->setProperty("searchType", catalog.type());
-            client->setProperty("searchCatalogId", catalog.id());
-            client->setProperty("searchQuery", query);
-            
-            // Connect signals
-            connect(client, &AddonClient::searchResultsFetched, this, &LibraryService::onSearchResultsFetched);
-            connect(client, &AddonClient::error, this, &LibraryService::onSearchClientError);
-            
-            // Perform search
-            client->search(catalog.type(), catalog.id(), query);
+            SearchCatalogInfo info;
+            info.addon = addon;
+            info.catalog = catalog;
+            info.baseUrl = baseUrl;
+            info.order = order;
+            info.catalogId = catalogId;
+            searchCatalogs.append(info);
         }
+    }
+    
+    // Sort by order
+    std::sort(searchCatalogs.begin(), searchCatalogs.end());
+    
+    // Now execute searches in the sorted order
+    for (const SearchCatalogInfo& info : searchCatalogs) {
+        // Check if this catalog is enabled (default to enabled)
+        auto preference = m_catalogPreferencesDao->getPreference(info.addon.id, info.catalog.type(), info.catalogId);
+        bool enabled = preference ? preference->enabled : true;
+        
+        if (!enabled) {
+            continue;
+        }
+        
+        m_pendingSearchRequests++;
+        
+        // Create a new AddonClient for each search request
+        AddonClient* client = new AddonClient(info.baseUrl, this);
+        m_activeClients.append(client);
+        
+        // Store search info on client
+        client->setProperty("isSearchRequest", true);
+        client->setProperty("addonId", info.addon.id);
+        client->setProperty("baseUrl", info.baseUrl);
+        client->setProperty("searchType", info.catalog.type());
+        client->setProperty("searchCatalogId", info.catalog.id());
+        client->setProperty("searchQuery", query);
+        
+        // Connect signals
+        connect(client, &AddonClient::searchResultsFetched, this, &LibraryService::onSearchResultsFetched);
+        connect(client, &AddonClient::error, this, &LibraryService::onSearchClientError);
+        
+        // Perform search
+        client->search(info.catalog.type(), info.catalog.id(), query);
     }
     
     // If no requests were made, emit empty results

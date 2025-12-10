@@ -753,17 +753,18 @@ Item {
                                         id: delegateWrapper
                                         width: ListView.view.width
                                         height: 70
-                                        z: dragArea.pressed ? 1 : 0
+                                        z: dragArea.pressed ? 100 : 1
                                         
                                         Rectangle {
                                             id: visualCard
-                                            anchors.fill: parent
-                                            color: dragArea.pressed ? "#333333" : "#252525"
+                                            width: parent.width
+                                            height: parent.height
+                                            color: dragArea.pressed ? "#252525" : "#252525"
                                             radius: 8
                                             border.width: 1
-                                            border.color: dragArea.pressed ? "#555555" : "#2d2d2d"
+                                            border.color: dragArea.pressed ? "#4d4d4d" : "#2d2d2d"
                                             scale: dragArea.pressed ? 1.02 : 1.0
-                                            
+                                            anchors.fill: dragArea.pressed ? undefined : parent
                                             Behavior on scale { NumberAnimation { duration: 150 } }
                                             Behavior on color { ColorAnimation { duration: 150 } }
                                             
@@ -776,6 +777,7 @@ Item {
                                                 Item {
                                                     width: 30
                                                     height: parent.height
+                                                    anchors.verticalCenter: parent.verticalCenter
                                                     
                                                     Text {
                                                         anchors.centerIn: parent
@@ -789,21 +791,65 @@ Item {
                                                         id: dragArea
                                                         anchors.fill: parent
                                                         cursorShape: Qt.OpenHandCursor
-                                                        drag.target: delegateWrapper
+                                                        drag.target: visualCard
                                                         drag.axis: Drag.YAxis
                                                         drag.smoothed: true
+                                                        property int pendingIndex: -1
                                                         
-                                                        onPressed: {
-                                                            delegateWrapper.z = 100
+                                                        Timer {
+                                                            id: reorderTimer
+                                                            interval: 150
+                                                            repeat: false
+                                                            onTriggered: {
+                                                                if (dragArea.pendingIndex !== -1 && dragArea.pendingIndex !== index) {
+                                                                    normalCatalogsModel.move(index, dragArea.pendingIndex, 1)
+                                                                    dragArea.pendingIndex = -1
+                                                                }
+                                                            }
                                                         }
                                                         
-                                                        onReleased: {
-                                                            delegateWrapper.z = 0
+                                                        onPressed: (mouse) => {
+                                                            var pos = visualCard.mapToItem(root, 0, 0)
+                                                            visualCard.width = delegateWrapper.width
+                                                            visualCard.height = delegateWrapper.height
+                                                            visualCard.parent = root
+                                                            visualCard.x = pos.x
+                                                            visualCard.y = pos.y
+                                                            visualCard.z = 1000
+                                                            normalCatalogsListView.interactive = false
+                                                        }
+                                                        
+                                                        onReleased: (mouse) => {
+                                                            visualCard.parent = delegateWrapper
+                                                            visualCard.x = 0
+                                                            visualCard.y = 0
+                                                            visualCard.z = 1
+                                                            visualCard.anchors.fill = delegateWrapper
+                                                            normalCatalogsListView.interactive = true
+                                                            reorderTimer.stop()
+                                                            dragArea.pendingIndex = -1
+                                                            
+                                                            // Save the order
                                                             let order = []
                                                             for (let i = 0; i < normalCatalogsModel.count; i++) {
                                                                 order.push(normalCatalogsModel.get(i))
                                                             }
                                                             catalogPrefsService.updateCatalogOrder(order)
+                                                        }
+                                                        
+                                                        onPositionChanged: (mouse) => {
+                                                            var rootCenter = Qt.point(visualCard.x + visualCard.width / 2, visualCard.y + visualCard.height / 2)
+                                                            var contentPos = normalCatalogsListView.contentItem.mapFromItem(root, rootCenter.x, rootCenter.y)
+                                                            var indexUnderMouse = normalCatalogsListView.indexAt(contentPos.x, contentPos.y)
+                                                            if (indexUnderMouse !== -1 && indexUnderMouse !== index) {
+                                                                if (dragArea.pendingIndex !== indexUnderMouse) {
+                                                                    dragArea.pendingIndex = indexUnderMouse
+                                                                    reorderTimer.restart()
+                                                                }
+                                                            } else {
+                                                                reorderTimer.stop()
+                                                                dragArea.pendingIndex = -1
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -836,22 +882,6 @@ Item {
                                                 }
                                             }
                                         }
-                                        
-                                        Drag.active: dragArea.drag.active
-                                        Drag.source: delegateWrapper
-                                        Drag.hotSpot.x: 35
-                                        Drag.hotSpot.y: 35
-                                        
-                                        DropArea {
-                                            anchors.fill: parent
-                                            onEntered: (drag) => {
-                                                let fromIndex = drag.source.model.index
-                                                let toIndex = index
-                                                if (fromIndex !== toIndex) {
-                                                    normalCatalogsModel.move(fromIndex, toIndex, 1)
-                                                }
-                                            }
-                                        }
                                     }
                                 }
                             }
@@ -871,30 +901,127 @@ Item {
                                 }
                                 
                                 ListView {
+                                    id: searchCatalogsListView
                                     width: parent.width
                                     height: contentItem.childrenRect.height
                                     model: searchCatalogsModel
                                     clip: true
                                     spacing: 12
+                                    move: Transition {
+                                        NumberAnimation {
+                                            properties: "x,y"
+                                            duration: 300
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
                                     
                                     delegate: Item {
+                                        id: delegateWrapper
                                         width: ListView.view.width
                                         height: 70
+                                        z: dragArea.pressed ? 100 : 1
                                         
                                         Rectangle {
-                                            anchors.fill: parent
-                                            color: "#252525"
+                                            id: visualCard
+                                            width: parent.width
+                                            height: parent.height
+                                            color: dragArea.pressed ? "#252525" : "#252525"
                                             radius: 8
                                             border.width: 1
-                                            border.color: "#2d2d2d"
+                                            border.color: dragArea.pressed ? "#4d4d4d" : "#2d2d2d"
+                                            scale: dragArea.pressed ? 1.02 : 1.0
+                                            anchors.fill: dragArea.pressed ? undefined : parent
+                                            Behavior on scale { NumberAnimation { duration: 150 } }
+                                            Behavior on color { ColorAnimation { duration: 150 } }
                                             
                                             Row {
                                                 anchors.fill: parent
                                                 anchors.margins: 16
                                                 spacing: 12
                                                 
+                                                // Drag Handle
+                                                Item {
+                                                    width: 30
+                                                    height: parent.height
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "\u2630"
+                                                        color: dragArea.pressed ? "#ffffff" : "#666666"
+                                                        font.pixelSize: 24
+                                                        font.bold: true
+                                                    }
+                                                    
+                                                    MouseArea {
+                                                        id: dragArea
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.OpenHandCursor
+                                                        drag.target: visualCard
+                                                        drag.axis: Drag.YAxis
+                                                        drag.smoothed: true
+                                                        property int pendingIndex: -1
+                                                        
+                                                        Timer {
+                                                            id: reorderTimer
+                                                            interval: 150
+                                                            repeat: false
+                                                            onTriggered: {
+                                                                if (dragArea.pendingIndex !== -1 && dragArea.pendingIndex !== index) {
+                                                                    searchCatalogsModel.move(index, dragArea.pendingIndex, 1)
+                                                                    dragArea.pendingIndex = -1
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        onPressed: (mouse) => {
+                                                            var pos = visualCard.mapToItem(root, 0, 0)
+                                                            visualCard.width = delegateWrapper.width
+                                                            visualCard.height = delegateWrapper.height
+                                                            visualCard.parent = root
+                                                            visualCard.x = pos.x
+                                                            visualCard.y = pos.y
+                                                            visualCard.z = 1000
+                                                            searchCatalogsListView.interactive = false
+                                                        }
+                                                        
+                                                        onReleased: (mouse) => {
+                                                            visualCard.parent = delegateWrapper
+                                                            visualCard.x = 0
+                                                            visualCard.y = 0
+                                                            visualCard.z = 1
+                                                            visualCard.anchors.fill = delegateWrapper
+                                                            searchCatalogsListView.interactive = true
+                                                            reorderTimer.stop()
+                                                            dragArea.pendingIndex = -1
+                                                            
+                                                            // Save the order
+                                                            let order = []
+                                                            for (let i = 0; i < searchCatalogsModel.count; i++) {
+                                                                order.push(searchCatalogsModel.get(i))
+                                                            }
+                                                            catalogPrefsService.updateSearchCatalogOrder(order)
+                                                        }
+                                                        
+                                                        onPositionChanged: (mouse) => {
+                                                            var rootCenter = Qt.point(visualCard.x + visualCard.width / 2, visualCard.y + visualCard.height / 2)
+                                                            var contentPos = searchCatalogsListView.contentItem.mapFromItem(root, rootCenter.x, rootCenter.y)
+                                                            var indexUnderMouse = searchCatalogsListView.indexAt(contentPos.x, contentPos.y)
+                                                            if (indexUnderMouse !== -1 && indexUnderMouse !== index) {
+                                                                if (dragArea.pendingIndex !== indexUnderMouse) {
+                                                                    dragArea.pendingIndex = indexUnderMouse
+                                                                    reorderTimer.restart()
+                                                                }
+                                                            } else {
+                                                                reorderTimer.stop()
+                                                                dragArea.pendingIndex = -1
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                
                                                 Column {
-                                                    width: parent.width - enableSwitch.width - parent.spacing
+                                                    width: parent.width - enableSwitch.width - (parent.spacing * 2)
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     spacing: 4
                                                     
@@ -968,28 +1095,32 @@ Item {
     function refreshCatalogList() { 
         normalCatalogsModel.clear(); 
         searchCatalogsModel.clear();
-        let catalogs = catalogPrefsService.getAvailableCatalogs(); 
-        let normalCount = 0;
-        let searchCount = 0;
         
-        for(let i=0; i<catalogs.length; i++) {
-            const catalog = {
-                addonId: catalogs[i].addonId, 
-                addonName: catalogs[i].addonName, 
-                catalogType: catalogs[i].catalogType, 
-                catalogId: catalogs[i].catalogId, 
-                catalogName: catalogs[i].catalogName, 
-                enabled: catalogs[i].enabled, 
-                isHeroSource: catalogs[i].isHeroSource
-            };
-            
-            if ((catalogs[i].catalogId || "").includes("search")) {
-                searchCatalogsModel.append(catalog);
-                searchCount++;
-            } else {
-                normalCatalogsModel.append(catalog);
-                normalCount++;
-            }
+        // Get normal catalogs
+        let normalCatalogs = catalogPrefsService.getAvailableCatalogs(); 
+        for(let i=0; i<normalCatalogs.length; i++) {
+            normalCatalogsModel.append({
+                addonId: normalCatalogs[i].addonId, 
+                addonName: normalCatalogs[i].addonName, 
+                catalogType: normalCatalogs[i].catalogType, 
+                catalogId: normalCatalogs[i].catalogId, 
+                catalogName: normalCatalogs[i].catalogName, 
+                enabled: normalCatalogs[i].enabled, 
+                isHeroSource: normalCatalogs[i].isHeroSource
+            });
+        }
+        
+        // Get search catalogs
+        let searchCatalogs = catalogPrefsService.getSearchCatalogs();
+        for(let i=0; i<searchCatalogs.length; i++) {
+            searchCatalogsModel.append({
+                addonId: searchCatalogs[i].addonId, 
+                addonName: searchCatalogs[i].addonName, 
+                catalogType: searchCatalogs[i].catalogType, 
+                catalogId: searchCatalogs[i].catalogId, 
+                catalogName: searchCatalogs[i].catalogName, 
+                enabled: searchCatalogs[i].enabled
+            });
         }
     }
     

@@ -3,6 +3,7 @@
 #include "logging_service.h"
 #include "core/database/database_manager.h"
 #include "features/addons/models/addon_manifest.h"
+#include <algorithm>
 
 CatalogPreferencesService::CatalogPreferencesService(
     std::unique_ptr<CatalogPreferencesDao> dao,
@@ -196,6 +197,94 @@ bool CatalogPreferencesService::updateCatalogOrder(const QVariantList& catalogOr
         emit catalogsUpdated();
     } else {
         emit error("Failed to update catalog order");
+    }
+    return success;
+}
+
+QVariantList CatalogPreferencesService::getSearchCatalogs()
+{
+    QVariantList catalogs;
+    
+    try {
+        // Get all enabled addons
+        QList<AddonConfig> enabledAddons = m_addonRepository->getEnabledAddons();
+        
+        for (const AddonConfig& addon : enabledAddons) {
+            // Check if addon has catalog resource
+            if (!AddonRepository::hasResource(addon.resources, "catalog")) {
+                continue;
+            }
+            
+            // Get manifest
+            AddonManifest manifest = m_addonRepository->getManifest(addon);
+            
+            // Process each catalog definition
+            for (const CatalogDefinition& catalogDef : manifest.catalogs()) {
+                QString catalogId = catalogDef.id().isEmpty() ? QString() : catalogDef.id();
+                
+                // Check if this catalog supports search by looking at extra properties
+                bool isSearchable = false;
+                for (const QJsonObject& extra : catalogDef.extra()) {
+                    if (extra["name"].toString() == "search") {
+                        isSearchable = true;
+                        break;
+                    }
+                }
+                
+                // Only include searchable catalogs
+                if (!isSearchable) {
+                    continue;
+                }
+                
+                // Get preference (or default to enabled)
+                auto preference = m_dao->getPreference(addon.id, catalogDef.type(), catalogId);
+                bool enabled = preference ? preference->enabled : true;
+                int order = preference ? preference->order : 0;
+                
+                // Build catalog name
+                QString catalogName = catalogDef.name();
+                if (catalogName.isEmpty()) {
+                    catalogName = capitalize(catalogDef.type());
+                    if (!catalogId.isEmpty()) {
+                        catalogName += " - " + catalogId;
+                    }
+                }
+                
+                QVariantMap catalogInfo;
+                catalogInfo["addonId"] = addon.id;
+                catalogInfo["addonName"] = addon.name;
+                catalogInfo["catalogType"] = catalogDef.type();
+                catalogInfo["catalogId"] = catalogId;
+                catalogInfo["catalogName"] = catalogName;
+                catalogInfo["enabled"] = enabled;
+                catalogInfo["order"] = order;
+                catalogInfo["uniqueId"] = QString("%1|%2|%3").arg(addon.id, catalogDef.type(), catalogId);
+                
+                catalogs.append(catalogInfo);
+            }
+        }
+        
+        // Sort by order
+        std::sort(catalogs.begin(), catalogs.end(), [](const QVariant& a, const QVariant& b) {
+            return a.toMap()["order"].toInt() < b.toMap()["order"].toInt();
+        });
+    } catch (const std::exception& e) {
+        LoggingService::logWarning("CatalogPreferencesService", QString("Error getting search catalogs: %1").arg(e.what()));
+        QString errorMsg = QString("Failed to get search catalogs: %1").arg(e.what());
+        LoggingService::report(errorMsg, "DATABASE_ERROR", "CatalogPreferencesService");
+        emit error(errorMsg);
+    }
+    
+    return catalogs;
+}
+
+bool CatalogPreferencesService::updateSearchCatalogOrder(const QVariantList& catalogOrder)
+{
+    bool success = m_dao->updateCatalogOrder(catalogOrder);
+    if (success) {
+        emit catalogsUpdated();
+    } else {
+        emit error("Failed to update search catalog order");
     }
     return success;
 }

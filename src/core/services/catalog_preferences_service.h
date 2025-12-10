@@ -41,6 +41,12 @@ public:
     
     // Update catalog order
     Q_INVOKABLE bool updateCatalogOrder(const QVariantList& catalogOrder);
+    
+    // Get search catalogs (catalogs that support search)
+    Q_INVOKABLE QVariantList getSearchCatalogs();
+    
+    // Update search catalog order
+    Q_INVOKABLE bool updateSearchCatalogOrder(const QVariantList& catalogOrder);
 
 signals:
     void catalogsUpdated();
