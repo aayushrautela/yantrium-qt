@@ -118,11 +118,13 @@ modules:
           echo "Warning: Desktop file not found"
         fi
       - |
-        # Ensure icon is accessible (Flatpak will handle icon installation automatically from the icon field)
+        # Install icon to the correct location
+        mkdir -p /app/share/icons/hicolor/scalable/apps
         if [ -f resources/assets/icons/app_logo.svg ]; then
-          echo "Icon file found at resources/assets/icons/app_logo.svg"
+          cp resources/assets/icons/app_logo.svg /app/share/icons/hicolor/scalable/apps/org.yantrium.Yantrium.svg
+          echo "Icon installed to /app/share/icons/hicolor/scalable/apps/org.yantrium.Yantrium.svg"
         else
-          echo "Warning: Icon file not found"
+          echo "Warning: Icon file not found at resources/assets/icons/app_logo.svg"
         fi
     sources:
       - type: dir
