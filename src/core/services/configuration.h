@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QtQmlIntegration/qqmlintegration.h>
 
 // Compile-time API key definitions
 #ifndef TMDB_API_KEY
@@ -24,9 +25,11 @@
 class Configuration : public QObject
 {
     Q_OBJECT
+    QML_ELEMENT
     Q_PROPERTY(QString tmdbApiKey READ tmdbApiKey CONSTANT)
     Q_PROPERTY(QString tmdbBaseUrl READ tmdbBaseUrl CONSTANT)
     Q_PROPERTY(QString tmdbImageBaseUrl READ tmdbImageBaseUrl CONSTANT)
+    Q_PROPERTY(QString omdbApiKey READ omdbApiKey NOTIFY omdbApiKeyChanged)
 
 public:
     explicit Configuration(QObject* parent = nullptr);
@@ -36,6 +39,8 @@ public:
     QString tmdbBaseUrl() const;
     QString tmdbImageBaseUrl() const;
     QString omdbApiKey() const;
+    Q_INVOKABLE bool saveOmdbApiKey(const QString& apiKey);
+    Q_INVOKABLE void reloadOmdbApiKey();
     
     // Trakt configuration
     QString traktClientId() const;
@@ -49,6 +54,9 @@ public:
     QString traktApiVersion() const;
     int defaultTraktCompletionThreshold() const;
     bool isTraktConfigured() const;
+
+signals:
+    void omdbApiKeyChanged();
 
 private:
     Q_DISABLE_COPY(Configuration)

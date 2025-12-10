@@ -13,6 +13,7 @@ Item {
     property AddonRepository addonRepo: AddonRepository
     property CatalogPreferencesService catalogPrefsService: CatalogPreferencesService
     property LibraryService libraryService: LibraryService
+    property Configuration configuration: Configuration
     
     Rectangle {
         anchors.fill: parent
@@ -208,6 +209,17 @@ Item {
                                                 }
                                             }
                                             
+                                            // Description
+                                            Text {
+                                                width: parent.width
+                                                text: model.description || "No description available"
+                                                font.pixelSize: 13
+                                                color: "#AAAAAA"
+                                                wrapMode: Text.WordWrap
+                                                maximumLineCount: 3
+                                                elide: Text.ElideRight
+                                            }
+                                            
                                             // Controls row (toggle and delete)
                                             Row {
                                                 width: parent.width
@@ -218,43 +230,17 @@ Item {
                                                     height: 1
                                                 }
                                                 
-                                                // Toggle switch
-                                                Rectangle {
+                                                // Toggle switch - Standard Qt Switch
+                                                Switch {
                                                     id: toggleSwitch
-                                                    width: 50
-                                                    height: 28
-                                                    radius: 14
-                                                    color: (model.enabled || false) ? "#E53935" : "#666666"
-                                                    
-                                                    Behavior on color {
-                                                        ColorAnimation { duration: 200 }
-                                                    }
-                                                    
-                                                    Rectangle {
-                                                        width: 24
-                                                        height: 24
-                                                        radius: 12
-                                                        color: "#FFFFFF"
-                                                        anchors.verticalCenter: parent.verticalCenter
-                                                        anchors.left: parent.left
-                                                        anchors.leftMargin: (model.enabled || false) ? 24 : 2
-                                                        
-                                                        Behavior on anchors.leftMargin {
-                                                            NumberAnimation { duration: 200 }
+                                                    checked: model.enabled || false
+                                                    onToggled: {
+                                                        if (checked) {
+                                                            addonRepo.enableAddon(model.id)
+                                                        } else {
+                                                            addonRepo.disableAddon(model.id)
                                                         }
-                                                    }
-                                                    
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            if (model.enabled) {
-                                                                addonRepo.disableAddon(model.id)
-                                                            } else {
-                                                                addonRepo.enableAddon(model.id)
-                                                            }
-                                                            refreshAddonList()
-                                                        }
+                                                        refreshAddonList()
                                                     }
                                                 }
                                                 
@@ -297,79 +283,357 @@ Item {
                 }
                 
                 // ==========================================
-                // TRAKT SECTION
+                // ACCOUNTS AND API SECTION
                 // ==========================================
                 Rectangle {
                     width: parent.width
-                    height: traktSection.height + 40
+                    height: accountsSection.height + 40
                     color: "#1a1a1a"
                     radius: 8
                     
                     Column {
-                        id: traktSection
-                        width: parent.width - 40; anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 20; spacing: 20
-                        property int pendingSyncs: 0
-                        function startResync() { pendingSyncs = 2; traktStatusText.text = "Resyncing..."; traktStatusText.color = "#2196F3"; resyncButton.enabled = false; TraktCoreService.resyncWatchedHistory() }
+                        id: accountsSection
+                        width: parent.width - 40
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.margins: 20
+                        spacing: 20
                         
-                        Row {
-                            width: parent.width; spacing: 10
-                            Column {
-                                width: parent.width - (loginButton.width + (resyncButton.visible ? resyncButton.width + parent.spacing : 0) + parent.spacing); spacing: 4
-                                Text { text: "Trakt Authentication"; font.pixelSize: 24; font.bold: true; color: "#ffffff" }
-                                Text { text: "Sync your watch history."; font.pixelSize: 14; color: "#aaaaaa"; wrapMode: Text.WordWrap; width: parent.width }
+                        // Header
+                        Column {
+                            width: parent.width
+                            spacing: 4
+                            Text { 
+                                text: "Accounts and API"
+                                font.pixelSize: 28
+                                font.bold: true
+                                color: "#ffffff"
                             }
-                            Button {
-                                id: loginButton; width: 200; height: 44
-                                text: TraktAuthService.isAuthenticated ? "Logout" : "Login with Trakt"
-                                enabled: TraktAuthService.isConfigured
-                                background: Rectangle { color: parent.pressed ? "#e0e0e0" : "#ffffff"; radius: 4 }
-                                contentItem: Text { text: parent.text; color: "#000000"; font.bold: true; font.pixelSize: 14; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                onClicked: { if (TraktAuthService.isAuthenticated) { TraktAuthService.logout(); currentUserText.text = "" } else { TraktAuthService.generateDeviceCode() } }
-                            }
-                            
-                            // --- RESYNC BUTTON ---
-                            Button {
-                                id: resyncButton
-                                width: 44
-                                height: 44
-                                visible: TraktAuthService.isAuthenticated
-                                enabled: TraktAuthService.isAuthenticated
-
-                                // 1. Transparent Background
-                                background: Rectangle {
-                                    color: parent.pressed ? "#22ffffff" : "transparent"
-                                    radius: 4
-                                }
-
-                                contentItem: Item {
-                                    Image {
-                                        id: resyncIcon
-                                        source: "qrc:/assets/icons/refresh.svg"
-                                        
-                                        // 2. High Quality Settings
-                                        sourceSize.width: 128
-                                        sourceSize.height: 128
-                                        mipmap: true
-                                        smooth: true
-                                        antialiasing: true
-
-                                        width: 36
-                                        height: 36
-                                        anchors.centerIn: parent
-                                        fillMode: Image.PreserveAspectFit
-                                    }
-                                }
-                                onClicked: { traktSection.startResync() }
+                            Text { 
+                                text: "Manage your account connections and API keys."
+                                font.pixelSize: 14
+                                color: "#aaaaaa"
+                                wrapMode: Text.WordWrap
+                                width: parent.width
                             }
                         }
                         
-                        Connections { target: TraktAuthService; function onDeviceCodeGenerated(u,v,e){ deviceCodeText.text=v+" : "+u; deviceCodeText.visible=true; pollingTimer.start() } function onAuthenticationStatusChanged(a){ if(a){deviceCodeText.visible=false; pollingTimer.stop(); TraktAuthService.getCurrentUser(); loginButton.text="Logout"}else{loginButton.text="Login"; currentUserText.text=""} } function onUserInfoFetched(u,s){ currentUserText.text="Logged in: "+u; currentUserText.color="#4CAF50" } function onError(m){traktStatusText.text="Error: "+m; traktStatusText.color="#F44336"} }
-                        Component.onCompleted: { TraktAuthService.checkAuthentication() }
-                        Text { id: currentUserText; width: parent.width; font.pixelSize: 14; color: "#aaaaaa"; wrapMode: Text.WordWrap }
-                        Text { id: deviceCodeText; width: parent.width; font.pixelSize: 14; color: "#ffffff"; wrapMode: Text.WordWrap; visible: false }
-                        Text { id: traktStatusText; width: parent.width; font.pixelSize: 14; color: "#aaaaaa"; wrapMode: Text.WordWrap }
-                        Connections { target: TraktCoreService; function onWatchedMoviesSynced(a,u){ traktStatusText.text="Movies synced: "+a; traktSection.pendingSyncs=Math.max(0,traktSection.pendingSyncs-1); if(traktSection.pendingSyncs===0) resyncButton.enabled=true } function onWatchedShowsSynced(a,u){ traktStatusText.text="Shows synced: "+a; traktSection.pendingSyncs=Math.max(0,traktSection.pendingSyncs-1); if(traktSection.pendingSyncs===0) resyncButton.enabled=true } function onSyncError(t,m){ traktStatusText.text="Error: "+m; traktSection.pendingSyncs=Math.max(0,traktSection.pendingSyncs-1); if(traktSection.pendingSyncs===0) resyncButton.enabled=true } }
-                        Timer { id: pollingTimer; interval: 5000; repeat: true; running: false; onTriggered: { if(TraktAuthService.isAuthenticated) stop(); else TraktAuthService.checkAuthentication() } }
+                        // Cards in Flow layout
+                        Flow {
+                            width: parent.width
+                            spacing: 20
+                            
+                            // Trakt Card
+                            Rectangle {
+                                id: traktCardRectangle
+                                width: Math.max(350, Math.min(450, (parent.width - 20) / 2))
+                                height: traktCardContent.height + 32
+                                color: "#252525"
+                                radius: 8
+                                border.color: "#2d2d2d"
+                                border.width: 1
+                                property int pendingSyncs: 0
+                                
+                                Column {
+                                    id: traktCardContent
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: 16
+                                    spacing: 12
+                                    
+                                    // Title
+                                    Text {
+                                        width: parent.width
+                                        text: "Trakt"
+                                        font.pixelSize: 20
+                                        font.bold: true
+                                        color: "#FFFFFF"
+                                    }
+                                    
+                                    // Description
+                                    Text {
+                                        width: parent.width
+                                        text: "Sync your watch history with Trakt."
+                                        font.pixelSize: 13
+                                        color: "#AAAAAA"
+                                        wrapMode: Text.WordWrap
+                                    }
+                                    
+                                    // Status
+                                    Text {
+                                        id: currentUserText
+                                        width: parent.width
+                                        font.pixelSize: 12
+                                        color: "#aaaaaa"
+                                        wrapMode: Text.WordWrap
+                                        visible: text !== ""
+                                    }
+                                    
+                                    Text {
+                                        id: deviceCodeText
+                                        width: parent.width
+                                        font.pixelSize: 12
+                                        color: "#ffffff"
+                                        wrapMode: Text.WordWrap
+                                        visible: false
+                                    }
+                                    
+                                    Text {
+                                        id: traktStatusText
+                                        width: parent.width
+                                        font.pixelSize: 12
+                                        color: "#aaaaaa"
+                                        wrapMode: Text.WordWrap
+                                    }
+                                    
+                                    // Buttons row
+                                    Row {
+                                        width: parent.width
+                                        spacing: 10
+                                        
+                                        Button {
+                                            id: loginButton
+                                            width: 150
+                                            height: 36
+                                            text: TraktAuthService.isAuthenticated ? "Logout" : "Login with Trakt"
+                                            enabled: TraktAuthService.isConfigured
+                                            background: Rectangle { 
+                                                color: parent.pressed ? "#e0e0e0" : "#ffffff"
+                                                radius: 4
+                                            }
+                                            contentItem: Text { 
+                                                text: parent.text
+                                                color: "#000000"
+                                                font.bold: true
+                                                font.pixelSize: 13
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            onClicked: { 
+                                                if (TraktAuthService.isAuthenticated) { 
+                                                    TraktAuthService.logout()
+                                                    currentUserText.text = ""
+                                                } else { 
+                                                    TraktAuthService.generateDeviceCode()
+                                                }
+                                            }
+                                        }
+                                        
+                                        Button {
+                                            id: resyncButton
+                                            width: 36
+                                            height: 36
+                                            visible: TraktAuthService.isAuthenticated
+                                            enabled: TraktAuthService.isAuthenticated
+                                            
+                                            background: Rectangle {
+                                                color: parent.pressed ? "#22ffffff" : "transparent"
+                                                radius: 4
+                                            }
+                                            
+                                            contentItem: Item {
+                                                Image {
+                                                    source: "qrc:/assets/icons/refresh.svg"
+                                                    sourceSize.width: 128
+                                                    sourceSize.height: 128
+                                                    mipmap: true
+                                                    smooth: true
+                                                    antialiasing: true
+                                                    width: 24
+                                                    height: 24
+                                                    anchors.centerIn: parent
+                                                    fillMode: Image.PreserveAspectFit
+                                                }
+                                            }
+                                            onClicked: { 
+                                                traktCardRectangle.pendingSyncs = 2
+                                                traktStatusText.text = "Resyncing..."
+                                                traktStatusText.color = "#2196F3"
+                                                resyncButton.enabled = false
+                                                TraktCoreService.resyncWatchedHistory()
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                Connections {
+                                    target: TraktAuthService
+                                    function onDeviceCodeGenerated(u, v, e) {
+                                        deviceCodeText.text = v + " : " + u
+                                        deviceCodeText.visible = true
+                                        pollingTimer.start()
+                                    }
+                                    function onAuthenticationStatusChanged(a) {
+                                        if (a) {
+                                            deviceCodeText.visible = false
+                                            pollingTimer.stop()
+                                            TraktAuthService.getCurrentUser()
+                                            loginButton.text = "Logout"
+                                        } else {
+                                            loginButton.text = "Login"
+                                            currentUserText.text = ""
+                                        }
+                                    }
+                                    function onUserInfoFetched(u, s) {
+                                        currentUserText.text = "Logged in: " + u
+                                        currentUserText.color = "#4CAF50"
+                                    }
+                                    function onError(m) {
+                                        traktStatusText.text = "Error: " + m
+                                        traktStatusText.color = "#F44336"
+                                    }
+                                }
+                                
+                                Connections {
+                                    target: TraktCoreService
+                                    function onWatchedMoviesSynced(a, u) {
+                                        traktStatusText.text = "Movies synced: " + a
+                                        traktCardRectangle.pendingSyncs = Math.max(0, traktCardRectangle.pendingSyncs - 1)
+                                        if (traktCardRectangle.pendingSyncs === 0) resyncButton.enabled = true
+                                    }
+                                    function onWatchedShowsSynced(a, u) {
+                                        traktStatusText.text = "Shows synced: " + a
+                                        traktCardRectangle.pendingSyncs = Math.max(0, traktCardRectangle.pendingSyncs - 1)
+                                        if (traktCardRectangle.pendingSyncs === 0) resyncButton.enabled = true
+                                    }
+                                    function onSyncError(t, m) {
+                                        traktStatusText.text = "Error: " + m
+                                        traktCardRectangle.pendingSyncs = Math.max(0, traktCardRectangle.pendingSyncs - 1)
+                                        if (traktCardRectangle.pendingSyncs === 0) resyncButton.enabled = true
+                                    }
+                                }
+                                
+                                Timer {
+                                    id: pollingTimer
+                                    interval: 5000
+                                    repeat: true
+                                    running: false
+                                    onTriggered: {
+                                        if (TraktAuthService.isAuthenticated) stop()
+                                        else TraktAuthService.checkAuthentication()
+                                    }
+                                }
+                                
+                                Component.onCompleted: {
+                                    TraktAuthService.checkAuthentication()
+                                }
+                            }
+                            
+                            // OMDB API Key Card
+                            Rectangle {
+                                width: Math.max(350, Math.min(450, (parent.width - 20) / 2))
+                                height: omdbCardContent.height + 32
+                                color: "#252525"
+                                radius: 8
+                                border.color: "#2d2d2d"
+                                border.width: 1
+                                
+                                Column {
+                                    id: omdbCardContent
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: 16
+                                    spacing: 12
+                                    
+                                    // Title
+                                    Text {
+                                        width: parent.width
+                                        text: "OMDB API Key"
+                                        font.pixelSize: 20
+                                        font.bold: true
+                                        color: "#FFFFFF"
+                                    }
+                                    
+                                    // Description
+                                    Text {
+                                        width: parent.width
+                                        text: "Add your OMDB API key to enable extra ratings (Rotten Tomatoes, Metacritic, etc.)"
+                                        font.pixelSize: 13
+                                        color: "#AAAAAA"
+                                        wrapMode: Text.WordWrap
+                                    }
+                                    
+                                    // Status
+                                    Text {
+                                        id: omdbStatusText
+                                        width: parent.width
+                                        font.pixelSize: 12
+                                        color: configuration.omdbApiKey ? "#4CAF50" : "#aaaaaa"
+                                        text: configuration.omdbApiKey ? "API key configured" : "No API key set"
+                                        wrapMode: Text.WordWrap
+                                    }
+                                    
+                                    // Input field
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 44
+                                        color: "#2d2d2d"
+                                        border.width: 1
+                                        border.color: omdbKeyField.activeFocus ? "#ffffff" : "#3d3d3d"
+                                        radius: 4
+                                        
+                                        TextField {
+                                            id: omdbKeyField
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            placeholderText: "Enter OMDB API key"
+                                            color: "#ffffff"
+                                            placeholderTextColor: "#666666"
+                                            background: Rectangle { color: "transparent" }
+                                            text: configuration.omdbApiKey || ""
+                                            echoMode: TextInput.Password
+                                        }
+                                    }
+                                    
+                                    // Save button
+                                    Button {
+                                        width: 120
+                                        height: 36
+                                        text: "Save"
+                                        background: Rectangle {
+                                            color: parent.pressed ? "#e0e0e0" : "#ffffff"
+                                            radius: 4
+                                        }
+                                        contentItem: Text {
+                                            text: parent.text
+                                            color: "#000000"
+                                            font.bold: true
+                                            font.pixelSize: 13
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        onClicked: {
+                                            if (omdbKeyField.text.trim() !== "") {
+                                                if (configuration.saveOmdbApiKey(omdbKeyField.text.trim())) {
+                                                    omdbStatusText.text = "API key saved successfully"
+                                                    omdbStatusText.color = "#4CAF50"
+                                                } else {
+                                                    omdbStatusText.text = "Failed to save API key"
+                                                    omdbStatusText.color = "#F44336"
+                                                }
+                                            } else {
+                                                // Clear the key
+                                                if (configuration.saveOmdbApiKey("")) {
+                                                    omdbStatusText.text = "API key cleared"
+                                                    omdbStatusText.color = "#aaaaaa"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                Connections {
+                                    target: configuration
+                                    function onOmdbApiKeyChanged() {
+                                        omdbKeyField.text = configuration.omdbApiKey || ""
+                                        omdbStatusText.text = configuration.omdbApiKey ? "API key configured" : "No API key set"
+                                        omdbStatusText.color = configuration.omdbApiKey ? "#4CAF50" : "#aaaaaa"
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 
@@ -496,7 +760,7 @@ Item {
     // Models / Logic
     ListModel { id: addonListModel }
     ListModel { id: catalogListModel }
-    function refreshAddonList() { addonListModel.clear(); let addons = addonRepo.getAllAddons(); for(let i=0; i<addons.length; i++) addonListModel.append({id: addons[i].id, name: addons[i].name, version: addons[i].version, enabled: addons[i].enabled}); addonStatusText.text="Total: "+addonListModel.count }
+    function refreshAddonList() { addonListModel.clear(); let addons = addonRepo.getAllAddons(); for(let i=0; i<addons.length; i++) addonListModel.append({id: addons[i].id, name: addons[i].name, version: addons[i].version, description: addons[i].description || "", enabled: addons[i].enabled}); addonStatusText.text="Total: "+addonListModel.count }
     function refreshCatalogList() { catalogListModel.clear(); let catalogs = catalogPrefsService.getAvailableCatalogs(); for(let i=0; i<catalogs.length; i++) catalogListModel.append({addonId: catalogs[i].addonId, addonName: catalogs[i].addonName, catalogType: catalogs[i].catalogType, catalogId: catalogs[i].catalogId, catalogName: catalogs[i].catalogName, enabled: catalogs[i].enabled, isHeroSource: catalogs[i].isHeroSource}); catalogStatusText.text="Total: "+catalogListModel.count }
     
     // Delete Dialog

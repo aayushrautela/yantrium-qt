@@ -209,44 +209,17 @@ Item {
                                             height: 1
                                         }
                                         
-                                        // Toggle switch
-                                        Rectangle {
+                                        // Toggle switch - Standard Qt Switch
+                                        Switch {
                                             id: toggleSwitch
-                                            width: 50
-                                            height: 28
-                                            radius: 14
-                                            color: (model.enabled || false) ? "#E53935" : "#666666"
-                                            
-                                            Behavior on color {
-                                                ColorAnimation { duration: 200 }
-                                            }
-                                            
-                                            Rectangle {
-                                                id: toggleHandle
-                                                width: 24
-                                                height: 24
-                                                radius: 12
-                                                color: "#FFFFFF"
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                anchors.left: parent.left
-                                                anchors.leftMargin: (model.enabled || false) ? 24 : 2
-                                                
-                                                Behavior on anchors.leftMargin {
-                                                    NumberAnimation { duration: 200 }
+                                            checked: model.enabled || false
+                                            onToggled: {
+                                                if (checked) {
+                                                    addonColumn.addonRepo.enableAddon(model.id)
+                                                } else {
+                                                    addonColumn.addonRepo.disableAddon(model.id)
                                                 }
-                                            }
-                                            
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (model.enabled) {
-                                                        addonColumn.addonRepo.disableAddon(model.id)
-                                                    } else {
-                                                        addonColumn.addonRepo.enableAddon(model.id)
-                                                    }
-                                                    addonColumn.refreshAddonList()
-                                                }
+                                                addonColumn.refreshAddonList()
                                             }
                                         }
                                         

@@ -118,6 +118,60 @@ QString Configuration::omdbApiKey() const
     return m_omdbApiKey;
 }
 
+bool Configuration::saveOmdbApiKey(const QString& apiKey)
+{
+    QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir dir;
+    if (!dir.exists(dataDir)) {
+        if (!dir.mkpath(dataDir)) {
+            LoggingService::logError("Configuration", QString("Failed to create data directory: %1").arg(dataDir));
+            return false;
+        }
+    }
+    
+    QString configFile = dataDir + "/omdb_config.txt";
+    QFile file(configFile);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        LoggingService::logError("Configuration", QString("Failed to open config file for writing: %1").arg(configFile));
+        return false;
+    }
+    
+    QTextStream out(&file);
+    out << apiKey.trimmed();
+    file.close();
+    
+    // Reload the key
+    reloadOmdbApiKey();
+    
+    // Emit signal for QML
+    emit omdbApiKeyChanged();
+    
+    LoggingService::logDebug("Configuration", QString("OMDB API key saved successfully (length: %1)").arg(m_omdbApiKey.length()));
+    return true;
+}
+
+void Configuration::reloadOmdbApiKey()
+{
+    QString omdbApiKey = QString::fromUtf8(OMDB_API_KEY);
+    if (omdbApiKey.isEmpty()) {
+        omdbApiKey = QString::fromLocal8Bit(qgetenv("OMDB_API_KEY"));
+    }
+    if (omdbApiKey.isEmpty()) {
+        QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QDir dir;
+        if (dir.exists(dataDir)) {
+            QString configFile = dataDir + "/omdb_config.txt";
+            QFile file(configFile);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream in(&file);
+                omdbApiKey = in.readLine().trimmed();
+                file.close();
+            }
+        }
+    }
+    m_omdbApiKey = omdbApiKey;
+}
+
 QString Configuration::traktClientId() const
 {
     return m_traktClientId;
