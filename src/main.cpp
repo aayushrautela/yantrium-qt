@@ -378,14 +378,6 @@ int main(int argc, char *argv[])
         qDebug() << "[MAIN] Configuration registered";
     }
     
-    // Register Configuration for QML
-    auto configService = registry.resolve<Configuration>();
-    if (configService) {
-        qDebug() << "[MAIN] Registering Configuration...";
-        qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "Configuration", configService.get());
-        qDebug() << "[MAIN] Configuration registered";
-        qDebug() << "[MAIN] CatalogPreferencesService registered";
-    }
     if (streamService) {
         qDebug() << "[MAIN] Registering StreamService...";
         qmlRegisterSingletonInstance("Yantrium.Services", 1, 0, "StreamService", streamService.get());
