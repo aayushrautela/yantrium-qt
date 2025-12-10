@@ -128,18 +128,25 @@ jobs:
 
     - name: Cache Flatpak builder cache
       uses: actions/cache@v4
+      id: flatpak-builder-cache
       with:
         path: |
           ~/.cache/flatpak-builder
           .flatpak-builder
-        key: flatpak-builder-cache-${{ runner.os }}-${{ hashFiles('org.yantrium.Yantrium.yml') }}
+        # Cache key based on dependency versions only - this ensures boost/libtorrent
+        # are only rebuilt when their versions change, not on every app source change.
+        # The manifest hash is intentionally excluded so dependency builds persist.
+        key: flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-v2.0.10-kde-6.10-v1
         restore-keys: |
+          flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-v2.0.10-kde-6.10-
           flatpak-builder-cache-${{ runner.os }}-
 
     - name: Build Flatpak
       run: |
         # Note: --install-deps-from=flathub is often helpful here, 
         # but since you installed the SDK manually above, this should work as is.
+        # Flatpak-builder will reuse cached modules (boost, libtorrent) from previous builds
+        # thanks to the cache above. Only the yantrium app itself will rebuild if source changed.
         flatpak-builder \
           --repo=repo \
           build-dir \
@@ -155,7 +162,6 @@ jobs:
         name: Yantrium-Flatpak-${{ inputs.build_type }}
         path: |
           yantrium.flatpak
-          org.yantrium.Yantrium.filled.yml
         retention-days: 30
         if-no-files-found: warn
 
