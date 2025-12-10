@@ -168,7 +168,7 @@ jobs:
         
         if (Test-Path $svgPath) {
           Write-Host "Converting $svgPath to $icoPath"
-          magick convert $svgPath -define icon:auto-resize=16,32,48,64,128,256 $icoPath
+          magick $svgPath -define icon:auto-resize=16,32,48,64,128,256 $icoPath
           if (Test-Path $icoPath) {
             Write-Host "Successfully created icon file: $icoPath"
           } else {
