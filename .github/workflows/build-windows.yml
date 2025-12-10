@@ -37,6 +37,11 @@ jobs:
       with:
         cmake-version: '3.31'
     
+    - name: Install 7-Zip
+      shell: powershell
+      run: |
+        choco install 7zip --no-progress -y
+        
     - name: Download MDK SDK
       shell: powershell
       run: |
@@ -47,13 +52,14 @@ jobs:
         
         Write-Host "Attempting to download MDK SDK version $MDK_VERSION..."
         
-        $downloadUrl = "https://github.com/wang-bin/mdk-sdk/releases/download/v$MDK_VERSION/mdk-sdk-windows-x64.zip"
+        # Use VS2022 x64 build (matches our build environment)
+        $downloadUrl = "https://github.com/wang-bin/mdk-sdk/releases/download/v$MDK_VERSION/mdk-sdk-windows-desktop-vs2022-x64.7z"
         Write-Host "Download URL: $downloadUrl"
         
-        $zipFile = "mdk-sdk.zip"
+        $archiveFile = "mdk-sdk.7z"
         
         try {
-            Invoke-WebRequest -Uri $downloadUrl -OutFile $zipFile -UseBasicParsing
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $archiveFile -UseBasicParsing
             Write-Host "Successfully downloaded MDK SDK"
         } catch {
             Write-Host "Error: Failed to download MDK SDK v$MDK_VERSION from GitHub releases"
@@ -62,12 +68,22 @@ jobs:
             exit 1
         }
         
-        Write-Host "Extracting MDK SDK..."
-        Expand-Archive -Path $zipFile -DestinationPath . -Force
+        Write-Host "Extracting MDK SDK (7z archive)..."
+        # Use 7-Zip to extract (choco installs it to Program Files)
+        $7zipPath = "${env:ProgramFiles}\7-Zip\7z.exe"
+        if (-not (Test-Path $7zipPath)) {
+            $7zipPath = "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
+        }
+        if (-not (Test-Path $7zipPath)) {
+            Write-Host "ERROR: 7-Zip not found. Expected at: $7zipPath"
+            exit 1
+        }
         
-        Remove-Item $zipFile -Force
+        & $7zipPath x $archiveFile -y
         
-        # Handle archives that extract with a root directory (e.g., mdk-sdk-windows-x64/)
+        Remove-Item $archiveFile -Force
+        
+        # Handle archives that extract with a root directory (e.g., mdk-sdk-windows-desktop-vs2022-x64/)
         $subdirs = Get-ChildItem -Directory | Where-Object { $_.Name -like "mdk-sdk*" -or $_.Name -like "mdk*" }
         if ($subdirs.Count -eq 1) {
             Write-Host "Archive extracted with root directory, moving contents up..."
