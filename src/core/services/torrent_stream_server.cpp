@@ -11,6 +11,7 @@
 #include <QDir>
 #include <QHostAddress>
 #include <QTcpServer>
+#include <QThread>
 
 #ifdef TORRENT_SUPPORT_ENABLED
 #ifdef HAVE_QHTTPSERVER
@@ -494,10 +495,33 @@ QHttpServerResponse TorrentStreamServer::handleRequest(const QHttpServerRequest&
     QString fileName = QString::fromStdString(files.file_path(ltFileIndex));
     QMimeDatabase mimeDb;
     QMimeType mimeType = mimeDb.mimeTypeForFile(fileName);
+
+    // Prioritize pieces for the requested range
+    handle.set_piece_deadline(ti.map_file(ltFileIndex, start, contentLength).piece, 0);
+
+    // Wait for the data to become available (this is a simplified synchronous wait)
+    // A more robust implementation would be asynchronous.
+    int piece_index = ti.map_file(ltFileIndex, start, contentLength).piece;
+    while (!handle.have_piece(libtorrent::piece_index_t{piece_index})) {
+        // This is a busy-wait loop, not ideal for production.
+        // It's for demonstration purposes.
+        // In a real app, you would use alerts or a more efficient mechanism.
+        QThread::msleep(100);
+    }
     
-    // TODO: Actually read and stream the file data from libtorrent
-    // For now, return placeholder
-    QByteArray body = "Torrent streaming - file data would be here";
+    // Read the data from libtorrent
+    libtorrent::io_buffer buf;
+    libtorrent::error_code ec;
+    int bytes_read = ti.read_piece(piece_index, buf, 0, ec);
+    if (ec || bytes_read <= 0) {
+        return QHttpServerResponse("Error reading torrent data", QHttpServerResponse::StatusCode::InternalServerError);
+    }
+
+    QByteArray body = QByteArray(buf.get(), bytes_read);
+    
+    // Adjust body to match the requested range
+    int offset_in_piece = start - (piece_index * ti.piece_length());
+    body = body.mid(offset_in_piece, contentLength);
     
     #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
     // Newer API: use QHttpHeaders and setHeaders()
