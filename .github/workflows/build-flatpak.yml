@@ -42,7 +42,7 @@ jobs:
         
         DOWNLOAD_SUCCESS=false
         for url in \
-          "https://github.com/wang-bin/mdk-sdk/releases/download/${MDK_VERSION}/mdk-sdk-linux-64.tar.xz"; do
+          "https://github.com/wang-bin/mdk-sdk/releases/download/${MDK_VERSION}/mdk-sdk-linux-x64.tar.xz"; do
           if curl -L -f -o mdk-sdk.tar.xz "$url" 2>/dev/null; then
             echo "Successfully downloaded from: $url"
             DOWNLOAD_SUCCESS=true
