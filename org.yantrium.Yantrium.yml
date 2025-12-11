@@ -123,7 +123,7 @@ modules:
           mkdir -p /app/share/icons/hicolor/scalable/apps
           cp "$ICON_SRC" "/app/share/icons/hicolor/scalable/apps/${APP_ID}.svg"
           echo "Installed scalable icon as ${APP_ID}.svg"
-
+          
           # Generate PNGs for compatibility
           ICON_SIZES="16 32 48 64 128 256"
           for size in $ICON_SIZES; do
