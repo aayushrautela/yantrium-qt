@@ -24,34 +24,9 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y flatpak flatpak-builder
-
-    - name: Cache Flatpak runtimes and SDKs
-      uses: actions/cache@v4
-      id: flatpak-cache
-      with:
-        path: /var/lib/flatpak
-        key: flatpak-runtimes-${{ runner.os }}-kde-6.10-v1
-        restore-keys: |
-          flatpak-runtimes-${{ runner.os }}-kde-6.10-v1-
-          flatpak-runtimes-${{ runner.os }}-
-
-    - name: Install KDE Platform runtime and SDK
-      if: steps.flatpak-cache.outputs.cache-hit != 'true'
-      run: |
-        # Added sudo here to fix permission error
+        # Install KDE Platform runtime and SDK (fast, no need to cache)
         sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
         sudo flatpak install -y flathub org.kde.Platform//6.10 org.kde.Sdk//6.10
-        # Fix permissions for cache - remove lock files and make directory readable
-        sudo rm -f /var/lib/flatpak/repo/.lock || true
-        sudo chmod -R a+rX /var/lib/flatpak || true
-
-    - name: Ensure Flatpak remote is configured
-      if: steps.flatpak-cache.outputs.cache-hit == 'true'
-      run: |
-        sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-        # Fix permissions after cache restore - remove lock files
-        sudo rm -f /var/lib/flatpak/repo/.lock || true
-        sudo chmod -R a+rX /var/lib/flatpak || true
 
     - name: Cache MDK SDK
       uses: actions/cache@v4
@@ -179,14 +154,6 @@ jobs:
           yantrium.flatpak
         retention-days: 30
         if-no-files-found: warn
-
-    - name: Fix permissions before cache save
-      if: always()
-      run: |
-        # Remove lock files and fix permissions so cache can save successfully
-        # This runs before the cache action tries to save at the end of the job
-        sudo rm -f /var/lib/flatpak/repo/.lock || true
-        sudo chmod -R a+rX /var/lib/flatpak || true
 
     - name: Cleanup
       if: always()
