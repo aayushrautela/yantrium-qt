@@ -54,40 +54,22 @@ ApplicationWindow {
     // Connect NavigationService signals
     Connections {
         target: navigationService
-        function onDetailRequested(contentId, type, addonId) {
-            if (contentId && type) {
-                // Store pending data
-                detailLoader.pendingContentId = contentId
-                detailLoader.pendingType = type
-                detailLoader.pendingAddonId = addonId || ""
-                detailLoader.pendingSeason = 0
-                detailLoader.pendingEpisode = 0
-                detailLoader.active = true
-                
-                if (detailLoader.status === Loader.Ready && detailLoader.item) {
-                    detailLoader.item.loadDetails(contentId, type, addonId || "", 0, 0)
-                    detailLoader.pendingContentId = ""
-                    detailLoader.pendingType = ""
-                    detailLoader.pendingAddonId = ""
-                    navigationService.navigateTo(NavigationService.Detail)
-                } else {
-                    // Navigation will happen when loader is ready (handled in onStatusChanged)
-                    navigationService.navigateTo(NavigationService.Detail)
-                }
-            }
-        }
         function onDetailRequested(contentId, type, addonId, season, episode) {
             if (contentId && type) {
+                // Handle both cases - -1 means not applicable (for movies or regular show navigation)
+                var seasonNum = (season !== undefined && season !== null && season >= 0) ? season : 0
+                var episodeNum = (episode !== undefined && episode !== null && episode >= 0) ? episode : 0
+                
                 // Store pending data
                 detailLoader.pendingContentId = contentId
                 detailLoader.pendingType = type
                 detailLoader.pendingAddonId = addonId || ""
-                detailLoader.pendingSeason = season || 0
-                detailLoader.pendingEpisode = episode || 0
+                detailLoader.pendingSeason = seasonNum
+                detailLoader.pendingEpisode = episodeNum
                 detailLoader.active = true
                 
                 if (detailLoader.status === Loader.Ready && detailLoader.item) {
-                    detailLoader.item.loadDetails(contentId, type, addonId || "", season || 0, episode || 0)
+                    detailLoader.item.loadDetails(contentId, type, addonId || "", seasonNum, episodeNum)
                     detailLoader.pendingContentId = ""
                     detailLoader.pendingType = ""
                     detailLoader.pendingAddonId = ""

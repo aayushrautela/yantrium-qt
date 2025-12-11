@@ -18,7 +18,7 @@ void NavigationService::navigateToDetail(const QString& contentId, const QString
     }
     
     LoggingService::logInfo("NavigationService", QString("Navigating to detail - contentId: %1, type: %2, addonId: %3").arg(contentId, type, addonId));
-    emit detailRequested(contentId, type, addonId);
+    emit detailRequested(contentId, type, addonId, -1, -1);
 }
 
 void NavigationService::navigateToDetail(const QString& contentId, const QString& type, const QString& addonId, int season, int episode)

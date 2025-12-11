@@ -105,11 +105,8 @@ public:
 signals:
     /**
      * @brief Emitted when detail screen navigation is requested
-     */
-    void detailRequested(const QString& contentId, const QString& type, const QString& addonId);
-    
-    /**
-     * @brief Emitted when detail screen navigation is requested with episode information
+     * @param season Season number (0 or -1 if not applicable)
+     * @param episode Episode number (0 or -1 if not applicable)
      */
     void detailRequested(const QString& contentId, const QString& type, const QString& addonId, int season, int episode);
 

@@ -393,8 +393,9 @@ Item {
             return
         }
         
-        // Store pending episode info if provided
-        if (season && episode) {
+        // Store pending episode info if provided (-1 means not applicable)
+        if (season !== undefined && season !== null && season > 0 && 
+            episode !== undefined && episode !== null && episode > 0) {
             root.pendingSeason = season
             root.pendingEpisode = episode
         } else {
