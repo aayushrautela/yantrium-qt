@@ -283,17 +283,46 @@ jobs:
         
         Write-Host "Qt Plugins Directory: $qtPluginsDir"
         
-        # Helper function to copy plugin directory
+        # 1. Copy extra dependencies from bin/ (e.g. libwebp.dll, libssl.dll)
+        # We exclude standard Qt6*.dll files as they are handled by windeployqt, but catch everything else
+        Write-Host "Scanning bin directory for extra dependencies..."
+        Get-ChildItem -Path "$qtBinDir\*.dll" -Exclude "Qt6*.dll", "*d.dll" | ForEach-Object {
+            $dest = Join-Path $buildDir $_.Name
+            if (-not (Test-Path $dest)) {
+                Copy-Item -Path $_.FullName -Destination $buildDir -Force
+                Write-Host "Copied dependency: $($_.Name)"
+            }
+        }
+
+        # Helper function to copy plugin directory to BOTH root and plugins/ subdir
         function Copy-PluginDir($pluginName) {
             $src = Join-Path $qtPluginsDir $pluginName
-            $dest = Join-Path $buildDir $pluginName
             
+            # Destination 1: Root (standard windeployqt)
+            $destRoot = Join-Path $buildDir $pluginName
+            
+            # Destination 2: plugins/ subdir (standard Qt)
+            $destPlugins = Join-Path $buildDir "plugins\$pluginName"
+
             if (Test-Path $src) {
                 Write-Host "Manually copying $pluginName..."
-                New-Item -ItemType Directory -Force -Path $dest | Out-Null
-                # Copy only release DLLs (exclude *d.dll)
-                Get-ChildItem -Path "$src\*.dll" -Exclude "*d.dll" | ForEach-Object {
-                    Copy-Item -Path $_.FullName -Destination $dest -Force
+                
+                # List source files for debugging
+                $files = Get-ChildItem -Path "$src\*.dll" -Exclude "*d.dll"
+                if ($files.Count -eq 0) {
+                     Write-Host "WARNING: No release DLLs found in $src (contents below):"
+                     Get-ChildItem -Path $src | Select-Object Name | Write-Host
+                }
+
+                $files | ForEach-Object {
+                    # Copy to root
+                    if (-not (Test-Path $destRoot)) { New-Item -ItemType Directory -Force -Path $destRoot | Out-Null }
+                    Copy-Item -Path $_.FullName -Destination $destRoot -Force
+                    
+                    # Copy to plugins/
+                    if (-not (Test-Path $destPlugins)) { New-Item -ItemType Directory -Force -Path $destPlugins | Out-Null }
+                    Copy-Item -Path $_.FullName -Destination $destPlugins -Force
+                    
                     Write-Host "Copied: $($_.Name)"
                 }
             } else {
@@ -301,7 +330,7 @@ jobs:
             }
         }
         
-        # Explicitly copy critical plugins for images and networking
+        # Explicitly copy critical plugins
         Copy-PluginDir "imageformats"
         Copy-PluginDir "iconengines"
         Copy-PluginDir "tls"
