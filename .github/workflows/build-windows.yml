@@ -27,7 +27,7 @@ jobs:
         arch: 'win64_msvc2019_64'
         cache: 'true'
         set-env: 'true'
-        modules: 'qt5compat qtshadertools'
+        modules: 'qt5compat qtshadertools qtimageformats'
 
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.1
@@ -291,8 +291,11 @@ jobs:
             if (Test-Path $src) {
                 Write-Host "Manually copying $pluginName..."
                 New-Item -ItemType Directory -Force -Path $dest | Out-Null
-                Copy-Item "$src\*.dll" $dest -Force
-                Get-ChildItem $dest | Select-Object Name | Write-Host
+                # Copy only release DLLs (exclude *d.dll)
+                Get-ChildItem -Path "$src\*.dll" -Exclude "*d.dll" | ForEach-Object {
+                    Copy-Item -Path $_.FullName -Destination $dest -Force
+                    Write-Host "Copied: $($_.Name)"
+                }
             } else {
                 Write-Host "Warning: Plugin directory $pluginName not found in Qt installation."
             }
