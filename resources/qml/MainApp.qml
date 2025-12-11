@@ -60,13 +60,39 @@ ApplicationWindow {
                 detailLoader.pendingContentId = contentId
                 detailLoader.pendingType = type
                 detailLoader.pendingAddonId = addonId || ""
+                detailLoader.pendingSeason = 0
+                detailLoader.pendingEpisode = 0
                 detailLoader.active = true
                 
                 if (detailLoader.status === Loader.Ready && detailLoader.item) {
-                    detailLoader.item.loadDetails(contentId, type, addonId || "")
+                    detailLoader.item.loadDetails(contentId, type, addonId || "", 0, 0)
                     detailLoader.pendingContentId = ""
                     detailLoader.pendingType = ""
                     detailLoader.pendingAddonId = ""
+                    navigationService.navigateTo(NavigationService.Detail)
+                } else {
+                    // Navigation will happen when loader is ready (handled in onStatusChanged)
+                    navigationService.navigateTo(NavigationService.Detail)
+                }
+            }
+        }
+        function onDetailRequested(contentId, type, addonId, season, episode) {
+            if (contentId && type) {
+                // Store pending data
+                detailLoader.pendingContentId = contentId
+                detailLoader.pendingType = type
+                detailLoader.pendingAddonId = addonId || ""
+                detailLoader.pendingSeason = season || 0
+                detailLoader.pendingEpisode = episode || 0
+                detailLoader.active = true
+                
+                if (detailLoader.status === Loader.Ready && detailLoader.item) {
+                    detailLoader.item.loadDetails(contentId, type, addonId || "", season || 0, episode || 0)
+                    detailLoader.pendingContentId = ""
+                    detailLoader.pendingType = ""
+                    detailLoader.pendingAddonId = ""
+                    detailLoader.pendingSeason = 0
+                    detailLoader.pendingEpisode = 0
                     navigationService.navigateTo(NavigationService.Detail)
                 } else {
                     // Navigation will happen when loader is ready (handled in onStatusChanged)
@@ -304,6 +330,8 @@ ApplicationWindow {
                     property string pendingContentId: ""
                     property string pendingType: ""
                     property string pendingAddonId: ""
+                    property int pendingSeason: 0
+                    property int pendingEpisode: 0
                     
                     onLoaded: {
                         if (item) {
@@ -337,22 +365,26 @@ ApplicationWindow {
 
                             // Load details if we have pending data (from NavigationService)
                             if (pendingContentId && pendingType) {
-                                item.loadDetails(pendingContentId, pendingType, pendingAddonId)
+                                item.loadDetails(pendingContentId, pendingType, pendingAddonId, pendingSeason, pendingEpisode)
                                 navigationService.navigateTo(NavigationService.Detail)
                                 pendingContentId = ""
                                 pendingType = ""
                                 pendingAddonId = ""
+                                pendingSeason = 0
+                                pendingEpisode = 0
                             }
                         }
                     }
                     
                     onStatusChanged: {
                         if (status === Loader.Ready && item && pendingContentId && pendingType) {
-                            item.loadDetails(pendingContentId, pendingType, pendingAddonId)
+                            item.loadDetails(pendingContentId, pendingType, pendingAddonId, pendingSeason, pendingEpisode)
                             navigationService.navigateTo(NavigationService.Detail)
                             pendingContentId = ""
                             pendingType = ""
                             pendingAddonId = ""
+                            pendingSeason = 0
+                            pendingEpisode = 0
                         }
                     }
                 }

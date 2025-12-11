@@ -50,6 +50,16 @@ public:
      * @param addonId Optional addon ID if content is from a specific addon
      */
     Q_INVOKABLE void navigateToDetail(const QString& contentId, const QString& type, const QString& addonId = "");
+    
+    /**
+     * @brief Navigate to detail screen for a content item with episode information
+     * @param contentId The content identifier (IMDB ID, TMDB ID, etc.) - for episodes, this is the show's ID
+     * @param type Content type ("movie", "tv", "series")
+     * @param addonId Optional addon ID if content is from a specific addon
+     * @param season Season number (for episodes)
+     * @param episode Episode number (for episodes)
+     */
+    Q_INVOKABLE void navigateToDetail(const QString& contentId, const QString& type, const QString& addonId, int season, int episode);
 
     /**
      * @brief Navigate to video player with stream URL and content data
@@ -97,6 +107,11 @@ signals:
      * @brief Emitted when detail screen navigation is requested
      */
     void detailRequested(const QString& contentId, const QString& type, const QString& addonId);
+    
+    /**
+     * @brief Emitted when detail screen navigation is requested with episode information
+     */
+    void detailRequested(const QString& contentId, const QString& type, const QString& addonId, int season, int episode);
 
     /**
      * @brief Emitted when video player navigation is requested

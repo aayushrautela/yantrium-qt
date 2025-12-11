@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Yantrium.Services 1.0
 
 Rectangle {
     id: root
@@ -95,7 +96,22 @@ Rectangle {
                             item.clicked.connect(function() {
                                 // Use ID as-is from catalog (preserves formats like "tmdb:123" for Stremio compatibility)
                                 var contentId = model.id || model.tmdbId || model.imdbId || ""
-                                root.itemClicked(contentId, model.type || "", model.addonId || root.addonId || "")
+                                var contentType = model.type || ""
+                                
+                                // For episodes, navigate to the show with episode info
+                                if (contentType === "episode" && model.season && model.episode) {
+                                    contentType = "tv"  // Navigate to show detail page for episodes
+                                    // Use NavigationService directly to pass episode info
+                                    if (typeof NavigationService !== 'undefined') {
+                                        NavigationService.navigateToDetail(contentId, contentType, model.addonId || root.addonId || "", 
+                                                                          model.season || 0, model.episode || 0)
+                                    } else {
+                                        // Fallback to regular navigation
+                                        root.itemClicked(contentId, contentType, model.addonId || root.addonId || "")
+                                    }
+                                } else {
+                                    root.itemClicked(contentId, contentType, model.addonId || root.addonId || "")
+                                }
                             })
                         } else {
                             item.posterUrl = Qt.binding(function() { return model.posterUrl || model.poster || "" })

@@ -172,7 +172,8 @@ Item {
                 progress: item.progress || item.progressPercent || 0,
                 rating: item.rating || "",
                 id: item.id || "",
-                imdbId: item.imdbId || ""
+                imdbId: item.imdbId || "",
+                tmdbId: item.tmdbId || ""
             })
         }
     }

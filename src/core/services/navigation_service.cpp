@@ -21,6 +21,18 @@ void NavigationService::navigateToDetail(const QString& contentId, const QString
     emit detailRequested(contentId, type, addonId);
 }
 
+void NavigationService::navigateToDetail(const QString& contentId, const QString& type, const QString& addonId, int season, int episode)
+{
+    if (contentId.isEmpty() || type.isEmpty()) {
+        LoggingService::logWarning("NavigationService", "navigateToDetail called with empty contentId or type");
+        return;
+    }
+    
+    LoggingService::logInfo("NavigationService", QString("Navigating to detail with episode - contentId: %1, type: %2, addonId: %3, season: %4, episode: %5")
+        .arg(contentId, type, addonId).arg(season).arg(episode));
+    emit detailRequested(contentId, type, addonId, season, episode);
+}
+
 void NavigationService::navigateToPlayer(const QString& streamUrl, const QVariantMap& contentData)
 {
     if (streamUrl.isEmpty()) {

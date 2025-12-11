@@ -68,15 +68,19 @@ Item {
                     seasons.push(i)
                 }
                 root.availableSeasons = seasons
-                root.selectedSeasonNumber = 1
-                // Load first season episodes - use whatever ID is available (prefer IMDB, then TMDB, then contentId)
+                
+                // If we have a pending episode, load that season; otherwise load season 1
+                var seasonToLoad = root.pendingSeason > 0 ? root.pendingSeason : 1
+                root.selectedSeasonNumber = seasonToLoad
+                
+                // Load episodes for the selected season - use whatever ID is available (prefer IMDB, then TMDB, then contentId)
                 var contentId = details.imdbId || details.id || ""
                 if (!contentId && details.tmdbId) {
                     // Fallback to TMDB ID if no IMDB/contentId available
                     var tmdbId = parseInt(details.tmdbId) || details.tmdbId
-                    libraryService.loadSeasonEpisodes(tmdbId, 1)
+                    libraryService.loadSeasonEpisodes(tmdbId, seasonToLoad)
                 } else if (contentId) {
-                    libraryService.loadSeasonEpisodes(contentId, 1)
+                    libraryService.loadSeasonEpisodes(contentId, seasonToLoad)
                 }
             }
         }
@@ -91,6 +95,96 @@ Item {
             if (seasonNumber === root.selectedSeasonNumber) {
                 root.currentSeasonEpisodes = episodes
                 console.log("[DetailScreen] Episodes loaded for season", seasonNumber, "count:", episodes.length)
+                
+                // Check if we need to navigate to a specific episode (from continue watching)
+                if (root.pendingSeason > 0 && root.pendingEpisode > 0 && 
+                    seasonNumber === root.pendingSeason) {
+                    // Find the episode in the loaded episodes
+                    var targetEpisode = null
+                    for (var i = 0; i < episodes.length; i++) {
+                        if (episodes[i].episodeNumber === root.pendingEpisode) {
+                            targetEpisode = episodes[i]
+                            break
+                        }
+                    }
+                    
+                    if (targetEpisode) {
+                        console.log("[DetailScreen] Navigating to episode S" + root.pendingSeason + "E" + root.pendingEpisode)
+                        // Navigate to the episode (similar to clicking on it)
+                        var showData = root.itemData
+                        
+                        var episodeItemData = {
+                            // Episode info
+                            episodeNumber: targetEpisode.episodeNumber || 0,
+                            episode: targetEpisode.episodeNumber || 0,
+                            episodeTitle: targetEpisode.title || "",
+                            title: targetEpisode.title || "",
+                            description: targetEpisode.description || targetEpisode.overview || "",
+                            airDate: targetEpisode.airDate || "",
+                            metadataLine: targetEpisode.metadataLine || "",
+                            duration: targetEpisode.duration || 0,
+                            thumbnailUrl: targetEpisode.thumbnailUrl || "",
+                            
+                            // Show info (for backdrop and navigation)
+                            showId: showData.id || "",
+                            showImdbId: showData.imdbId || "",
+                            showTitle: showData.title || showData.name || "",
+                            showPosterUrl: showData.posterUrl || "",
+                            showBackdropUrl: showData.backdropUrl || showData.background || "",
+                            showLogoUrl: showData.logoUrl || showData.logo || "",
+                            showTmdbId: showData.tmdbId || "",
+                            showNumberOfSeasons: showData.numberOfSeasons || 1,
+                            
+                            // Season info
+                            season: root.pendingSeason,
+                            seasonNumber: root.pendingSeason,
+                            
+                            // Type and metadata
+                            type: "tv",
+                            addonId: showData.addonId || "",
+                            
+                            // For smart play state
+                            tmdbId: showData.tmdbId || "",
+                            id: showData.id || "",
+                            imdbId: showData.imdbId || ""
+                        }
+                        
+                        // Preserve show data
+                        if (Object.keys(root.showData).length === 0) {
+                            root.showData = showData
+                        }
+                        
+                        // Preserve availableSeasons if not already set
+                        if (root.availableSeasons.length === 0 && episodeItemData.showNumberOfSeasons > 0) {
+                            var seasons = []
+                            for (var j = 1; j <= episodeItemData.showNumberOfSeasons; j++) {
+                                seasons.push(j)
+                            }
+                            root.availableSeasons = seasons
+                        }
+                        
+                        // Set smart play state for episode
+                        episodeItemData.smartPlayState = {
+                            action: "play",
+                            season: root.pendingSeason,
+                            episode: root.pendingEpisode,
+                            buttonText: "Play"
+                        }
+                        
+                        // Set itemData directly for episode mode
+                        root.itemData = episodeItemData
+                        root.isLoading = false
+                        root.smartPlayState = episodeItemData.smartPlayState
+                        root.currentTabIndex = 0
+                        root.isInLibrary = false
+                        root.similarItems = []
+                        castModel.clear()
+                        
+                        // Clear pending episode info
+                        root.pendingSeason = 0
+                        root.pendingEpisode = 0
+                    }
+                }
             }
         }
         function onError(message) {
@@ -288,11 +382,24 @@ Item {
     signal playRequested(string streamUrl, var contentData)
     signal showRequested(string contentId, string type, string addonId)  // For navigating back to show from episode
     
-    function loadDetails(contentId, type, addonId) {
-        console.log("[DetailScreen] loadDetails called - contentId:", contentId, "type:", type, "addonId:", addonId)
+    // Properties for pending episode navigation (from continue watching)
+    property int pendingSeason: 0
+    property int pendingEpisode: 0
+    
+    function loadDetails(contentId, type, addonId, season, episode) {
+        console.log("[DetailScreen] loadDetails called - contentId:", contentId, "type:", type, "addonId:", addonId, "season:", season, "episode:", episode)
         if (!contentId || !type) {
             console.error("[DetailScreen] Missing contentId or type - contentId:", contentId, "type:", type)
             return
+        }
+        
+        // Store pending episode info if provided
+        if (season && episode) {
+            root.pendingSeason = season
+            root.pendingEpisode = episode
+        } else {
+            root.pendingSeason = 0
+            root.pendingEpisode = 0
         }
         
         // Track this request to ignore stale responses
