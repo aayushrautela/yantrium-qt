@@ -15,192 +15,83 @@ on:
 jobs:
   build-flatpak:
     runs-on: ubuntu-latest
+    env:
+      MDK_VERSION: "0.35.0"
+      FLATPAK_BUILDER_CACHE: ".flatpak-builder"
+      MDK_PATH: "vendor/mdk-sdk"
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Flatpak
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y flatpak flatpak-builder
-        # Install KDE Platform runtime and SDK (fast, no need to cache)
-        sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-        sudo flatpak install -y flathub org.kde.Platform//6.10 org.kde.Sdk//6.10
-
-    - name: Cache MDK SDK
-      uses: actions/cache@v4
-      id: mdk-cache
-      with:
-        path: vendor/mdk-sdk
-        key: mdk-sdk-${{ runner.os }}-v0.35.0-v1
-
-    - name: Download MDK SDK
-      if: steps.mdk-cache.outputs.cache-hit != 'true'
-      run: |
-        # Download MDK SDK for Linux amd64
-        MDK_VERSION="0.35.0"
-        mkdir -p vendor/mdk-sdk
-        cd vendor/mdk-sdk
-        
-        echo "Attempting to download MDK SDK version ${MDK_VERSION}..."
-        
-        DOWNLOAD_URL="https://github.com/wang-bin/mdk-sdk/releases/download/v${MDK_VERSION}/mdk-sdk-linux-x64.tar.xz"
-        echo "Download URL: ${DOWNLOAD_URL}"
-        
-        # Use curl with verbose output to see what's happening
-        if curl -L -f --show-error --retry 3 --retry-delay 2 -o mdk-sdk.tar.xz "${DOWNLOAD_URL}"; then
-          echo "Successfully downloaded MDK SDK from: ${DOWNLOAD_URL}"
-        else
-          echo "Error: Failed to download MDK SDK v${MDK_VERSION} from GitHub releases"
-          echo "URL attempted: ${DOWNLOAD_URL}"
-          echo "Please check available versions at: https://github.com/wang-bin/mdk-sdk/releases"
-          exit 1
-        fi
-        
-        # Extract archive (try with strip-components first, fallback to no strip)
-        echo "Extracting MDK SDK..."
-        if tar -xf mdk-sdk.tar.xz --strip-components=1 2>/dev/null; then
-          echo "Extracted with --strip-components=1"
-        elif tar -xf mdk-sdk.tar.xz 2>/dev/null; then
-          echo "Extracted without --strip-components"
-          # If there's a subdirectory, move its contents up
-          if [ -d mdk-sdk-* ]; then
-            mv mdk-sdk-*/* . 2>/dev/null || true
-            rmdir mdk-sdk-* 2>/dev/null || true
-          fi
-        else
-          echo "Error: Failed to extract MDK SDK archive"
-          exit 1
-        fi
-        
-        rm -f mdk-sdk.tar.xz
-        
-        # Verify essential files exist
-        if [ ! -d "include" ]; then
-          echo "Warning: include directory not found after extraction"
-        fi
-        if [ ! -d "lib/amd64" ] && [ ! -d "lib/x86_64" ] && [ ! -d "lib" ]; then
-          echo "Error: MDK SDK extraction failed - lib directory not found"
-          ls -la
-          exit 1
-        fi
-        
-        echo "MDK SDK downloaded and extracted successfully"
-        cd ../..
-
-    - name: Setup build environment
-      env:
-        TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-        TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
-        TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
-        OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
-      run: |
-        # Export variables for envsubst
-        export TMDB_API_KEY
-        export TRAKT_CLIENT_ID
-        export TRAKT_CLIENT_SECRET
-        export OMDB_API_KEY
-
-        # Install gettext for envsubst
-        sudo apt-get install -y gettext-base
-
-        # Inject API keys into manifest
-        envsubst < org.yantrium.Yantrium.yml > org.yantrium.Yantrium.filled.yml
-
-    - name: Prepare build directory for caching
-      run: |
-        # Create build directory structure so cache can be restored to the right location
-        mkdir -p build-dir/.flatpak-builder/modules
-        mkdir -p .flatpak-builder/modules
-        mkdir -p $HOME/.cache/flatpak-builder
-
-    - name: Cache Flatpak builder cache (libtorrent + boost)
-      uses: actions/cache@v4
-      id: flatpak-builder-cache
-      with:
-        path: |
-          $HOME/.cache/flatpak-builder
-          .flatpak-builder
-          build-dir/.flatpak-builder
-        # Cache key based on dependency versions only - this ensures boost/libtorrent
-        # are only rebuilt when their versions change, not on every app source change.
-        # The manifest hash is intentionally excluded so dependency builds persist.
-        # Using a more specific key with libtorrent version to ensure proper caching.
-        # Note: Cache save conflicts are handled automatically by GitHub Actions.
-        key: flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-v2.0.10-kde-6.10-v3
-        restore-keys: |
-          flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-v2.0.10-kde-6.10-
-          flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-
-          flatpak-builder-cache-${{ runner.os }}-
-
-    - name: Check cache status and verify modules
-      run: |
-        if [ "${{ steps.flatpak-builder-cache.outputs.cache-hit }}" == "true" ]; then
-          echo "✅ Cache HIT - checking for cached modules..."
+      - name: Setup Flatpak and Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder gettext-base
           
-          # Check for boost module
-          if [ -d "build-dir/.flatpak-builder/modules/boost" ] || [ -d ".flatpak-builder/modules/boost" ]; then
-            echo "✅ Found cached boost module"
-          else
-            echo "⚠️  Cache hit but boost module not found in expected locations"
-          fi
+          # Setup Flathub and install KDE Runtimes
+          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y flathub org.kde.Platform//6.10 org.kde.Sdk//6.10
+
+      - name: Cache MDK SDK
+        id: cache-mdk
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MDK_PATH }}
+          key: mdk-sdk-linux-${{ env.MDK_VERSION }}
+
+      - name: Download MDK SDK
+        if: steps.cache-mdk.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ${{ env.MDK_PATH }}
+          DOWNLOAD_URL="https://github.com/wang-bin/mdk-sdk/releases/download/v${MDK_VERSION}/mdk-sdk-linux-x64.tar.xz"
           
-          # Check for libtorrent module
-          if [ -d "build-dir/.flatpak-builder/modules/libtorrent-rasterbar" ] || [ -d ".flatpak-builder/modules/libtorrent-rasterbar" ]; then
-            echo "✅ Found cached libtorrent-rasterbar module"
-          else
-            echo "⚠️  Cache hit but libtorrent-rasterbar module not found in expected locations"
-          fi
+          echo "Downloading MDK SDK v${MDK_VERSION}..."
+          curl -L -f -o mdk-sdk.tar.xz "${DOWNLOAD_URL}"
           
-          # List what we found
-          echo "Cached modules in build-dir/.flatpak-builder/modules:"
-          ls -la build-dir/.flatpak-builder/modules/ 2>/dev/null || echo "  (empty)"
-          echo "Cached modules in .flatpak-builder/modules:"
-          ls -la .flatpak-builder/modules/ 2>/dev/null || echo "  (empty)"
-        else
-          echo "❌ Cache MISS - will build libtorrent and boost from scratch"
-        fi
+          echo "Extracting..."
+          tar -xf mdk-sdk.tar.xz -C ${{ env.MDK_PATH }} --strip-components=1
+          rm -f mdk-sdk.tar.xz
 
-    - name: Build Flatpak
-      run: |
-        # Note: --install-deps-from=flathub is often helpful here, 
-        # but since you installed the SDK manually above, this should work as is.
-        # Flatpak-builder will reuse cached modules (boost, libtorrent) from previous builds
-        # thanks to the cache above. Only the yantrium app itself will rebuild if source changed.
-        # --disable-updates prevents checking for updates to cached modules, ensuring they're reused
-        # --keep-build-dirs preserves build artifacts for better caching
-        echo "Building Flatpak (cache status: ${{ steps.flatpak-builder-cache.outputs.cache-hit }})..."
-        # Flatpak-builder stores modules in .flatpak-builder/modules/ relative to current directory
-        # The --keep-build-dirs flag preserves build artifacts for caching
-        flatpak-builder \
-          --repo=repo \
-          --disable-updates \
-          --keep-build-dirs \
-          build-dir \
-          org.yantrium.Yantrium.filled.yml
-        
-        # Verify what was built/cached after build
-        echo "=== Post-build cache verification ==="
-        echo "Modules in .flatpak-builder/modules:"
-        ls -la .flatpak-builder/modules/ 2>/dev/null || echo "  (not found)"
-        echo "Modules in build-dir/.flatpak-builder/modules:"
-        ls -la build-dir/.flatpak-builder/modules/ 2>/dev/null || echo "  (not found)"
+      - name: Cache Flatpak Builder (Libtorrent/Boost)
+        uses: actions/cache@v4
+        with:
+          # Cache the internal builder directory where compiled modules are stored
+          path: .flatpak-builder
+          # Update this key if you change boost/libtorrent versions to force a rebuild
+          key: flatpak-builder-${{ runner.os }}-kde6.10-boost-1.84-libtorrent-v2.0.10
+          restore-keys: |
+            flatpak-builder-${{ runner.os }}-kde6.10-
 
-    - name: Create Flatpak bundle
-      run: |
-        flatpak build-bundle repo yantrium.flatpak org.yantrium.Yantrium
+      - name: Prepare Manifest
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+          OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+        run: |
+          envsubst < org.yantrium.Yantrium.yml > org.yantrium.Yantrium.filled.yml
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: Yantrium-Flatpak-${{ inputs.build_type }}
-        path: |
-          yantrium.flatpak
-        retention-days: 30
-        if-no-files-found: warn
+      - name: Build Flatpak
+        run: |
+          # --ccache: Enables ccache if available (speeds up C++ rebuilds)
+          # --force-clean: Cleans the output directory (build-dir) but NOT the cache (.flatpak-builder)
+          # --disable-updates: Prevents checking for updates to runtime/sdk
+          flatpak-builder \
+            --repo=repo \
+            --force-clean \
+            --disable-updates \
+            --ccache \
+            build-dir \
+            org.yantrium.Yantrium.filled.yml
 
-    - name: Cleanup
-      if: always()
-      run: |
-        rm -f org.yantrium.Yantrium.filled.yml
+      - name: Create Bundle
+        run: |
+          flatpak build-bundle repo yantrium.flatpak org.yantrium.Yantrium
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yantrium-Flatpak-${{ inputs.build_type }}
+          path: yantrium.flatpak
+          retention-days: 30
