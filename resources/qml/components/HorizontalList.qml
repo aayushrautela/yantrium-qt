@@ -94,9 +94,15 @@ Rectangle {
                             
                             
                             item.clicked.connect(function() {
-                                // Use ID as-is from catalog (preserves formats like "tmdb:123" for Stremio compatibility)
-                                var contentId = model.id || model.tmdbId || model.imdbId || ""
+                                // Use ID as-is from addon - DO NOT process or fallback to tmdbId/imdbId
+                                // Addons provide IDs in formats like "tmdb:123" or "imdb:tt123" and we must preserve them
+                                var contentId = model.id || ""
                                 var contentType = model.type || ""
+                                
+                                if (!contentId) {
+                                    console.error("[HorizontalList] No contentId found for continue watching item:", model.title)
+                                    return
+                                }
                                 
                                 // For episodes, navigate to the show with episode info
                                 if (contentType === "episode" && model.season && model.episode) {
@@ -122,8 +128,13 @@ Rectangle {
                             item.badgeText = Qt.binding(function() { return model.badgeText || "" })
                             item.isHighlighted = Qt.binding(function() { return model.isHighlighted || false })
                             item.clicked.connect(function() {
-                                // Use ID as-is from catalog (preserves formats like "tmdb:123" for Stremio compatibility)
-                                var contentId = model.id || model.tmdbId || model.imdbId || ""
+                                // Use ID as-is from addon - DO NOT process or fallback to tmdbId/imdbId
+                                // Addons provide IDs in formats like "tmdb:123" or "imdb:tt123" and we must preserve them
+                                var contentId = model.id || ""
+                                if (!contentId) {
+                                    console.error("[HorizontalList] No contentId found for item:", model.title)
+                                    return
+                                }
                                 root.itemClicked(contentId, model.type || "", model.addonId || root.addonId || "")
                             })
                         }

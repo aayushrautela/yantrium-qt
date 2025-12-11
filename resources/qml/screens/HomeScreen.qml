@@ -458,8 +458,9 @@ Item {
                                             var addonId = model.addonId || sectionColumn.sectionAddonId || ""
                                             var contentId = ""
                                             
-                                            // Use ID as-is from catalog (preserves formats like "tmdb:123" for Stremio compatibility)
-                                            contentId = model.id || model.tmdbId || model.imdbId || ""
+                                            // Use ID as-is from addon - DO NOT process or fallback to tmdbId/imdbId
+                                            // Addons provide IDs in formats like "tmdb:123" or "imdb:tt123" and we must preserve them
+                                            contentId = model.id || ""
                                             
                                             if (!contentId) {
                                                 console.error("[HomeScreen] No contentId found for item:", model.title)
