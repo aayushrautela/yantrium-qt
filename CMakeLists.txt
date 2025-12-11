@@ -139,6 +139,9 @@ qt_add_executable(Yantrium
     ${PROJECT_SOURCES}
 )
 
+# Ensure the binary is named 'yantrium' (lowercase) to match desktop file Exec=yantrium
+set_target_properties(Yantrium PROPERTIES OUTPUT_NAME "yantrium")
+
 # Add src directory to include path
 target_include_directories(Yantrium PRIVATE src)
 
@@ -199,6 +202,17 @@ install(TARGETS Yantrium
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
+)
+
+# Install Desktop File
+install(FILES org.yantrium.Yantrium.desktop
+    DESTINATION share/applications
+)
+
+# Install App Icon
+install(FILES resources/assets/icons/app_logo.svg
+    DESTINATION share/icons/hicolor/scalable/apps
+    RENAME org.yantrium.Yantrium.svg
 )
 
 # --- CRITICAL ---

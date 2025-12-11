@@ -96,52 +96,6 @@ modules:
         if [ ! -f /app/lib/libmdk.so ] && [ ! -f /app/lib/libmdk.so.0 ]; then
           echo "Warning: MDK libraries not found in /app/lib"
         fi
-
-      # 2. Rename executable
-      - |
-        if [ -f /app/bin/Yantrium ]; then
-          mv /app/bin/Yantrium /app/bin/yantrium
-        fi
-
-      # 3. Install Desktop File
-      - |
-        mkdir -p /app/share/applications
-        if [ -f org.yantrium.Yantrium.desktop ]; then
-          cp org.yantrium.Yantrium.desktop /app/share/applications/
-        else
-          echo "ERROR: org.yantrium.Yantrium.desktop file missing from source root!"
-          exit 1
-        fi
-
-      # 4. Install Icons (Standardized)
-      - |
-        ICON_SRC="resources/assets/icons/app_logo.svg"
-        APP_ID="org.yantrium.Yantrium"
-        
-        if [ -f "$ICON_SRC" ]; then
-          # Install Scalable SVG (The most important one for GNOME)
-          mkdir -p /app/share/icons/hicolor/scalable/apps
-          cp "$ICON_SRC" "/app/share/icons/hicolor/scalable/apps/${APP_ID}.svg"
-          echo "Installed scalable icon as ${APP_ID}.svg"
-          
-          # Generate PNGs for compatibility
-          ICON_SIZES="16 32 48 64 128 256"
-          for size in $ICON_SIZES; do
-            mkdir -p "/app/share/icons/hicolor/${size}x${size}/apps"
-            
-            # Try using rsvg-convert (Standard in most SDKs)
-            if command -v rsvg-convert >/dev/null 2>&1; then
-              rsvg-convert -w $size -h $size "$ICON_SRC" -o "/app/share/icons/hicolor/${size}x${size}/apps/${APP_ID}.png"
-            # Fallback to ImageMagick convert
-            elif command -v convert >/dev/null 2>&1; then
-              convert -background none -resize ${size}x${size} "$ICON_SRC" "/app/share/icons/hicolor/${size}x${size}/apps/${APP_ID}.png"
-            else
-              echo "Warning: No icon converter tool found. Only SVG installed."
-            fi
-          done
-        else
-          echo "Warning: Icon file not found at $ICON_SRC"
-        fi
     sources:
       - type: dir
         path: .
