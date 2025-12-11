@@ -108,12 +108,19 @@ jobs:
         # Inject API keys into manifest
         envsubst < org.yantrium.Yantrium.yml > org.yantrium.Yantrium.filled.yml
 
+    - name: Prepare build directory for caching
+      run: |
+        # Create build directory structure so cache can be restored to the right location
+        mkdir -p build-dir/.flatpak-builder/modules
+        mkdir -p .flatpak-builder/modules
+        mkdir -p $HOME/.cache/flatpak-builder
+
     - name: Cache Flatpak builder cache (libtorrent + boost)
       uses: actions/cache@v4
       id: flatpak-builder-cache
       with:
         path: |
-          ~/.cache/flatpak-builder
+          $HOME/.cache/flatpak-builder
           .flatpak-builder
           build-dir/.flatpak-builder
         # Cache key based on dependency versions only - this ensures boost/libtorrent
@@ -121,11 +128,39 @@ jobs:
         # The manifest hash is intentionally excluded so dependency builds persist.
         # Using a more specific key with libtorrent version to ensure proper caching.
         # Note: Cache save conflicts are handled automatically by GitHub Actions.
-        key: flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-v2.0.10-kde-6.10-v2
+        key: flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-v2.0.10-kde-6.10-v3
         restore-keys: |
           flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-v2.0.10-kde-6.10-
           flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-
           flatpak-builder-cache-${{ runner.os }}-
+
+    - name: Check cache status and verify modules
+      run: |
+        if [ "${{ steps.flatpak-builder-cache.outputs.cache-hit }}" == "true" ]; then
+          echo "✅ Cache HIT - checking for cached modules..."
+          
+          # Check for boost module
+          if [ -d "build-dir/.flatpak-builder/modules/boost" ] || [ -d ".flatpak-builder/modules/boost" ]; then
+            echo "✅ Found cached boost module"
+          else
+            echo "⚠️  Cache hit but boost module not found in expected locations"
+          fi
+          
+          # Check for libtorrent module
+          if [ -d "build-dir/.flatpak-builder/modules/libtorrent-rasterbar" ] || [ -d ".flatpak-builder/modules/libtorrent-rasterbar" ]; then
+            echo "✅ Found cached libtorrent-rasterbar module"
+          else
+            echo "⚠️  Cache hit but libtorrent-rasterbar module not found in expected locations"
+          fi
+          
+          # List what we found
+          echo "Cached modules in build-dir/.flatpak-builder/modules:"
+          ls -la build-dir/.flatpak-builder/modules/ 2>/dev/null || echo "  (empty)"
+          echo "Cached modules in .flatpak-builder/modules:"
+          ls -la .flatpak-builder/modules/ 2>/dev/null || echo "  (empty)"
+        else
+          echo "❌ Cache MISS - will build libtorrent and boost from scratch"
+        fi
 
     - name: Build Flatpak
       run: |
@@ -135,12 +170,22 @@ jobs:
         # thanks to the cache above. Only the yantrium app itself will rebuild if source changed.
         # --disable-updates prevents checking for updates to cached modules, ensuring they're reused
         # --keep-build-dirs preserves build artifacts for better caching
+        echo "Building Flatpak (cache status: ${{ steps.flatpak-builder-cache.outputs.cache-hit }})..."
+        # Flatpak-builder stores modules in .flatpak-builder/modules/ relative to current directory
+        # The --keep-build-dirs flag preserves build artifacts for caching
         flatpak-builder \
           --repo=repo \
           --disable-updates \
           --keep-build-dirs \
           build-dir \
           org.yantrium.Yantrium.filled.yml
+        
+        # Verify what was built/cached after build
+        echo "=== Post-build cache verification ==="
+        echo "Modules in .flatpak-builder/modules:"
+        ls -la .flatpak-builder/modules/ 2>/dev/null || echo "  (not found)"
+        echo "Modules in build-dir/.flatpak-builder/modules:"
+        ls -la build-dir/.flatpak-builder/modules/ 2>/dev/null || echo "  (not found)"
 
     - name: Create Flatpak bundle
       run: |
