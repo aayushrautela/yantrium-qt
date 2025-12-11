@@ -271,6 +271,33 @@ jobs:
         Write-Host "Running windeployqt..."
         # Fixed: Removed --imageformats --sql --network (auto-detected in Qt6)
         windeployqt.exe --verbose 2 --qmldir resources/qml --compiler-runtime $exePath
+
+    - name: Copy Image Format Dependency DLLs
+      shell: powershell
+      run: |
+        $buildDir = "build\${{ inputs.build_type }}"
+        $windeployqt = Get-Command windeployqt
+        $qtBinDir = Split-Path -Parent $windeployqt.Path
+        
+        Write-Host "Qt bin directory: $qtBinDir"
+        
+        # Copy all lib*.dll files from Qt bin directory
+        # These are third-party libraries needed by image format plugins
+        $libDlls = Get-ChildItem -Path $qtBinDir -Filter "lib*.dll" -ErrorAction SilentlyContinue
+        if ($libDlls) {
+            $copiedCount = 0
+            foreach ($dll in $libDlls) {
+                $destPath = Join-Path $buildDir $dll.Name
+                if (-not (Test-Path $destPath)) {
+                    Copy-Item -Path $dll.FullName -Destination $buildDir -Force
+                    Write-Host "Copied: $($dll.Name)"
+                    $copiedCount++
+                }
+            }
+            Write-Host "Successfully copied $copiedCount image format dependency DLL(s)."
+        } else {
+            Write-Host "Warning: No lib*.dll files found in Qt bin directory"
+        }
         
     # Copy MDK and libtorrent runtime libraries
     - name: Copy dependencies

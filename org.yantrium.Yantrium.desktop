@@ -7,4 +7,6 @@ Exec=yantrium
 Icon=org.yantrium.Yantrium
 Categories=AudioVideo;Player;Video;
 StartupNotify=true
+StartupWMClass=Yantrium
 MimeType=video/mp4;video/x-msvideo;video/quicktime;video/x-matroska;
+
