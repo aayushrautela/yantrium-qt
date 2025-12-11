@@ -37,7 +37,7 @@ QUrl AddonClient::buildUrl(const QString& path)
         fullPath.prepend('/');
     }
     
-    // Join paths properly: if base URL has a path, append the new path
+    // Get the base path from the base URL
     QString basePath = baseUrl.path();
     
     // Remove trailing slash from base path if present
@@ -46,13 +46,20 @@ QUrl AddonClient::buildUrl(const QString& path)
     }
     
     // Join paths: basePath + fullPath
-    // QUrl::setPath() expects decoded paths and will encode them automatically
     QString joinedPath = basePath + fullPath;
     
-    // Set the joined path - QUrl will handle encoding automatically
-    baseUrl.setPath(joinedPath, QUrl::TolerantMode);
+    // Reconstruct the full URL string manually to preserve characters like ':'
+    // QUrl::setPath() encodes ':' to '%3A', but Stremio addons often expect unencoded ':'
+    QString urlString = baseUrl.toString(QUrl::RemovePath | QUrl::RemoveQuery | QUrl::RemoveFragment);
+    if (urlString.endsWith('/')) {
+        urlString.chop(1);
+    }
     
-    return baseUrl;
+    urlString += joinedPath;
+    
+    // Create QUrl from the string - this preserves the path as-is (mostly)
+    // while still ensuring it's a valid URL structure
+    return QUrl(urlString);
 }
 
 QString AddonClient::extractBaseUrl(const QString& manifestUrl)
