@@ -269,8 +269,41 @@ jobs:
         }
 
         Write-Host "Running windeployqt..."
-        # Explicitly include imageformats and iconengines to ensure they are copied
-        windeployqt.exe --verbose 2 --qmldir resources/qml --compiler-runtime --imageformats --iconengines $exePath
+        # Reverted to standard flags as --imageformats/--iconengines caused errors
+        windeployqt.exe --verbose 2 --qmldir resources/qml --compiler-runtime $exePath
+
+    - name: Manually Copy Qt Plugins
+      shell: powershell
+      run: |
+        # Fallback: Manually copy plugins that windeployqt might miss or misconfigure
+        $windeployqt = Get-Command windeployqt
+        $qtBinDir = Split-Path -Parent $windeployqt.Path
+        $qtPluginsDir = Join-Path (Split-Path -Parent $qtBinDir) "plugins"
+        $buildDir = "build\${{ inputs.build_type }}"
+        
+        Write-Host "Qt Plugins Directory: $qtPluginsDir"
+        
+        # Helper function to copy plugin directory
+        function Copy-PluginDir($pluginName) {
+            $src = Join-Path $qtPluginsDir $pluginName
+            $dest = Join-Path $buildDir $pluginName
+            
+            if (Test-Path $src) {
+                Write-Host "Manually copying $pluginName..."
+                New-Item -ItemType Directory -Force -Path $dest | Out-Null
+                Copy-Item "$src\*.dll" $dest -Force
+                Get-ChildItem $dest | Select-Object Name | Write-Host
+            } else {
+                Write-Host "Warning: Plugin directory $pluginName not found in Qt installation."
+            }
+        }
+        
+        # Explicitly copy critical plugins for images and networking
+        Copy-PluginDir "imageformats"
+        Copy-PluginDir "iconengines"
+        Copy-PluginDir "tls"
+        Copy-PluginDir "styles"
+
 
     # Copy MDK and libtorrent runtime libraries
     - name: Copy dependencies
