@@ -32,6 +32,7 @@ jobs:
         path: /var/lib/flatpak
         key: flatpak-runtimes-${{ runner.os }}-kde-6.10-v1
         restore-keys: |
+          flatpak-runtimes-${{ runner.os }}-kde-6.10-v1-
           flatpak-runtimes-${{ runner.os }}-
 
     - name: Install KDE Platform runtime and SDK
@@ -132,19 +133,23 @@ jobs:
         # Inject API keys into manifest
         envsubst < org.yantrium.Yantrium.yml > org.yantrium.Yantrium.filled.yml
 
-    - name: Cache Flatpak builder cache
+    - name: Cache Flatpak builder cache (libtorrent + boost)
       uses: actions/cache@v4
       id: flatpak-builder-cache
       with:
         path: |
           ~/.cache/flatpak-builder
           .flatpak-builder
+          build-dir/.flatpak-builder
         # Cache key based on dependency versions only - this ensures boost/libtorrent
         # are only rebuilt when their versions change, not on every app source change.
         # The manifest hash is intentionally excluded so dependency builds persist.
-        key: flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-v2.0.10-kde-6.10-v1
+        # Using a more specific key with libtorrent version to ensure proper caching.
+        # Note: Cache save conflicts are handled automatically by GitHub Actions.
+        key: flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-v2.0.10-kde-6.10-v2
         restore-keys: |
           flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-v2.0.10-kde-6.10-
+          flatpak-builder-cache-${{ runner.os }}-boost-1.84.0-libtorrent-
           flatpak-builder-cache-${{ runner.os }}-
 
     - name: Build Flatpak
@@ -154,9 +159,11 @@ jobs:
         # Flatpak-builder will reuse cached modules (boost, libtorrent) from previous builds
         # thanks to the cache above. Only the yantrium app itself will rebuild if source changed.
         # --disable-updates prevents checking for updates to cached modules, ensuring they're reused
+        # --keep-build-dirs preserves build artifacts for better caching
         flatpak-builder \
           --repo=repo \
           --disable-updates \
+          --keep-build-dirs \
           build-dir \
           org.yantrium.Yantrium.filled.yml
 
