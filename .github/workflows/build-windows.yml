@@ -15,362 +15,180 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    env:
+      MDK_VERSION: "0.35.0"
+      MDK_PATH: "vendor/mdk-sdk"
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Qt6
-      uses: jurplel/install-qt-action@v4
-      with:
-        version: '6.6.3'
-        arch: 'win64_msvc2019_64'
-        cache: 'true'
-        set-env: 'true'
-        modules: 'qt5compat qtshadertools qtimageformats'
+      - name: Setup Qt6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.6.3'
+          arch: 'win64_msvc2019_64'
+          cache: 'true'
+          set-env: 'true'
+          modules: 'qt5compat qtshadertools qtimageformats'
 
-    - name: Setup MSVC
-      uses: microsoft/setup-msbuild@v1.1
+      - name: Setup Environment (MSVC, CMake, 7-Zip)
+        uses: microsoft/setup-msbuild@v1.1
+      
+      - uses: jwlawson/actions-setup-cmake@v1.14
+        with:
+          cmake-version: '3.31'
 
-    - name: Setup CMake
-      uses: jwlawson/actions-setup-cmake@v1.14
-      with:
-        cmake-version: '3.31'
-    
-    - name: Install 7-Zip
-      shell: powershell
-      run: |
-        choco install 7zip --no-progress -y
-        
-    - name: Download MDK SDK
-      shell: powershell
-      run: |
-        $MDK_VERSION = "0.35.0"
-        $vendorDir = "vendor\mdk-sdk"
-        New-Item -ItemType Directory -Force -Path $vendorDir | Out-Null
-        cd $vendorDir
-        
-        Write-Host "Attempting to download MDK SDK version $MDK_VERSION..."
-        
-        # Use VS2022 x64 build (matches our build environment)
-        $downloadUrl = "https://github.com/wang-bin/mdk-sdk/releases/download/v$MDK_VERSION/mdk-sdk-windows-desktop-vs2022-x64.7z"
-        Write-Host "Download URL: $downloadUrl"
-        
-        $archiveFile = "mdk-sdk.7z"
-        
-        try {
-            Invoke-WebRequest -Uri $downloadUrl -OutFile $archiveFile -UseBasicParsing
-            Write-Host "Successfully downloaded MDK SDK"
-        } catch {
-            Write-Host "Error: Failed to download MDK SDK v$MDK_VERSION from GitHub releases"
-            Write-Host "URL attempted: $downloadUrl"
-            Write-Host "Error: $_"
-            exit 1
-        }
-        
-        Write-Host "Extracting MDK SDK (7z archive)..."
-        # Use 7-Zip to extract (choco installs it to Program Files)
-        $7zipPath = "${env:ProgramFiles}\7-Zip\7z.exe"
-        if (-not (Test-Path $7zipPath)) {
-            $7zipPath = "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
-        }
-        if (-not (Test-Path $7zipPath)) {
-            Write-Host "ERROR: 7-Zip not found. Expected at: $7zipPath"
-            exit 1
-        }
-        
-        & $7zipPath x $archiveFile -y
-        
-        Remove-Item $archiveFile -Force
-        
-        # Handle archives that extract with a root directory (e.g., mdk-sdk-windows-desktop-vs2022-x64/)
-        $subdirs = Get-ChildItem -Directory | Where-Object { $_.Name -like "mdk-sdk*" -or $_.Name -like "mdk*" }
-        if ($subdirs.Count -eq 1) {
-            Write-Host "Archive extracted with root directory, moving contents up..."
-            $subdir = $subdirs[0]
-            Get-ChildItem -Path $subdir.FullName | Move-Item -Destination . -Force
-            Remove-Item $subdir -Force
-        }
-        
-        # Verify essential files exist
-        if (-not (Test-Path "include\mdk\Player.h")) {
-            Write-Host "Error: MDK SDK extraction failed - include/mdk/Player.h not found"
-            Write-Host "Contents of current directory:"
-            Get-ChildItem | Select-Object Name, PSIsContainer
-            if (Test-Path "include") {
-                Write-Host "Contents of include directory:"
-                Get-ChildItem "include" -Recurse | Select-Object FullName
-            }
-            exit 1
-        }
-        if (-not (Test-Path "lib\x64\mdk.lib") -and -not (Test-Path "lib\mdk.lib")) {
-            Write-Host "Error: MDK SDK extraction failed - lib/mdk.lib not found"
-            if (Test-Path "lib") {
-                Write-Host "Contents of lib directory:"
-                Get-ChildItem "lib" -Recurse | Select-Object FullName
-            }
-            exit 1
-        }
-        
-        Write-Host "MDK SDK downloaded and extracted successfully"
-        cd ..\..
-    
-    # Cache libtorrent build since it takes forever
-    - name: Cache vcpkg and libtorrent
-      uses: actions/cache@v4
-      id: vcpkg-cache
-      with:
-        path: |
-          vcpkg/
-          vendor/libtorrent/
-        key: vcpkg-libtorrent-${{ runner.os }}-v2
+      # Cache MDK SDK to avoid redownloading/extracting on every run
+      - name: Cache MDK SDK
+        id: cache-mdk
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MDK_PATH }}
+          key: mdk-sdk-windows-${{ env.MDK_VERSION }}
 
-    - name: Build libtorrent with vcpkg
-      if: steps.vcpkg-cache.outputs.cache-hit != 'true'
-      shell: powershell
-      run: |
-        echo "Setting up vcpkg..."
-        git clone https://github.com/Microsoft/vcpkg.git vcpkg
-        cd vcpkg
-        .\bootstrap-vcpkg.bat
+      - name: Download MDK SDK
+        if: steps.cache-mdk.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path ${{ env.MDK_PATH }} | Out-Null
+          $downloadUrl = "https://github.com/wang-bin/mdk-sdk/releases/download/v${{ env.MDK_VERSION }}/mdk-sdk-windows-desktop-vs2022-x64.7z"
+          $archive = "mdk-sdk.7z"
 
-        echo "Installing libtorrent..."
-        .\vcpkg install libtorrent:x64-windows
-
-        echo "Copying libtorrent files to vendor directory..."
-        $vendorDir = "..\vendor\libtorrent"
-        New-Item -ItemType Directory -Force -Path "$vendorDir\bin\x64" | Out-Null
-        New-Item -ItemType Directory -Force -Path "$vendorDir\lib\x64" | Out-Null
-        New-Item -ItemType Directory -Force -Path "$vendorDir\include" | Out-Null
-
-        Copy-Item -Path "installed\x64-windows\bin\*.dll" -Destination "$vendorDir\bin\x64\" -Force
-        Copy-Item -Path "installed\x64-windows\lib\*.lib" -Destination "$vendorDir\lib\x64\" -Force
-        Copy-Item -Path "installed\x64-windows\include\*" -Destination "$vendorDir\include\" -Recurse -Force
-
-        echo "libtorrent setup complete"
-        
-    # Convert SVG to ICO for Windows icon
-    - name: Convert SVG to ICO
-      shell: powershell
-      run: |
-        # Install ImageMagick for SVG to ICO conversion
-        choco install imagemagick --no-progress -y
-        
-        # Create icons directory if it doesn't exist
-        $iconDir = "resources\assets\icons"
-        if (-not (Test-Path $iconDir)) {
-          New-Item -ItemType Directory -Path $iconDir -Force | Out-Null
-        }
-        
-        # Convert SVG to ICO with multiple sizes (16, 32, 48, 64, 128, 256)
-        $svgPath = "$iconDir\app_logo.svg"
-        $icoPath = "$iconDir\app_logo.ico"
-        
-        if (Test-Path $svgPath) {
-          Write-Host "Converting $svgPath to $icoPath"
-          magick $svgPath -define icon:auto-resize=16,32,48,64,128,256 $icoPath
-          if (Test-Path $icoPath) {
-            Write-Host "Successfully created icon file: $icoPath"
-          } else {
-            Write-Host "Warning: Icon conversion may have failed"
+          Write-Host "Downloading MDK SDK..."
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $archive -UseBasicParsing
+          
+          Write-Host "Extracting..."
+          7z x $archive -o"${{ env.MDK_PATH }}" -y
+          
+          # Move contents up if they are nested in a single subdirectory
+          $subdirs = Get-ChildItem -Path ${{ env.MDK_PATH }} -Directory
+          if ($subdirs.Count -eq 1) {
+            Get-ChildItem -Path $subdirs[0].FullName | Move-Item -Destination ${{ env.MDK_PATH }} -Force
+            Remove-Item $subdirs[0].FullName -Force
           }
-        } else {
-          Write-Host "Warning: SVG file not found at $svgPath"
-        }
+          Remove-Item $archive -Force
 
-    # Build the main application
-    - name: Configure and build
-      shell: cmd
-      env:
-        TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-        TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
-        TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
-        OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
-      run: |
-        cmake -B build -S . ^
-          -G "Visual Studio 17 2022" ^
-          -A x64 ^
-          -DCMAKE_BUILD_TYPE=${{ inputs.build_type }} ^
-          -DTMDB_API_KEY="%TMDB_API_KEY%" ^
-          -DTRAKT_CLIENT_ID="%TRAKT_CLIENT_ID%" ^
-          -DTRAKT_CLIENT_SECRET="%TRAKT_CLIENT_SECRET%" ^
-          -DOMDB_API_KEY="%OMDB_API_KEY%"
+      # Cache Libtorrent (built via vcpkg)
+      - name: Cache vcpkg and libtorrent
+        uses: actions/cache@v4
+        id: vcpkg-cache
+        with:
+          path: |
+            vcpkg/
+            vendor/libtorrent/
+          key: vcpkg-libtorrent-${{ runner.os }}-v2
 
-        cmake --build build --config ${{ inputs.build_type }}
-        
-    - name: Check MDK SDK
-      shell: powershell
-      run: |
-        $mdkInclude = "vendor\mdk-sdk\include\mdk\Player.h"
-        $mdkLib1 = "vendor\mdk-sdk\lib\x64\mdk.lib"
-        $mdkLib2 = "vendor\mdk-sdk\lib\mdk.lib"
-        
-        if (-not (Test-Path $mdkInclude)) {
-          Write-Host "ERROR: MDK SDK header not found at $mdkInclude"
-          Write-Host "Contents of vendor\mdk-sdk\include:"
-          if (Test-Path "vendor\mdk-sdk\include") {
-            Get-ChildItem "vendor\mdk-sdk\include" -Recurse | Select-Object FullName
+      - name: Build libtorrent with vcpkg
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          git clone https://github.com/Microsoft/vcpkg.git vcpkg
+          cd vcpkg
+          .\bootstrap-vcpkg.bat
+          .\vcpkg install libtorrent:x64-windows
+
+          # Prepare vendor structure
+          $vendorDir = "..\vendor\libtorrent"
+          New-Item -ItemType Directory -Force -Path "$vendorDir\bin\x64", "$vendorDir\lib\x64", "$vendorDir\include" | Out-Null
+
+          Copy-Item "installed\x64-windows\bin\*.dll" "$vendorDir\bin\x64\" -Force
+          Copy-Item "installed\x64-windows\lib\*.lib" "$vendorDir\lib\x64\" -Force
+          Copy-Item "installed\x64-windows\include\*" "$vendorDir\include\" -Recurse -Force
+
+      - name: Convert SVG to ICO
+        shell: powershell
+        run: |
+          choco install imagemagick --no-progress -y
+          $iconDir = "resources\assets\icons"
+          if (Test-Path "$iconDir\app_logo.svg") {
+             magick "$iconDir\app_logo.svg" -define icon:auto-resize=16,32,48,64,128,256 "$iconDir\app_logo.ico"
           }
-          exit 1
-        }
-        
-        if (-not (Test-Path $mdkLib1) -and -not (Test-Path $mdkLib2)) {
-          Write-Host "ERROR: MDK SDK library not found at either:"
-          Write-Host "  - $mdkLib1"
-          Write-Host "  - $mdkLib2"
-          if (Test-Path "vendor\mdk-sdk\lib") {
-            Write-Host "Contents of vendor\mdk-sdk\lib:"
-            Get-ChildItem "vendor\mdk-sdk\lib" -Recurse | Select-Object FullName
-          }
-          exit 1
-        }
-        
-        Write-Host "MDK SDK verification successful"
 
-    - name: Setup OpenSSL
-      shell: powershell
-      run: |
-        echo "Installing OpenSSL..."
-        choco install openssl --no-progress
+      - name: Configure and Build
+        shell: cmd
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+          OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+        run: |
+          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 ^
+            -DCMAKE_BUILD_TYPE=${{ inputs.build_type }} ^
+            -DTMDB_API_KEY="%TMDB_API_KEY%" ^
+            -DTRAKT_CLIENT_ID="%TRAKT_CLIENT_ID%" ^
+            -DTRAKT_CLIENT_SECRET="%TRAKT_CLIENT_SECRET%" ^
+            -DOMDB_API_KEY="%OMDB_API_KEY%"
+          
+          cmake --build build --config ${{ inputs.build_type }}
 
-        $possiblePaths = @("C:\Program Files\OpenSSL\bin", "C:\Program Files\OpenSSL-Win64\bin")
-        $opensslPath = $null
-        foreach ($path in $possiblePaths) {
-          if (Test-Path $path) { $opensslPath = $path; break }
-        }
+      - name: Install OpenSSL
+        shell: powershell
+        run: |
+          choco install openssl --no-progress
+          $openssl = "C:\Program Files\OpenSSL-Win64\bin"
+          if (-not (Test-Path $openssl)) { $openssl = "C:\Program Files\OpenSSL\bin" }
+          
+          $target = "build\${{ inputs.build_type }}"
+          Copy-Item "$openssl\libcrypto*.dll", "$openssl\libssl*.dll" -Destination $target -Force
 
-        if (-not $opensslPath) {
-          Write-Host "FATAL: Could not find OpenSSL bin directory."
-          exit 1
-        }
+      - name: Deploy Qt and Plugins
+        shell: powershell
+        run: |
+          $buildDir = "build\${{ inputs.build_type }}"
+          $exePath = "$buildDir\Yantrium.exe"
+          
+          # 1. Standard Windeployqt
+          windeployqt.exe --verbose 1 --qmldir resources/qml --compiler-runtime $exePath
 
-        $targetDir = "build\${{ inputs.build_type }}"
-        $libs = Get-ChildItem -Path $opensslPath -Include "libcrypto*.dll", "libssl*.dll" -Recurse
+          # 2. Manual Plugin Fixups (Streamlined)
+          $qtBin = Split-Path (Get-Command windeployqt).Path -Parent
+          $qtPlugins = Join-Path (Split-Path $qtBin -Parent) "plugins"
+          
+          # Copy extra dependencies from Qt bin (libwebp, etc) excluding core Qt dlls
+          Get-ChildItem "$qtBin\*.dll" -Exclude "Qt6*.dll", "*d.dll" | Copy-Item -Destination $buildDir -Force
 
-        if ($libs) {
-          foreach ($lib in $libs) {
-            Copy-Item -Path $lib.FullName -Destination $targetDir -Force
-          }
-        } else {
-          Write-Host "FATAL: No libcrypto/libssl DLLs found in $opensslPath"
-          exit 1
-        }
-
-    # Package Qt libraries and plugins
-    - name: Deploy Qt
-      shell: powershell
-      run: |
-        $buildDir = "build\${{ inputs.build_type }}"
-        $exePath = "$buildDir\Yantrium.exe"
-
-        if (-not (Test-Path $exePath)) {
-          Write-Host "FATAL: Executable not found at $exePath"
-          exit 1
-        }
-
-        Write-Host "Running windeployqt..."
-        # Reverted to standard flags as --imageformats/--iconengines caused errors
-        windeployqt.exe --verbose 2 --qmldir resources/qml --compiler-runtime $exePath
-
-    - name: Manually Copy Qt Plugins
-      shell: powershell
-      run: |
-        # Fallback: Manually copy plugins that windeployqt might miss or misconfigure
-        $windeployqt = Get-Command windeployqt
-        $qtBinDir = Split-Path -Parent $windeployqt.Path
-        $qtPluginsDir = Join-Path (Split-Path -Parent $qtBinDir) "plugins"
-        $buildDir = "build\${{ inputs.build_type }}"
-        
-        Write-Host "Qt Plugins Directory: $qtPluginsDir"
-        
-        # 1. Copy extra dependencies from bin/ (e.g. libwebp.dll, libssl.dll)
-        # We exclude standard Qt6*.dll files as they are handled by windeployqt, but catch everything else
-        Write-Host "Scanning bin directory for extra dependencies..."
-        Get-ChildItem -Path "$qtBinDir\*.dll" -Exclude "Qt6*.dll", "*d.dll" | ForEach-Object {
-            $dest = Join-Path $buildDir $_.Name
-            if (-not (Test-Path $dest)) {
-                Copy-Item -Path $_.FullName -Destination $buildDir -Force
-                Write-Host "Copied dependency: $($_.Name)"
-            }
-        }
-
-        # Helper function to copy plugin directory to BOTH root and plugins/ subdir
-        function Copy-PluginDir($pluginName) {
-            $src = Join-Path $qtPluginsDir $pluginName
-            
-            # Destination 1: Root (standard windeployqt)
-            $destRoot = Join-Path $buildDir $pluginName
-            
-            # Destination 2: plugins/ subdir (standard Qt)
-            $destPlugins = Join-Path $buildDir "plugins\$pluginName"
-
-            if (Test-Path $src) {
-                Write-Host "Manually copying $pluginName..."
+          # Function to force copy plugins to both root and ./plugins/ folder
+          function Copy-PluginDir($name) {
+             $src = Join-Path $qtPlugins $name
+             if (Test-Path $src) {
+                $destRoot = Join-Path $buildDir $name
+                $destSub  = Join-Path $buildDir "plugins\$name"
+                New-Item -Force -ItemType Directory $destRoot, $destSub | Out-Null
                 
-                # List source files for debugging
-                $files = Get-ChildItem -Path "$src\*.dll" -Exclude "*d.dll"
-                if ($files.Count -eq 0) {
-                     Write-Host "WARNING: No release DLLs found in $src (contents below):"
-                     Get-ChildItem -Path $src | Select-Object Name | Write-Host
+                Get-ChildItem "$src\*.dll" -Exclude "*d.dll" | ForEach-Object {
+                   Copy-Item $_.FullName $destRoot -Force
+                   Copy-Item $_.FullName $destSub -Force
                 }
+             }
+          }
 
-                $files | ForEach-Object {
-                    # Copy to root
-                    if (-not (Test-Path $destRoot)) { New-Item -ItemType Directory -Force -Path $destRoot | Out-Null }
-                    Copy-Item -Path $_.FullName -Destination $destRoot -Force
-                    
-                    # Copy to plugins/
-                    if (-not (Test-Path $destPlugins)) { New-Item -ItemType Directory -Force -Path $destPlugins | Out-Null }
-                    Copy-Item -Path $_.FullName -Destination $destPlugins -Force
-                    
-                    Write-Host "Copied: $($_.Name)"
-                }
-            } else {
-                Write-Host "Warning: Plugin directory $pluginName not found in Qt installation."
-            }
-        }
-        
-        # Explicitly copy critical plugins
-        Copy-PluginDir "imageformats"
-        Copy-PluginDir "iconengines"
-        Copy-PluginDir "tls"
-        Copy-PluginDir "styles"
-        
-    - name: Clean up Qt configuration
-      shell: powershell
-      run: |
-        # Delete qt.conf to force the application to use standard search paths
-        # This prevents windeployqt's configuration from overriding our manual plugin placement
-        $buildDir = "build\${{ inputs.build_type }}"
-        $qtConf = Join-Path $buildDir "qt.conf"
-        if (Test-Path $qtConf) {
-            Remove-Item -Path $qtConf -Force
-            Write-Host "Removed qt.conf to ensure standard plugin search paths are used."
-        }
+          Copy-PluginDir "imageformats"
+          Copy-PluginDir "iconengines"
+          Copy-PluginDir "tls"
+          Copy-PluginDir "styles"
 
+          # 3. Clean qt.conf to enforce standard paths
+          Remove-Item "$buildDir\qt.conf" -Force -ErrorAction SilentlyContinue
 
-    # Copy MDK and libtorrent runtime libraries
-    - name: Copy dependencies
-      shell: cmd
-      run: |
-        if exist "vendor\mdk-sdk\bin\x64\*.dll" copy /Y vendor\mdk-sdk\bin\x64\*.dll build\${{ inputs.build_type }}\
-        if exist "vendor\libtorrent\bin\x64\*.dll" copy /Y vendor\libtorrent\bin\x64\*.dll build\${{ inputs.build_type }}\
-        
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: Yantrium-Windows-${{ inputs.build_type }}
-        path: |
-          build/${{ inputs.build_type }}/Yantrium.exe
-          build/${{ inputs.build_type }}/*.dll
-          build/${{ inputs.build_type }}/platforms/
-          build/${{ inputs.build_type }}/sqldrivers/
-          build/${{ inputs.build_type }}/imageformats/
-          build/${{ inputs.build_type }}/iconengines/
-          build/${{ inputs.build_type }}/qml/
-          build/${{ inputs.build_type }}/QtQuick/
-          build/${{ inputs.build_type }}/QtQml/
-          build/${{ inputs.build_type }}/Qt5Compat/
-          build/${{ inputs.build_type }}/tls/
-        retention-days: 30
-        if-no-files-found: warn
+      - name: Copy Runtime Dependencies
+        shell: powershell
+        run: |
+          $target = "build\${{ inputs.build_type }}"
+          Copy-Item "vendor\mdk-sdk\bin\x64\*.dll" $target -Force
+          Copy-Item "vendor\libtorrent\bin\x64\*.dll" $target -Force
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yantrium-Windows-${{ inputs.build_type }}
+          path: |
+            build/${{ inputs.build_type }}/
+            !build/${{ inputs.build_type }}/**/*.obj
+            !build/${{ inputs.build_type }}/**/*.iobj
+            !build/${{ inputs.build_type }}/**/*.ipdb
+            !build/${{ inputs.build_type }}/**/*.pdb
+            !build/${{ inputs.build_type }}/**/*.exp
+            !build/${{ inputs.build_type }}/**/*.lib
+            !build/${{ inputs.build_type }}/**/*.ilk
+          retention-days: 30
