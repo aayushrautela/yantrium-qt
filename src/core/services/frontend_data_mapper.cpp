@@ -967,12 +967,12 @@ QVariantMap FrontendDataMapper::mapContinueWatchingItem(const QVariantMap& trakt
     }
     map["imdbId"] = imdbId;
     map["tmdbId"] = tmdbId;
-    // Construct ID in the format addons expect (tmdb:123 or imdb:tt123)
-    // Prefer TMDB format if available, as it matches catalog item format
-    if (!tmdbId.isEmpty()) {
+    // Use IMDB ID as primary identifier - all addons support it
+    // IMDB IDs already start with "tt" which is the format addons expect
+    if (!imdbId.isEmpty()) {
+        map["id"] = imdbId;
+    } else if (!tmdbId.isEmpty()) {
         map["id"] = "tmdb:" + tmdbId;
-    } else if (!imdbId.isEmpty()) {
-        map["id"] = imdbId;  // IMDB IDs already start with "tt"
     } else {
         map["id"] = "";  // No ID available
     }

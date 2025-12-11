@@ -673,7 +673,18 @@ void LibraryService::onPlaybackProgressFetched(const QVariantList& progress)
             m_mediaMetadataService->getCompleteMetadata(contentId, type);
         } else {
             // No metadata available, use item as-is
-            m_continueWatching.append(continueItem);
+            // Ensure ID field is set - prefer IMDB if available (all addons support it)
+            QVariantMap itemToAppend = continueItem;
+            if (itemToAppend["id"].toString().isEmpty()) {
+                QString imdbId = itemToAppend["imdbId"].toString();
+                QString tmdbId = itemToAppend["tmdbId"].toString();
+                if (!imdbId.isEmpty()) {
+                    itemToAppend["id"] = imdbId;
+                } else if (!tmdbId.isEmpty()) {
+                    itemToAppend["id"] = "tmdb:" + tmdbId;
+                }
+            }
+            m_continueWatching.append(itemToAppend);
         }
     }
     
@@ -711,7 +722,18 @@ void LibraryService::onPlaybackProgressFetched(const QVariantList& progress)
             m_mediaMetadataService->getCompleteMetadata(contentId, type);
         } else {
             // No metadata available, use item as-is
-            m_continueWatching.append(continueItem);
+            // Ensure ID field is set - prefer IMDB if available (all addons support it)
+            QVariantMap itemToAppend = continueItem;
+            if (itemToAppend["id"].toString().isEmpty()) {
+                QString imdbId = itemToAppend["imdbId"].toString();
+                QString tmdbId = itemToAppend["tmdbId"].toString();
+                if (!imdbId.isEmpty()) {
+                    itemToAppend["id"] = imdbId;
+                } else if (!tmdbId.isEmpty()) {
+                    itemToAppend["id"] = "tmdb:" + tmdbId;
+                }
+            }
+            m_continueWatching.append(itemToAppend);
         }
     }
     
@@ -1110,6 +1132,17 @@ void LibraryService::onMediaMetadataLoaded(const QVariantMap& details)
         // Merge metadata into continue watching item
         // Preserve Trakt-specific fields (progress, episode info) but enrich with metadata images
         QVariantMap enrichedItem = traktItem;
+        
+        // Ensure ID field is set - prefer IMDB if available (all addons support it)
+        if (enrichedItem["id"].toString().isEmpty()) {
+            QString imdbId = enrichedItem["imdbId"].toString();
+            QString tmdbId = enrichedItem["tmdbId"].toString();
+            if (!imdbId.isEmpty()) {
+                enrichedItem["id"] = imdbId;
+            } else if (!tmdbId.isEmpty()) {
+                enrichedItem["id"] = "tmdb:" + tmdbId;
+            }
+        }
         
         // Enrich with metadata images if available
         if (details.contains("posterUrl") && !details["posterUrl"].toString().isEmpty()) {
