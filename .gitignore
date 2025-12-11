@@ -10,6 +10,7 @@ cmake_install.cmake
 *.cmake
 !CMakeLists.txt
 !**/CMakeLists.txt
+!cmake/*.cmake
 .cmake/
 
 # Compiled binaries

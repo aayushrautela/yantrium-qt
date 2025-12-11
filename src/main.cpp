@@ -51,6 +51,12 @@ int main(int argc, char *argv[])
     // Enable QML console.log messages (Qt6 filters them by default)
     qputenv("QT_LOGGING_RULES", "qml.debug=true;js.debug=true");
 
+    // Force Qt to use OpenGL (Required for MDK video)
+    qputenv("QSG_RHI_BACKEND", "opengl");
+    qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
+    
+    QGuiApplication app(argc, argv);
+
 #ifdef Q_OS_WIN
     // Add Qt plugin paths for Windows deployment
     // This ensures plugins can be found even if not in standard locations
@@ -72,12 +78,6 @@ int main(int argc, char *argv[])
     } else {
         qDebug() << "[MAIN] SVG format is supported";
     }
-    
-    // Force Qt to use OpenGL (Required for MDK video)
-    qputenv("QSG_RHI_BACKEND", "opengl");
-    qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
-    
-    QGuiApplication app(argc, argv);
 
     // Register services in service registry for dependency injection FIRST
     // This must happen before AppController::initialize() which needs DatabaseManager

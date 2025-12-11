@@ -133,11 +133,6 @@ set(PROJECT_SOURCES
     resources/qml.qrc
 )
 
-# Windows icon resource file
-if(WIN32)
-    list(APPEND PROJECT_SOURCES resources/yantrium.rc)
-endif()
-
 # 4. Define the Executable
 qt_add_executable(Yantrium
     MANUAL_FINALIZATION
@@ -188,146 +183,13 @@ if(Qt6HttpServer_FOUND)
 endif()
 
 # =========================================================
-# 6. MDK-SDK INTEGRATION
+# 6. PLATFORM SPECIFIC CONFIGURATION
 # =========================================================
-set(MDK_DIR "${CMAKE_SOURCE_DIR}/vendor/mdk-sdk")
 
 if(WIN32)
-    target_include_directories(Yantrium PRIVATE ${MDK_DIR}/include)
-    target_link_libraries(Yantrium PRIVATE ${MDK_DIR}/lib/x64/mdk.lib)
-    
-    # Copy MDK binaries to build directory on Windows
-    add_custom_command(TARGET Yantrium POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${MDK_DIR}/bin/x64/ $<TARGET_FILE_DIR:Yantrium>)
-        
+    include(cmake/WindowsConfig.cmake)
 elseif(UNIX AND NOT APPLE)
-    target_include_directories(Yantrium PRIVATE ${MDK_DIR}/include)
-    target_link_libraries(Yantrium PRIVATE ${MDK_DIR}/lib/amd64/libmdk.so)
-    
-    # Copy libmdk.so to build directory on Linux
-    add_custom_command(TARGET Yantrium POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-        ${MDK_DIR}/lib/amd64/libmdk.so $<TARGET_FILE_DIR:Yantrium>)
-        
-    set_target_properties(Yantrium PROPERTIES
-        BUILD_RPATH "\$ORIGIN"
-        INSTALL_RPATH "\$ORIGIN"
-    )
-endif()
-
-# =========================================================
-# 7. LIBTORRENT INTEGRATION
-# =========================================================
-set(LIBTORRENT_DIR "${CMAKE_SOURCE_DIR}/vendor/libtorrent")
-
-if(WIN32)
-    # Check if libtorrent is available in vendor directory
-    if(EXISTS "${LIBTORRENT_DIR}/lib/x64/libtorrent-rasterbar.lib" OR 
-       EXISTS "${LIBTORRENT_DIR}/lib/x64/torrent-rasterbar.lib")
-        message(STATUS "Found bundled libtorrent for Windows")
-        target_include_directories(Yantrium PRIVATE ${LIBTORRENT_DIR}/include)
-        
-        # Find the actual library file
-        file(GLOB LIBTORRENT_LIBS "${LIBTORRENT_DIR}/lib/x64/*torrent*.lib")
-        if(LIBTORRENT_LIBS)
-            target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIBS})
-            target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
-            
-            # Copy libtorrent DLLs to build directory
-            add_custom_command(TARGET Yantrium POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                ${LIBTORRENT_DIR}/bin/x64/ $<TARGET_FILE_DIR:Yantrium>)
-        endif()
-    else()
-        message(STATUS "libtorrent not found in vendor directory - torrent support disabled")
-    endif()
-    
-elseif(UNIX AND NOT APPLE)
-    # Check if libtorrent is available in vendor directory first
-    file(GLOB LIBTORRENT_SO "${LIBTORRENT_DIR}/lib/amd64/libtorrent-rasterbar.so*")
-    
-    if(LIBTORRENT_SO)
-        message(STATUS "Found bundled libtorrent for Linux in vendor directory")
-        target_include_directories(Yantrium PRIVATE ${LIBTORRENT_DIR}/include)
-        
-        # Link against the main .so file (not versioned)
-        find_file(LIBTORRENT_MAIN_SO 
-            NAMES libtorrent-rasterbar.so
-            PATHS ${LIBTORRENT_DIR}/lib/amd64
-            NO_DEFAULT_PATH
-        )
-        if(LIBTORRENT_MAIN_SO)
-            target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_MAIN_SO})
-            target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
-            
-            # Copy all libtorrent .so files to build directory
-            add_custom_command(TARGET Yantrium POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                ${LIBTORRENT_DIR}/lib/amd64/ $<TARGET_FILE_DIR:Yantrium>)
-        else()
-            # Fallback: link against first found .so file
-            list(GET LIBTORRENT_SO 0 FIRST_SO)
-            target_link_libraries(Yantrium PRIVATE ${FIRST_SO})
-            target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
-            
-            add_custom_command(TARGET Yantrium POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                ${LIBTORRENT_DIR}/lib/amd64/ $<TARGET_FILE_DIR:Yantrium>)
-        endif()
-        
-        set_target_properties(Yantrium PROPERTIES
-            BUILD_RPATH "\$ORIGIN"
-            INSTALL_RPATH "\$ORIGIN"
-        )
-    else()
-        # ==================================================
-        # SYSTEM LIBTORRENT FALLBACK (FLATPAK/LINUX) - CORRECTED LINKING
-        # ==================================================
-        
-        # 1. Try PkgConfig with IMPORTED_TARGET option (Most reliable)
-        if(PkgConfig_FOUND)
-            pkg_check_modules(LIBTORRENT IMPORTED_TARGET libtorrent-rasterbar)
-        endif()
-
-        if(LIBTORRENT_FOUND)
-            message(STATUS "--- Libtorrent Found via PkgConfig ---")
-            message(STATUS "Linking: PkgConfig::LIBTORRENT")
-            
-            # Link using the PkgConfig imported target (Handles -L, -l, and dependencies like Boost)
-            target_link_libraries(Yantrium PRIVATE PkgConfig::LIBTORRENT)
-            
-            # PkgConfig usually sets includes, but for completeness and definitions:
-            target_include_directories(Yantrium PRIVATE ${LIBTORRENT_INCLUDE_DIRS})
-            target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
-            
-        else()
-            # 2. Manual Fallback: Find the absolute library path
-            message(STATUS "PkgConfig failed, trying manual absolute path link...")
-            
-            find_library(LIBTORRENT_LIB_FILE 
-                NAMES libtorrent-rasterbar.so libtorrent-rasterbar.a torrent-rasterbar
-                PATHS /app/lib /usr/lib /usr/local/lib /usr/lib64
-            )
-            
-            find_path(LIBTORRENT_INCLUDE_DIR
-                NAMES libtorrent/session.hpp
-                PATHS /app/include /usr/include /usr/local/include
-            )
-
-            if(LIBTORRENT_LIB_FILE AND LIBTORRENT_INCLUDE_DIR)
-                message(STATUS "Found libtorrent manually: ${LIBTORRENT_LIB_FILE}")
-                target_include_directories(Yantrium PRIVATE ${LIBTORRENT_INCLUDE_DIR})
-                
-                # Link using the FULL PATH to the .so file
-                target_link_libraries(Yantrium PRIVATE ${LIBTORRENT_LIB_FILE})
-                
-                target_compile_definitions(Yantrium PRIVATE TORRENT_SUPPORT_ENABLED)
-            else()
-                message(STATUS "libtorrent not found - torrent support disabled")
-            endif()
-        endif()
-    endif()
+    include(cmake/LinuxConfig.cmake)
 endif()
 
 qt_import_qml_plugins(Yantrium)

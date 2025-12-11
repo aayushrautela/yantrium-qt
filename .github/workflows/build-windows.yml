@@ -335,6 +335,18 @@ jobs:
         Copy-PluginDir "iconengines"
         Copy-PluginDir "tls"
         Copy-PluginDir "styles"
+        
+    - name: Clean up Qt configuration
+      shell: powershell
+      run: |
+        # Delete qt.conf to force the application to use standard search paths
+        # This prevents windeployqt's configuration from overriding our manual plugin placement
+        $buildDir = "build\${{ inputs.build_type }}"
+        $qtConf = Join-Path $buildDir "qt.conf"
+        if (Test-Path $qtConf) {
+            Remove-Item -Path $qtConf -Force
+            Write-Host "Removed qt.conf to ensure standard plugin search paths are used."
+        }
 
 
     # Copy MDK and libtorrent runtime libraries
